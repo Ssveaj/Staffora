@@ -1,0 +1,46 @@
+.tile-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+    gap: var(--space-4);
+}
+
+.org-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.org-row {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    padding: var(--space-3) 0;
+    border-bottom: 1px solid var(--color-border);
+}
+
+    .org-row:last-child {
+        border-bottom: none;
+    }
+
+.org-row__head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+}
+
+.org-row__text {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.org-row__summary {
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+}
+
+.role-badges {
+    display: flex;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+}

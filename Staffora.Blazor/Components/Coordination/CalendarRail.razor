@@ -1,0 +1,184 @@
+@using System.Globalization
+@using Staffora.Core.Scheduling
+@using Staffora.Core.Staffing
+
+<div class="calendar-rail" data-calendar-rail>
+    <button type="button" class="calendar-rail__move" data-calendar-move="earlier" aria-label="@($"Show one month earlier, {MonthName(this.first.AddMonths(-1))}")" @onclick="() => Move(-1)">
+        <MaterialSymbol Name="keyboard_arrow_up" Class="material-symbol--sm" />
+        <span aria-hidden="true">@MonthName(this.first.AddMonths(-1))</span>
+    </button>
+
+    <div class="calendar-rail__stack">
+        @foreach (var month in ShownMonths)
+        {
+            var captionId = $"calendar-rail-{month:yyyy-MM}";
+            var marks = Marks?.Invoke(month, month.AddMonths(1).AddDays(-1));
+            var closed = Closed?.Invoke(month, month.AddMonths(1).AddDays(-1));
+            var holidays = Holidays?.ByDay(month, month.AddMonths(1).AddDays(-1));
+            <table class="mini-month" aria-labelledby="@captionId" data-month="@MonthValue(month)">
+                <caption id="@captionId" class="mini-month__caption">@month.ToString("MMMM yyyy", CultureInfo.InvariantCulture)</caption>
+                <thead>
+                    <tr>
+                        <th scope="col" class="mini-month__head mini-month__head--week" abbr="Week">w</th>
+                        @foreach (var (letter, name) in WeekdayHeads)
+                        {
+                            <th scope="col" class="mini-month__head" abbr="@name">@letter</th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var monday in WeeksOf(month))
+                    {
+                        var week = ISOWeek.GetWeekOfYear(monday.ToDateTime(TimeOnly.MinValue));
+                        var tinted = ScheduleRules.MondayOf(Shown) == monday;
+                        <tr class="@(tinted ? "mini-month__week-row mini-month__week-row--shown" : "mini-month__week-row")">
+                            <th scope="row" class="mini-month__week-cell">
+                                <span class="mini-month__week" data-week="@ScheduleRules.DateText(monday)"><span class="visually-hidden">Week </span>@week</span>
+                            </th>
+                            @for (var offset = 0; offset < 7; offset++)
+                            {
+                                var day = monday.AddDays(offset);
+                                if (day.Month != month.Month)
+                                {
+                                    <td class="mini-month__blank"></td>
+                                    continue;
+                                }
+
+                                var mark = marks is not null && marks.TryGetValue(day, out var found) ? found : null;
+                                var closedOn = closed is not null && closed.TryGetValue(day, out var closedMarks) ? closedMarks : null;
+                                var holidayOn = holidays is not null && holidays.TryGetValue(day, out var holidayMarks) ? Holidays!.TextOf(holidayMarks) : null;
+                                var shown = day == Shown;
+                                var dot = DotOf(mark);
+                                <td>
+                                    <button type="button"
+                                            class="@DayClass(day, offset, shown, closedOn is not null, holidayOn is not null)"
+                                            data-day="@ScheduleRules.DateText(day)"
+                                            data-closed-day="@(closedOn is null ? null : ClosedDayRules.MarksText(closedOn))"
+                                            data-holiday="@holidayOn"
+                                            aria-pressed="@(shown ? "true" : "false")"
+                                            aria-current="@(day == Today ? "date" : null)"
+                                            aria-label="@DayLabel(day, mark, holidayOn, closedOn)"
+                                            title="@DayTitle(holidayOn, closedOn)"
+                                            @onclick="() => OnDay.InvokeAsync(day)">
+                                        <span class="mini-month__number" aria-hidden="true">@day.Day</span>
+                                        @if (dot is not null)
+                                        {
+                                            <span class="@($"mini-month__mark mini-month__mark--{dot}")" data-mark="@dot" aria-hidden="true"></span>
+                                        }
+                                    </button>
+                                </td>
+                            }
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+
+    <button type="button" class="calendar-rail__move" data-calendar-move="later" aria-label="@($"Show one month later, {MonthName(this.first.AddMonths(MonthsShown))}")" @onclick="() => Move(1)">
+        <MaterialSymbol Name="keyboard_arrow_down" Class="material-symbol--sm" />
+        <span aria-hidden="true">@MonthName(this.first.AddMonths(MonthsShown))</span>
+    </button>
+
+    <ul class="calendar-rail__legend" aria-label="What the marks of a day mean">
+        <li><span class="calendar-rail__swatch mini-month__mark--open" aria-hidden="true"></span>Open slots</li>
+        <li><span class="calendar-rail__swatch mini-month__mark--risk" aria-hidden="true"></span>At risk</li>
+        <li><span class="calendar-rail__swatch mini-month__mark--staffed" aria-hidden="true"></span>All staffed</li>
+        <li><span class="calendar-rail__swatch calendar-rail__swatch--closed" aria-hidden="true"></span>Closed day</li>
+        @if (Holidays is { Calendar.IsNone: false })
+        {
+            <li><span class="calendar-rail__swatch calendar-rail__swatch--holiday" aria-hidden="true"></span>Public holiday</li>
+        }
+    </ul>
+</div>
+
+@code {
+    public const int MonthsShown = 3;
+
+    private static readonly (string Letter, string Name)[] WeekdayHeads =
+    [
+        ("M", "Monday"), ("T", "Tuesday"), ("W", "Wednesday"), ("T", "Thursday"), ("F", "Friday"), ("S", "Saturday"), ("S", "Sunday"),
+    ];
+
+    private DateOnly first;
+    private DateOnly? anchoredOn;
+
+    [Parameter, EditorRequired] public DateOnly Today { get; set; }
+
+    [Parameter, EditorRequired] public DateOnly Shown { get; set; }
+
+    [Parameter] public Func<DateOnly, DateOnly, IReadOnlyDictionary<DateOnly, DayMark>>? Marks { get; set; }
+
+    [Parameter] public Func<DateOnly, DateOnly, IReadOnlyDictionary<DateOnly, IReadOnlyList<ClosedDayMark>>>? Closed { get; set; }
+
+    [Parameter] public TenantHolidays? Holidays { get; set; }
+
+    [Parameter] public EventCallback<DateOnly> OnDay { get; set; }
+
+    private IEnumerable<DateOnly> ShownMonths => Enumerable.Range(0, MonthsShown).Select(offset => this.first.AddMonths(offset));
+
+    protected override void OnParametersSet()
+    {
+        var month = new DateOnly(Shown.Year, Shown.Month, 1);
+        if (this.anchoredOn is null || (this.anchoredOn != Shown && (month < this.first || month >= this.first.AddMonths(MonthsShown))))
+        {
+            this.first = month;
+        }
+
+        this.anchoredOn = Shown;
+    }
+
+    private void Move(int months) => this.first = this.first.AddMonths(months);
+
+    private static IEnumerable<DateOnly> WeeksOf(DateOnly month)
+    {
+        var last = month.AddMonths(1).AddDays(-1);
+        for (var monday = ScheduleRules.MondayOf(month); monday <= last; monday = monday.AddDays(7))
+        {
+            yield return monday;
+        }
+    }
+
+    internal static string? DotOf(DayMark? mark) => mark switch
+    {
+        null => null,
+        { AtRisk: > 0 } => "risk",
+        { Uncovered: > 0 } or { Waiting: > 0 } => "open",
+        { Covered: > 0 } => "staffed",
+        _ => null,
+    };
+
+    private string DayClass(DateOnly day, int offset, bool shown, bool closed, bool holiday) =>
+        "mini-month__day"
+        + (offset >= 5 ? " mini-month__day--weekend" : null)
+        + (day < Today ? " mini-month__day--past" : null)
+        + (day == Today ? " mini-month__day--today" : null)
+        + (holiday ? " mini-month__day--holiday" : null)
+        + (closed ? " mini-month__day--closed" : null)
+        + (shown ? " mini-month__day--shown" : null);
+
+    private static string? DayTitle(string? holiday, IReadOnlyList<ClosedDayMark>? closed) =>
+        holiday is null && closed is null ? null : string.Join(", ", new[] { holiday, closed is null ? null : ClosedDayRules.MarksText(closed) }.OfType<string>());
+
+    private static string DayLabel(DateOnly day, DayMark? mark, string? holiday, IReadOnlyList<ClosedDayMark>? closed)
+    {
+        var named = DayTitle(holiday, closed);
+        var text = named is null ? LongDay(day) : $"{LongDay(day)}, {named}";
+        if (mark is null)
+        {
+            return text;
+        }
+
+        var parts = new List<string>();
+        if (mark.AtRisk > 0) parts.Add($"{mark.AtRisk} at risk");
+        if (mark.Uncovered + mark.Waiting > 0) parts.Add($"{mark.Uncovered + mark.Waiting} open");
+        if (mark.Covered > 0) parts.Add($"{mark.Covered} staffed");
+        return parts.Count == 0 ? text : $"{text}, {string.Join(", ", parts)}";
+    }
+
+    private static string LongDay(DateOnly day) => day.ToString("dddd d MMMM yyyy", CultureInfo.InvariantCulture);
+
+    private static string MonthName(DateOnly month) => month.ToString("MMMM", CultureInfo.InvariantCulture);
+
+    private static string MonthValue(DateOnly month) => new DateOnly(month.Year, month.Month, 1).ToString("yyyy'-'MM'-'dd", CultureInfo.InvariantCulture);
+}

@@ -1,0 +1,20 @@
+.user-dialog {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+}
+
+.user-dialog__schedule-problem {
+    margin: 0 0 var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--color-danger-border);
+    border-radius: var(--radius-md);
+    background: var(--color-danger-soft);
+    color: var(--color-danger);
+}
+
+.user-dialog__schedule-open {
+    display: flex;
+    justify-content: flex-start;
+    margin: 0 0 var(--space-3);
+}

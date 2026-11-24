@@ -1,0 +1,53 @@
+.state-entity-dialog-tabs {
+    display: flex;
+    flex: 0 0 auto;
+    gap: var(--space-2);
+    margin: 0 var(--space-6);
+    padding-top: var(--space-2);
+    overflow-x: auto;
+    border-bottom: 1px solid var(--color-border);
+    scrollbar-width: thin;
+}
+
+.state-entity-dialog-tabs__tab {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    min-height: 2.75rem;
+    padding: var(--space-2) var(--space-4);
+    border: 0;
+    border-bottom: 2px solid transparent;
+    background: none;
+    color: var(--color-text-muted);
+    font: inherit;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+    cursor: pointer;
+}
+
+    .state-entity-dialog-tabs__tab:hover {
+        color: var(--color-text);
+        background: var(--color-surface-hover);
+    }
+
+    .state-entity-dialog-tabs__tab:focus-visible {
+        outline: none;
+        box-shadow: inset var(--focus-ring);
+        border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+    }
+
+    .state-entity-dialog-tabs__tab[aria-disabled="true"] {
+        cursor: default;
+    }
+
+.state-entity-dialog-tabs__tab--selected {
+    border-bottom-color: var(--dialog-state-color, var(--color-accent));
+    color: var(--dialog-state-text, var(--color-accent));
+    font-weight: var(--font-weight-semibold);
+}
+
+@media (max-width: 640px) {
+    .state-entity-dialog-tabs {
+        margin: 0 var(--space-4);
+    }
+}

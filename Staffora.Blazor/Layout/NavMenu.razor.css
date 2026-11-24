@@ -1,0 +1,116 @@
+.app-nav {
+    flex: 1 1 auto;
+    min-height: 0;
+    padding: var(--space-2) var(--space-3) var(--space-4);
+    overflow-y: auto;
+}
+
+.app-nav__group + .app-nav__group {
+    margin-top: var(--space-4);
+}
+
+.app-nav__heading {
+    margin: 0;
+    padding: var(--space-2) var(--space-3) var(--space-1);
+    color: var(--color-text-subtle);
+    font-size: var(--font-size-2xs);
+    font-weight: var(--font-weight-semibold);
+    letter-spacing: 0.08em;
+    line-height: var(--line-height-snug);
+    text-transform: uppercase;
+}
+
+.app-nav__list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.app-nav__link {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    min-height: var(--control-height-lg);
+    padding: 0 var(--space-3);
+    border-radius: var(--radius-lg);
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+    .app-nav__link ::deep .material-symbol {
+        --icon-size: 1.125rem;
+        flex: none;
+        color: inherit;
+    }
+
+    .app-nav__link:hover {
+        background: var(--color-surface-hover);
+        color: var(--color-text);
+    }
+
+    .app-nav__link:focus-visible {
+        outline: none;
+        box-shadow: var(--focus-ring);
+    }
+
+    .app-nav__link.active {
+        background: var(--color-accent-soft);
+        color: var(--color-accent-strong);
+        font-weight: var(--font-weight-semibold);
+    }
+
+        .app-nav__link.active::after {
+            content: "";
+            flex: none;
+            width: 6px;
+            height: 6px;
+            margin-inline-start: auto;
+            border-radius: var(--radius-full);
+            background: var(--color-accent);
+        }
+
+.app-nav__label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+@media (min-width: 900px) {
+    :root[data-sidebar="collapsed"] .app-nav {
+        padding: var(--space-2) var(--space-2) var(--space-4);
+    }
+
+    :root[data-sidebar="collapsed"] .app-nav__group + .app-nav__group {
+        margin-top: var(--space-3);
+        padding-top: var(--space-3);
+        border-top: 1px solid var(--color-border);
+    }
+
+    :root[data-sidebar="collapsed"] .app-nav__heading {
+        display: none;
+    }
+
+    :root[data-sidebar="collapsed"] .app-nav__link {
+        justify-content: center;
+        padding: 0;
+    }
+
+        :root[data-sidebar="collapsed"] .app-nav__link.active::after {
+            display: none;
+        }
+
+    :root[data-sidebar="collapsed"] .app-nav__label {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+    }
+}

@@ -1,0 +1,18 @@
+.error-log-dropped ::deep .rz-alert {
+    margin: 0 0 var(--space-4);
+}
+
+.error-log-time {
+    font-variant-numeric: tabular-nums;
+    font-weight: var(--font-weight-semibold);
+}
+
+.error-log-message__text {
+    overflow-wrap: anywhere;
+}
+
+.error-log-code {
+    color: var(--color-text);
+    font-size: var(--font-size-xs);
+    overflow-wrap: anywhere;
+}

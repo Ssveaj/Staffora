@@ -1,0 +1,133 @@
+@using System.Globalization
+@using Staffora.Blazor.Helper
+@using Staffora.Core.Entities.Messaging
+
+<div class="@Classes" data-history-step="@Step.Id">
+    @if (Changed)
+    {
+        <span class="history-step__marker" style="@ColorStyle("marker", Step.To)" aria-hidden="true">
+            <MaterialSymbol Name="@Step.To.GetIcon()" Class="history-step__marker-icon" />
+        </span>
+    }
+    else
+    {
+        <span class="history-step__marker history-step__marker--stayed" style="@ColorStyle("marker", Step.To)" role="img" aria-label="@StayedIn" title="@StayedIn"></span>
+    }
+    <div class="history-step__body">
+        <div class="history-step__head">
+            <span class="history-step__name">@Step.StepName</span>
+            @if (Changed)
+            {
+                <span class="history-step__states">
+                    <span class="visually-hidden">from</span>
+                    <span class="history-step__state" style="@ChipStyle(Step.From)" data-history-state="@Step.From">
+                        <MaterialSymbol Name="@Step.From.GetIcon()" Class="history-step__state-icon material-symbol--sm" />
+                        <span>@EnumDisplayHelper.GetDisplayName(Step.From)</span>
+                    </span>
+                    <MaterialSymbol Name="arrow_forward" Class="history-step__arrow material-symbol--sm" />
+                    <span class="visually-hidden">to</span>
+                    <span class="history-step__state" style="@ChipStyle(Step.To)" data-history-state="@Step.To">
+                        <MaterialSymbol Name="@Step.To.GetIcon()" Class="history-step__state-icon material-symbol--sm" />
+                        <span>@EnumDisplayHelper.GetDisplayName(Step.To)</span>
+                    </span>
+                </span>
+            }
+        </div>
+        <div class="history-step__meta">
+            <span class="history-step__actor">@Step.Actor</span>
+            <span class="history-step__dot" aria-hidden="true">·</span>
+            <time datetime="@Step.At.ToString("o", CultureInfo.InvariantCulture)">@WhenText</time>
+        </div>
+        @if (Step.ActorNotes.Count > 0 || Step.Notices is { Count: > 0 })
+        {
+            <ul class="history-step__notes">
+                @foreach (var note in Step.ActorNotes)
+                {
+                    <li class="history-step__note">
+                        <MaterialSymbol Name="@NoteIcon(note)" Class="history-step__note-icon material-symbol--sm" />
+                        <span>@note</span>
+                    </li>
+                }
+                @foreach (var notice in Step.Notices ?? [])
+                {
+                    <li class="history-step__notice" data-history-notice="@notice.Status">
+                        <MaterialSymbol Name="@NoticeIcon(notice.Status)" Class="history-step__note-icon material-symbol--sm" />
+                        <span><span class="history-step__notice-name">Notice: @notice.Name</span> · <span class="history-step__notice-outcome">@notice.Outcome</span></span>
+                    </li>
+                }
+            </ul>
+        }
+    </div>
+</div>
+
+@code {
+    public const string TimeFormat = "HH:mm";
+
+    public const string DateFormat = "d MMM yyyy";
+
+    [Parameter, EditorRequired] public StateHistoryStep Step { get; set; } = null!;
+
+    [Parameter] public DateOnly? Today { get; set; }
+
+    [Parameter] public bool ShowDay { get; set; } = true;
+
+    [Parameter] public bool LinksToNext { get; set; }
+
+    [Parameter] public bool Compact { get; set; }
+
+    private bool Changed => !Equals(Step.From, Step.To);
+
+    private string StayedIn => $"Stayed in {EnumDisplayHelper.GetDisplayName(Step.To)}";
+
+    private string Classes =>
+        "history-step"
+        + (Compact ? " history-step--compact" : string.Empty)
+        + (LinksToNext ? " history-step--linked" : string.Empty)
+        + (Changed ? string.Empty : " history-step--stayed");
+
+    private string WhenText
+    {
+        get
+        {
+            var time = Step.At.ToString(TimeFormat, CultureInfo.InvariantCulture);
+            if (!ShowDay)
+            {
+                return time;
+            }
+
+            var day = DateOnly.FromDateTime(Step.At.DateTime);
+            return IsRecent(day, Today) ? $"{DayOf(day, Today)} {time}" : $"{DayOf(day, Today)}, {time}";
+        }
+    }
+
+    public static string DayOf(DateOnly day, DateOnly? today) => today switch
+    {
+        { } now when day == now => "Today",
+        { } now when day == now.AddDays(-1) => "Yesterday",
+        _ => day.ToString(DateFormat, CultureInfo.InvariantCulture),
+    };
+
+    private static bool IsRecent(DateOnly day, DateOnly? today) => today is { } now && (day == now || day == now.AddDays(-1));
+
+    private static string ColorStyle(string part, Enum state)
+    {
+        var colors = ColorContrast.OnFill(state.GetStateColor());
+        return $"--history-{part}-fill: {colors.Fill}; --history-{part}-text: {colors.Foreground};";
+    }
+
+    private static string ChipStyle(Enum state) => ColorStyle("state", state);
+
+    private static string NoteIcon(string note) => note switch
+    {
+        StateHistoryService.ImpersonatedNote => "supervisor_account",
+        StateHistoryService.OnBehalfNote => "smart_toy",
+        _ => "info",
+    };
+
+    private static string NoticeIcon(OutgoingMessageStatus status) => status switch
+    {
+        OutgoingMessageStatus.Delivered => "mark_email_read",
+        OutgoingMessageStatus.Failed => "error",
+        _ => "schedule_send",
+    };
+}

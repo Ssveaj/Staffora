@@ -1,0 +1,31 @@
+@using Staffora.Core.Entities.EntityAttributes
+@using Staffora.Services.CustomFields
+@inject DialogService DialogService
+
+<FormDialogFrame OnSave="ContinueAsync" SaveText="Continue" SaveIcon="arrow_forward">
+    <RadzenFormField Text="Applies to" Component="custom-field-target" Style="width: 100%;">
+        <RadzenDropDown Name="custom-field-target" InputAttributes="@FieldLabel.Of("Applies to")" @bind-Value="this.target"
+                        Data="@targets" TextProperty="Text" ValueProperty="Value" TValue="CustomFieldTarget" Style="width: 100%;" />
+    </RadzenFormField>
+    <RadzenText TextStyle="TextStyle.Body2" class="text-muted">A field applies to the records of one kind for good: it keeps what it applies to once it is saved.</RadzenText>
+</FormDialogFrame>
+
+@code {
+    private static readonly IReadOnlyList<TargetChoice> targets = [.. Enum.GetValues<CustomFieldTarget>().Select(target => new TargetChoice(CustomFieldTargets.Label(target), target))];
+
+    private CustomFieldTarget target = CustomFieldTarget.User;
+
+    private Task ContinueAsync()
+    {
+        DialogService.Close(this.target);
+        return Task.CompletedTask;
+    }
+
+    public static async Task<CustomFieldTarget?> OpenAsync(DialogService dialogService)
+    {
+        var chosen = await dialogService.OpenFormDialogAsync<ChooseCustomFieldTargetDialog, CustomFieldTarget?>("New custom field", options: new FormDialogOptions { Width = "440px", Icon = "tune" });
+        return chosen;
+    }
+
+    private sealed record TargetChoice(string Text, CustomFieldTarget Value);
+}

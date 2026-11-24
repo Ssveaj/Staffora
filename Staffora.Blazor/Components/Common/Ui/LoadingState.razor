@@ -1,0 +1,14 @@
+<div class="@CssClass" role="status" aria-live="polite" data-loading>
+    <span class="@SpinnerClass" aria-hidden="true"></span>
+    <span class="ui-loading__text">@Text</span>
+</div>
+
+@code {
+    [Parameter] public string Text { get; set; } = "Loading…";
+
+    [Parameter] public bool Inline { get; set; }
+
+    private string CssClass => this.Inline ? "ui-loading ui-loading--inline" : "ui-loading";
+
+    private string SpinnerClass => this.Inline ? "ui-spinner ui-spinner--sm" : "ui-spinner";
+}

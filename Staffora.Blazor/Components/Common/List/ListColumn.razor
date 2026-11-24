@@ -1,0 +1,32 @@
+@typeparam TItem
+@implements IDisposable
+
+@code {
+    [CascadingParameter] internal ListView<TItem>? Owner { get; set; }
+
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+
+    [Parameter] public bool Primary { get; set; }
+
+    [Parameter] public string? HiddenWhenGroupedBy { get; set; }
+
+    [Parameter] public Func<TItem, string?>? Subtitle { get; set; }
+
+    [Parameter] public bool Avatar { get; set; }
+
+    [Parameter] public string? Class { get; set; }
+
+    [Parameter, EditorRequired] public RenderFragment<TItem> ChildContent { get; set; } = null!;
+
+    protected override void OnInitialized()
+    {
+        if (Owner is null)
+        {
+            throw new InvalidOperationException($"{nameof(ListColumn<TItem>)} is declared inside a {nameof(ListView<TItem>)}'s Columns.");
+        }
+
+        Owner.AddColumn(this);
+    }
+
+    public void Dispose() => Owner?.RemoveColumn(this);
+}

@@ -1,0 +1,35 @@
+@using Staffora.Blazor.Components.Common.Dialogs.StateEntity
+@using Staffora.Blazor.Components.Common.WorkflowFields
+@using Staffora.Blazor.Helper
+@using Staffora.Core.Entities.Tenancy
+@implements IStateEntityDialog<TenantDialogContext>
+
+<div class="tenant-dialog">
+    <StateFieldTextBox @bind-Value="Context.Entity!.Name" Label="Name" MaxLength="200" />
+    <StateFieldTextArea @bind-Value="Context.Entity!.Description" Label="Description" MaxLength="500" />
+</div>
+
+@code {
+    private int? shownVersion;
+
+    [Parameter, EditorRequired] public TenantDialogContext Context { get; set; } = null!;
+
+    protected override void OnParametersSet()
+    {
+        if (this.shownVersion != Context.Version)
+        {
+            this.shownVersion = Context.Version;
+            Context.DisplayName = string.IsNullOrWhiteSpace(Context.Entity!.Name) ? null : Context.Entity.Name;
+        }
+    }
+
+    internal static TenantDialogContext ContextFor(TenantService service, Guid? tenantId) =>
+        new(service, tenantId) { DefaultTitle = "Tenant", CreateTitle = "New tenant", EntityIcon = "apartment" };
+
+    public static Task<StateEntityDialogResult> OpenAsync(DialogService dialogService, TenantService service, Guid tenantId, StateEntityDialogOptions? options = null) =>
+        dialogService.OpenStateEntityDialogAsync<TenantDialog, TenantDialogContext>(ContextFor(service, tenantId), options);
+
+    public static Task<StateEntityDialogResult> OpenSessionAsync(DialogService dialogService, TenantService service, IReadOnlyList<Guid> tenantIds, int start) =>
+        dialogService.OpenStateEntityDialogSessionAsync(new StateEntityDialogSession(
+            [.. tenantIds.Select(id => StateEntityDialogTarget.For<TenantDialog, TenantDialogContext>(ContextFor(service, id)))], start));
+}

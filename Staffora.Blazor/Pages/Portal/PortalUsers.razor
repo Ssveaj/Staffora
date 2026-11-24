@@ -1,0 +1,100 @@
+@page "/portal/users"
+@inject UserService UserService
+@inject DialogService DialogService
+
+<PermissionView Permission="RolePermission.CustomerUsersManage">
+    <Loading>
+        <PageScaffold Class="page-scaffold--column">
+            <Main>
+                <LoadingState Text="Loading your users…" />
+            </Main>
+        </PageScaffold>
+    </Loading>
+    <Authorized>
+        <PageScaffold Class="page-scaffold--column">
+            <Header>
+                <PageHeader Title="Users"
+                            Count="@(this.count)"
+                            Description="The people of your organization who use the portal: add orderers, and take them out of use."
+                            Icon="people"
+                            RootText="Portal"
+                            RootPath="/portal">
+                    <Actions>
+                        <IconTextButton Text="New user"
+                                        Icon="person_add"
+                                        ButtonStyle="ButtonStyle.Primary"
+                                        Click="CreateUserAsync" />
+                    </Actions>
+                </PageHeader>
+            </Header>
+            <Main>
+                <PageSection>
+                    <ListView @ref="this.list"
+                              TItem="UserListItemDto"
+                              TotalChanged="@(total => this.count = total)"
+                              Id="users"
+                              Label="Users"
+                              ItemName="user"
+                              ItemsName="users"
+                              Definition="UserList.Definition"
+                              Load="UserService.QueryUsersAsync"
+                              RowKey="user => user.Id"
+                              RowLabel="user => user.DisplayName"
+                              RowState="user => ListRowState.Of(user.State)"
+                              OnOpen="OpenUserAsync"
+                              SearchPlaceholder="Name, email or user name"
+                              EmptyIcon="person_off"
+                              EmptyText="No users yet.">
+                        <Columns>
+                            <ListColumn TItem="UserListItemDto" Title="Name" Primary="true">
+                                @context.DisplayName
+                            </ListColumn>
+                            <ListColumn TItem="UserListItemDto" Title="Email">
+                                @context.Email
+                            </ListColumn>
+                            <ListColumn TItem="UserListItemDto" Title="Role">
+                                @RoleOf(context)
+                            </ListColumn>
+                        </Columns>
+                    </ListView>
+                </PageSection>
+            </Main>
+        </PageScaffold>
+    </Authorized>
+    <NotAuthorized>
+        <PageScaffold Class="page-scaffold--column">
+            <Header>
+                <PageHeader Title="Users" Icon="people" RootText="Portal" RootPath="/portal" />
+            </Header>
+            <Main>
+                <PageSection>
+                    <EmptyState Icon="lock" Title="Access denied" Text="Only a customer administrator manages your organization's users." Tone="UiTone.Warning" Role="alert" />
+                </PageSection>
+            </Main>
+        </PageScaffold>
+    </NotAuthorized>
+</PermissionView>
+
+@code {
+    private ListView<UserListItemDto>? list;
+
+    private int? count;
+
+    internal const string Path = "/portal/users";
+
+    private static string RoleOf(UserListItemDto user) =>
+        user.Roles is not { Count: > 0 } roles
+            ? "No role"
+            : string.Join(", ", roles.Select(role => role.Split(" on ", 2)[0]).Distinct());
+
+    private async Task CreateUserAsync()
+    {
+        var result = await UserDialog.OpenCreateAsync(DialogService, UserService);
+        if (result.EntityId is not null && this.list is not null)
+        {
+            await this.list.ReloadAsync();
+        }
+    }
+
+    private Task OpenUserAsync(UserListItemDto user) => UserDialog.OpenAsync(DialogService, UserService, user.Id);
+}

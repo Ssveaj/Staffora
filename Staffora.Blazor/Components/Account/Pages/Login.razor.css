@@ -1,0 +1,452 @@
+.sign-in {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 100vh;
+    min-height: 100dvh;
+    background: var(--color-canvas);
+    color: var(--color-text);
+}
+
+.sign-in__panel {
+    position: relative;
+    isolation: isolate;
+    display: flex;
+    min-height: 13rem;
+    overflow: hidden;
+    background: linear-gradient(180deg, var(--color-ink) 0%, var(--color-ink-strong) 100%);
+    color: var(--color-on-ink);
+}
+
+    .sign-in__panel::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        z-index: -1;
+        background:
+            linear-gradient(90deg, color-mix(in srgb, var(--color-ink-strong) 72%, transparent) 0%, transparent 62%),
+            linear-gradient(0deg, color-mix(in srgb, var(--color-ink-strong) 80%, transparent) 0%, transparent 45%);
+        pointer-events: none;
+    }
+
+.sign-in__art {
+    position: absolute;
+    inset: 0;
+    z-index: -3;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: 62% 50%;
+    transform: scale(1.06);
+    animation: sign-in-drift 48s ease-in-out infinite alternate;
+    pointer-events: none;
+    user-select: none;
+}
+
+.sign-in__glow {
+    position: absolute;
+    inset: 0;
+    z-index: -2;
+    background: radial-gradient(42% 38% at 70% 52%, color-mix(in srgb, var(--color-ink-glow) 22%, transparent), transparent 70%);
+    opacity: 0.7;
+    animation: sign-in-glow 9s ease-in-out infinite alternate;
+    pointer-events: none;
+}
+
+.sign-in__story {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: var(--space-4);
+    min-width: 0;
+    padding: var(--space-5) var(--space-4) var(--space-12);
+}
+
+.sign-in__brand {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-3);
+    margin: 0;
+    color: var(--color-on-ink);
+    font-size: var(--font-size-lg);
+    font-weight: var(--font-weight-bold);
+    letter-spacing: -0.01em;
+}
+
+.sign-in__mark {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: var(--radius-lg);
+    background: var(--color-accent);
+    box-shadow: var(--shadow-ink-glow);
+    color: var(--color-on-accent);
+}
+
+.sign-in__headline {
+    max-width: 22ch;
+    margin: 0;
+    color: var(--color-on-ink);
+    font-size: var(--font-size-xl);
+    font-weight: var(--font-weight-bold);
+    letter-spacing: -0.02em;
+    line-height: var(--line-height-tight);
+}
+
+.sign-in__lede,
+.sign-in__proofs {
+    display: none;
+}
+
+.sign-in__lede {
+    max-width: 30rem;
+    margin: var(--space-4) 0 0;
+    color: var(--color-on-ink-muted);
+    font-size: var(--font-size-lg);
+    line-height: var(--line-height-relaxed);
+}
+
+.sign-in__proofs {
+    flex-direction: column;
+    gap: var(--space-3);
+    margin: var(--space-8) 0 0;
+    padding: 0;
+    list-style: none;
+}
+
+    .sign-in__proofs li {
+        display: flex;
+        align-items: center;
+        gap: var(--space-3);
+        color: var(--color-on-ink);
+        font-size: var(--font-size-md);
+        font-weight: var(--font-weight-medium);
+    }
+
+.sign-in__proof-icon {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    border: 1px solid var(--color-ink-line);
+    border-radius: var(--radius-lg);
+    background: color-mix(in srgb, var(--color-ink-accent) 10%, transparent);
+    color: var(--color-ink-accent);
+}
+
+.sign-in__floor {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    margin-top: calc(-1 * var(--space-8));
+    padding: 0 var(--space-4) var(--space-10);
+}
+
+.sign-in-card {
+    width: 100%;
+    max-width: 26.25rem;
+    padding: var(--space-8) var(--space-6);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-2xl);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-lift);
+    animation: sign-in-rise 0.6s ease both;
+}
+
+.sign-in-card__header {
+    margin-bottom: var(--space-6);
+}
+
+    .sign-in-card__header h1 {
+        margin: 0 0 var(--space-1);
+        color: var(--color-text);
+        font-size: var(--font-size-2xl);
+        font-weight: var(--font-weight-bold);
+        letter-spacing: -0.02em;
+        line-height: var(--line-height-tight);
+    }
+
+    .sign-in-card__header p {
+        margin: 0;
+        color: var(--color-text-muted);
+        font-size: var(--font-size-md);
+    }
+
+.sign-in-card ::deep .sign-in-card__form {
+    display: grid;
+    gap: var(--space-5);
+}
+
+.sign-in-card__field {
+    display: grid;
+    gap: var(--space-2);
+}
+
+.sign-in-card__label {
+    color: var(--color-text);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+}
+
+.sign-in-card ::deep .sign-in-card__input {
+    min-height: 2.75rem;
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-lg);
+    background: var(--color-surface);
+    color: var(--color-text);
+    font-size: var(--font-size-md);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+    .sign-in-card ::deep .sign-in-card__input:hover {
+        border-color: var(--color-text-faint);
+    }
+
+    .sign-in-card ::deep .sign-in-card__input:focus {
+        border-color: var(--color-accent);
+        outline: none;
+        box-shadow: var(--focus-ring);
+    }
+
+    .sign-in-card ::deep .sign-in-card__input.valid.modified,
+    .sign-in-card ::deep .sign-in-card__input.invalid {
+        outline: none;
+    }
+
+    .sign-in-card ::deep .sign-in-card__input.invalid {
+        border-color: var(--color-danger);
+    }
+
+.sign-in-card ::deep .validation-message,
+.sign-in-card ::deep .validation-errors,
+.sign-in-card ::deep .text-danger {
+    color: var(--color-danger) !important;
+    font-size: var(--font-size-sm);
+}
+
+.sign-in-card ::deep .validation-errors {
+    margin: 0;
+    padding: var(--space-3) var(--space-4) var(--space-3) var(--space-8);
+    border: 1px solid var(--color-danger-border);
+    border-radius: var(--radius-lg);
+    background: var(--color-danger-soft);
+}
+
+.sign-in-card ::deep .alert {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+    margin: 0 0 var(--space-5);
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--color-border);
+    border-left-width: 4px;
+    border-radius: var(--radius-lg);
+    font-size: var(--font-size-sm);
+    line-height: var(--line-height-normal);
+}
+
+    .sign-in-card ::deep .alert::before {
+        content: "info";
+        content: "info" / "";
+        flex: 0 0 auto;
+        width: 1em;
+        overflow: hidden;
+        font-family: "Material Symbols Outlined";
+        font-size: var(--icon-size-md);
+        font-weight: var(--font-weight-regular);
+        line-height: 1;
+    }
+
+.sign-in-card ::deep .alert-danger {
+    border-color: var(--color-danger-border);
+    border-left-color: var(--color-danger);
+    background: var(--color-danger-soft);
+    color: var(--color-danger);
+}
+
+    .sign-in-card ::deep .alert-danger::before {
+        content: "error";
+        content: "error" / "";
+    }
+
+.sign-in-card ::deep .alert-success {
+    border-color: var(--color-success-border);
+    border-left-color: var(--color-success);
+    background: var(--color-success-soft);
+    color: var(--color-success);
+}
+
+.sign-in-card__remember {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    width: fit-content;
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+    cursor: pointer;
+}
+
+    .sign-in-card__remember ::deep .form-check-input {
+        width: 1.05rem;
+        height: 1.05rem;
+        margin: 0;
+        border-color: var(--color-border-strong);
+        border-radius: var(--radius-sm);
+        cursor: pointer;
+    }
+
+        .sign-in-card__remember ::deep .form-check-input:focus {
+            border-color: var(--color-accent);
+            box-shadow: var(--focus-ring);
+        }
+
+        .sign-in-card__remember ::deep .form-check-input:checked {
+            border-color: var(--color-accent);
+            background-color: var(--color-accent);
+        }
+
+.sign-in-card__submit {
+    width: 100%;
+    min-height: 2.75rem;
+    padding: var(--space-2) var(--space-4);
+    border: 0;
+    border-radius: var(--radius-lg);
+    background: var(--color-accent);
+    box-shadow: var(--shadow-1);
+    color: var(--color-on-accent);
+    font-size: var(--font-size-md);
+    font-weight: var(--font-weight-semibold);
+    transition: background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+    .sign-in-card__submit:hover,
+    .sign-in-card__submit:active {
+        background: var(--color-accent-strong);
+        color: var(--color-on-accent);
+    }
+
+    .sign-in-card__submit:focus-visible {
+        background: var(--color-accent-strong);
+        color: var(--color-on-accent);
+        outline: none;
+        box-shadow: var(--focus-ring);
+    }
+
+.sign-in-card__help {
+    margin: var(--space-6) 0 0;
+    padding-top: var(--space-5);
+    border-top: 1px solid var(--color-divider-faint);
+    color: var(--color-text-subtle);
+    font-size: var(--font-size-sm);
+    text-align: center;
+}
+
+@keyframes sign-in-drift {
+    from {
+        transform: scale(1.06) translate(0, 0);
+    }
+
+    to {
+        transform: scale(1.1) translate(-1.5%, 1%);
+    }
+}
+
+@keyframes sign-in-glow {
+    from {
+        opacity: 0.55;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes sign-in-rise {
+    from {
+        transform: translateY(12px);
+    }
+
+    to {
+        transform: none;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .sign-in__art,
+    .sign-in__glow,
+    .sign-in-card {
+        animation: none;
+    }
+}
+
+@media (min-width: 30rem) {
+    .sign-in__story {
+        padding: var(--space-6) var(--space-8) var(--space-12);
+    }
+
+    .sign-in__headline {
+        font-size: var(--font-size-2xl);
+    }
+
+    .sign-in-card {
+        padding: var(--space-10) var(--space-8);
+    }
+}
+
+@media (min-width: 64rem) {
+    .sign-in {
+        grid-template-columns: minmax(0, 55fr) minmax(0, 45fr);
+    }
+
+    .sign-in__panel {
+        position: sticky;
+        top: 0;
+        height: 100vh;
+        height: 100dvh;
+        min-height: 36rem;
+    }
+
+    .sign-in__story {
+        padding: var(--space-10) clamp(var(--space-10), 5vw, 4.5rem);
+    }
+
+    .sign-in__headline {
+        font-size: var(--font-size-4xl);
+    }
+
+    .sign-in__proofs {
+        display: flex;
+    }
+
+    .sign-in__lede {
+        display: block;
+    }
+
+    .sign-in__floor {
+        align-items: center;
+        margin-top: 0;
+        padding: var(--space-12) var(--space-8);
+    }
+
+    .sign-in-card {
+        padding: var(--space-10);
+    }
+
+    .sign-in-card__header h1 {
+        font-size: var(--font-size-3xl);
+    }
+}
+
+.sign-in-card__error {
+    margin: 0;
+    color: var(--color-danger);
+    font-size: var(--font-size-sm);
+    text-align: center;
+}

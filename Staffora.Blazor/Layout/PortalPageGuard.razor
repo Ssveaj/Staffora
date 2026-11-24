@@ -1,0 +1,70 @@
+@inject PermissionService PermissionService
+@inject UserSessionService UserSessionService
+@inject IRuntimeExecutionContext Runtime
+@implements IDisposable
+
+@if (this.show is true)
+{
+    @ChildContent
+}
+else if (this.show is false)
+{
+    <SystemPage Title="@CustomerPortalPages.NotPartTitle" Message="@CustomerPortalPages.NotPartMessage" Icon="block" Tone="UiTone.Warning"
+                LinkPath="@AppHome.PortalHome" LinkText="Go to your portal's home" />
+}
+
+@code {
+    private bool? show;
+    private Type? judged;
+
+    [CascadingParameter] public RouteData? RouteData { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    protected override void OnInitialized() => UserSessionService.OnChanged += OnSessionChanged;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var page = RouteData?.PageType;
+        if (this.show is not null && page == this.judged)
+        {
+            return;
+        }
+
+        this.judged = page;
+        var judging = ShowsAsync(page);
+        if (!judging.IsCompleted)
+        {
+            this.show = null;
+        }
+
+        this.show = await judging;
+    }
+
+    private async Task<bool> ShowsAsync(Type? page)
+    {
+        if (CustomerPortalPages.IsPortalPage(page))
+        {
+            return true;
+        }
+
+        var session = Runtime.Current;
+        return session.HasPlatformReach() || session.EffectiveUserId is null
+            || await PermissionService.GetEditionAsync(session) != TenantEdition.CustomerPortal;
+    }
+
+    private void OnSessionChanged() => _ = InvokeAsync(async () =>
+    {
+        var judging = ShowsAsync(RouteData?.PageType);
+        if (!judging.IsCompleted)
+        {
+            this.show = null;
+            StateHasChanged();
+        }
+
+        this.show = await judging;
+        StateHasChanged();
+    });
+
+    public void Dispose() => UserSessionService.OnChanged -= OnSessionChanged;
+}

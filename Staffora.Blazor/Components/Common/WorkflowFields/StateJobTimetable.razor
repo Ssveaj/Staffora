@@ -1,0 +1,186 @@
+@using System.Globalization
+@using Staffora.Core.Jobs
+@using Staffora.Core.Entities.Jobs
+@using Staffora.Core.Scheduling
+@using Staffora.Core.Workflow.FieldAccess
+
+@if (Access.HasFlag(FieldAccessFlags.Visible))
+{
+    <div class="state-job-timetable" data-area="@Area" data-access="@(Editable ? "editable" : "read-only")">
+        @if (!Editable)
+        {
+            <p class="state-job-timetable__note">The timetable is read-only.</p>
+        }
+
+        <ul class="state-job-timetable__days">
+            @foreach (var day in WeekdayExtensions.Week)
+            {
+                var label = day.ToString();
+                var occurrences = OccurrencesOn(day);
+                <li class="state-job-timetable__day" data-day="@((int)day)">
+                    <span class="state-job-timetable__day-name" id="@($"{NamePrefix}-day-{(int)day}")">@label</span>
+                    <div class="state-job-timetable__occurrences" role="group" aria-labelledby="@($"{NamePrefix}-day-{(int)day}")">
+                        @if (occurrences.Count == 0)
+                        {
+                            <span class="state-job-timetable__none">No time</span>
+                        }
+                        else if (!Editable)
+                        {
+                            <span data-occurrences>@string.Join(", ", occurrences.Select(TimesOf))</span>
+                        }
+                        else
+                        {
+                            @for (var place = 0; place < occurrences.Count; place++)
+                            {
+                                @OccurrenceEditor(occurrences[place], label, place + 1)
+                            }
+                        }
+                    </div>
+                    @if (Editable)
+                    {
+                        <IconTextButton Text="Add time" Icon="add" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.Small" Variant="Variant.Outlined"
+                                        aria-label="@($"Add time on {label}")" data-add-day="@((int)day)" Click="@(() => Add(day))" />
+                    }
+                </li>
+            }
+        </ul>
+
+        @if (Editable)
+        {
+            <div class="state-job-timetable__problems-region" aria-live="polite" data-problems-region>
+                @if (Problems.Count > 0)
+                {
+                    <ul class="state-job-timetable__problems" aria-label="Problems with the timetable" data-problems>
+                        @foreach (var problem in Problems)
+                        {
+                            <li>@problem</li>
+                        }
+                    </ul>
+                }
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private readonly List<JobTimeSlot> order = [];
+
+    private readonly HashSet<(JobTimeSlot Occurrence, bool Start)> unreadable = [];
+    private ICollection<JobTimeSlot>? rowsOf;
+
+    [CascadingParameter] public StateEntityDialogContext? DialogContext { get; set; }
+
+    [Parameter, EditorRequired] public string Area { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired] public ICollection<JobTimeSlot> Values { get; set; } = null!;
+
+    [Parameter, EditorRequired] public string NamePrefix { get; set; } = "occurrence";
+
+    private FieldAccessFlags Access { get; set; }
+
+    private bool Editable => Access.HasFlag(FieldAccessFlags.Editable);
+
+    private IReadOnlyList<string> Problems =>
+    [
+        .. Ordered.SelectMany(occurrence => new[] { true, false }.Where(start => this.unreadable.Contains((occurrence, start))).Select(start => EmptiedTime(occurrence, start))),
+        .. JobRules.TimetableProblems(Values.Select(occurrence => new OccurrenceTimes(occurrence.Weekday, occurrence.Start, occurrence.End))),
+    ];
+
+    private IEnumerable<JobTimeSlot> Ordered => this.order.Where(Values.Contains).Concat(Values.Where(occurrence => !this.order.Contains(occurrence)));
+
+    protected override void OnParametersSet()
+    {
+        Access = (DialogContext ?? throw new InvalidOperationException("StateJobTimetable is part of a state-entity dialog's body; its layout cascades the dialog's context.")).AreaAccessOf(Area);
+
+        if (!ReferenceEquals(this.rowsOf, Values))
+        {
+            this.rowsOf = Values;
+            this.order.Clear();
+            this.unreadable.Clear();
+            this.order.AddRange(Values.OrderBy(occurrence => occurrence.Weekday).ThenBy(occurrence => occurrence.Start).ThenBy(occurrence => occurrence.End));
+        }
+    }
+
+    private List<JobTimeSlot> OccurrencesOn(Weekday day) => [.. Ordered.Where(occurrence => occurrence.Weekday == day)];
+
+    private string EmptiedTime(JobTimeSlot occurrence, bool start) =>
+        $"{occurrence.Weekday}: the {(start ? "start" : "end")} of {TimesOf(occurrence)} is empty. It stays {WorkPatternRules.TimeText(start ? occurrence.Start : occurrence.End)} until a time is typed.";
+
+    private static string TimesOf(JobTimeSlot occurrence) => $"{WorkPatternRules.TimeText(occurrence.Start)}–{WorkPatternRules.TimeText(occurrence.End)}";
+
+    private RenderFragment OccurrenceEditor(JobTimeSlot occurrence, string dayLabel, int place) => __builder =>
+    {
+        var name = $"{NamePrefix}-{(int)occurrence.Weekday}-{place}";
+        <div class="state-job-timetable__occurrence" @key="occurrence" data-occurrence="@name">
+            <input type="time" class="rz-textbox state-job-timetable__time" name="@($"{name}-start")" aria-label="@($"Start, {dayLabel}, time {place}")" aria-invalid="@(this.unreadable.Contains((occurrence, true)) ? "true" : null)"
+                   value="@WorkPatternRules.TimeText(occurrence.Start)" @onchange="@(change => SetTime(occurrence, change.Value, start: true))" />
+            <span aria-hidden="true">–</span>
+            <input type="time" class="rz-textbox state-job-timetable__time" name="@($"{name}-end")" aria-label="@($"End, {dayLabel}, time {place}")" aria-invalid="@(this.unreadable.Contains((occurrence, false)) ? "true" : null)"
+                   value="@WorkPatternRules.TimeText(occurrence.End)" @onchange="@(change => SetTime(occurrence, change.Value, start: false))" />
+            <RadzenButton Icon="close" ButtonStyle="ButtonStyle.Base" Size="ButtonSize.Small" Variant="Variant.Text"
+                          aria-label="@($"Remove the time {TimesOf(occurrence)} on {dayLabel}")" title="Remove this time" Click="@(() => Remove(occurrence))" />
+        </div>
+    };
+
+    private void Add(Weekday day)
+    {
+        if (!Editable)
+        {
+            return;
+        }
+
+        var (start, end) = NextFreeHour(OccurrencesOn(day));
+        Values.Add(new JobTimeSlot { Weekday = day, Start = start, End = end });
+        DialogContext!.NotifyEdited();
+    }
+
+    private static (TimeOnly Start, TimeOnly End) NextFreeHour(IReadOnlyList<JobTimeSlot> taken)
+    {
+        var lastMinute = new TimeOnly(23, 59);
+        if (taken.Count == 0)
+        {
+            return (new TimeOnly(8, 0), new TimeOnly(9, 0));
+        }
+
+        var after = taken.Max(occurrence => occurrence.End);
+        return after < lastMinute ? (after, after.Hour >= 23 ? lastMinute : after.AddHours(1)) : (lastMinute, lastMinute);
+    }
+
+    private void Remove(JobTimeSlot occurrence)
+    {
+        if (!Editable)
+        {
+            return;
+        }
+
+        Values.Remove(occurrence);
+        this.unreadable.RemoveWhere(input => input.Occurrence == occurrence);
+        DialogContext!.NotifyEdited();
+    }
+
+    private void SetTime(JobTimeSlot occurrence, object? value, bool start)
+    {
+        if (!Editable)
+        {
+            return;
+        }
+
+        if (value is not string text || !TimeOnly.TryParseExact(text, ["HH:mm", "HH:mm:ss"], CultureInfo.InvariantCulture, DateTimeStyles.None, out var time))
+        {
+            this.unreadable.Add((occurrence, start));
+            return;
+        }
+
+        this.unreadable.Remove((occurrence, start));
+        if (start)
+        {
+            occurrence.Start = time;
+        }
+        else
+        {
+            occurrence.End = time;
+        }
+
+        DialogContext!.NotifyEdited();
+    }
+}

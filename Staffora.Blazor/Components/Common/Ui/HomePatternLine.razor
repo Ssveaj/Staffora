@@ -1,0 +1,23 @@
+@using System.Globalization
+<a class="home-pattern" href="@Href" data-tone="@HomeToneClass.Of(Tone)" @attributes="AdditionalAttributes">
+    <MaterialSymbol Name="@(Count > 0 ? "event_busy" : "event_available")" />
+    <span>@Text(Count)<span class="visually-hidden">@HomeToneClass.Text(Tone)</span></span>
+    <MaterialSymbol Name="arrow_forward" Class="home-pattern__go" />
+</a>
+
+@code {
+    public static readonly string Href = $"/staffing/staff?{StaffList.Pattern}={StaffList.PatternNone}";
+
+    [Parameter, EditorRequired] public int Count { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)] public IReadOnlyDictionary<string, object>? AdditionalAttributes { get; set; }
+
+    private HomeTone Tone => HomeRules.WaitingTone(Count);
+
+    public static string Text(int without) => without switch
+    {
+        0 => "Every staff member has a work pattern",
+        1 => "1 staff member without a work pattern",
+        _ => $"{without.ToString(CultureInfo.InvariantCulture)} staff without a work pattern",
+    };
+}

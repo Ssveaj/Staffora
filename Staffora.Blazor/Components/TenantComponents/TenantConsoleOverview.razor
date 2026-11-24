@@ -1,0 +1,251 @@
+@using System.Globalization
+@using Staffora.Core.Entities.Identity
+@using Staffora.Core.Entities.Organization
+@using Staffora.Core.Entities.Tenancy
+
+<HomeBoard Kind="HomeBoardKind.Inline">
+<div class="console-overview">
+    <section class="console-hero" aria-labelledby="@NameId">
+        <div class="console-hero__identity">
+            <span class="console-hero__mark" aria-hidden="true">@Initials(Summary.Name)</span>
+            <div class="console-hero__who">
+                <h2 class="console-hero__name" id="@NameId">@Summary.Name</h2>
+                @if (!string.IsNullOrWhiteSpace(Summary.Description))
+                {
+                    <p class="console-hero__description">@Summary.Description</p>
+                }
+                <div class="console-hero__facts">
+                    <span class="console-hero__state" data-console-state="@PlatformTenantList.StateValue(Summary.State)" data-tone="@StateTone" title="@StateDescription">
+                        <span class="console-hero__state-dot" aria-hidden="true"></span>@PlatformTenantList.StateLabel(Summary.State)
+                    </span>
+                    <span class="console-hero__fact"><MaterialSymbol Name="calendar_today" />Created @Summary.Created.ToString("d MMM yyyy", CultureInfo.InvariantCulture)</span>
+                    <span class="console-hero__fact"><MaterialSymbol Name="@KindIcon" />@KindText</span>
+                </div>
+            </div>
+        </div>
+
+        <dl class="console-hero__figures" aria-label="The tenant in figures">
+            <div class="console-hero__figure" data-figure="active-users">
+                <dt>Active users</dt>
+                <dd class="console-hero__value">@Number(Summary.ActiveUsers)</dd>
+                <dd class="console-hero__note"><a href="@TabPath("users")">Open users</a></dd>
+            </div>
+            <div class="console-hero__figure" data-figure="inactive-users">
+                <dt>Inactive users</dt>
+                <dd class="console-hero__value">@Number(Summary.InactiveUsers)</dd>
+                <dd class="console-hero__note">Deactivated accounts</dd>
+            </div>
+            <div class="console-hero__figure" data-figure="units">
+                <dt>Organization units</dt>
+                <dd class="console-hero__value">@Number(Summary.UnitsInUse)<span class="console-hero__of"> of @Number(Summary.Units.Count)</span></dd>
+                <dd class="console-hero__note">in use</dd>
+            </div>
+            <div class="console-hero__figure" data-figure="roles">
+                <dt>Roles</dt>
+                <dd class="console-hero__value">@Number(Summary.RoleCount)</dd>
+                <dd class="console-hero__note"><a href="@TabPath("roles")">Open roles</a></dd>
+            </div>
+            <div class="console-hero__figure" data-figure="dead-letters" data-tone="@(Summary.DeadLetters > 0 ? "attention" : "calm")">
+                <dt>Dead letters<span class="visually-hidden">@(Summary.DeadLetters > 0 ? " (needs a look)" : string.Empty)</span></dt>
+                <dd class="console-hero__value">@Number(Summary.DeadLetters)</dd>
+                <dd class="console-hero__note"><a href="@TabPath("dead-letters")">Open dead letters</a></dd>
+            </div>
+        </dl>
+    </section>
+
+    <div class="console-cards">
+        <div class="console-cards__side">
+            <section class="console-card console-card--lifted" aria-labelledby="console-owners-title">
+                <header class="console-card__head">
+                    <h3 class="console-card__title" id="console-owners-title">System owners</h3>
+                    <span class="console-card__count">@Number(Summary.SystemOwners.Count)</span>
+                </header>
+                <p class="console-card__lead">The people who own the tenant's setup and appoint its other owners.</p>
+                @if (Summary.SystemOwners.Count == 0 && Summary.IsPlatformTenant)
+                {
+                    <div class="home-empty">
+                        <MaterialSymbol Name="admin_panel_settings" />
+                        <div class="home-empty__text">
+                            <strong>No system owners</strong>
+                            <span>The platform's own tenant has none: its people are the platform owners, listed under Users.</span>
+                        </div>
+                    </div>
+                }
+                else if (Summary.SystemOwners.Count == 0 && Summary.ManagedBy is not null)
+                {
+                    <div class="home-empty">
+                        <MaterialSymbol Name="storefront" />
+                        <div class="home-empty__text">
+                            <strong>No system owners</strong>
+                            <span>A customer portal has none: its staffing company runs it, and its customer administrators manage its people.</span>
+                        </div>
+                    </div>
+                }
+                else if (Summary.SystemOwners.Count == 0)
+                {
+                    <EmptyState Icon="person_off" Title="No active system owner" Text="Nobody holds the System owner role while active, so the tenant cannot be activated." Tone="UiTone.Warning" />
+                }
+                else
+                {
+                    <ul class="console-rows" aria-label="System owners">
+                        @foreach (var owner in Summary.SystemOwners)
+                        {
+                            <li class="console-row">
+                                <span class="console-row__avatar" aria-hidden="true">@Initials(owner.Name)</span>
+                                <span class="console-row__text">
+                                    <strong class="console-row__name">@owner.Name</strong>
+                                    <span class="console-row__meta">@owner.Email</span>
+                                </span>
+                                <span class="console-pill" data-tone="@(owner.State == UserState.Active ? "calm" : "held")"><span class="console-pill__dot" aria-hidden="true"></span>@EnumDisplayHelper.GetDisplayName(owner.State)</span>
+                            </li>
+                        }
+                    </ul>
+                }
+            </section>
+
+            @if (Summary.ManagedBy is { } company)
+            {
+                <section class="console-card" aria-labelledby="console-portal-title">
+                    <header class="console-card__head">
+                        <h3 class="console-card__title" id="console-portal-title">Managed by</h3>
+                    </header>
+                    <p class="console-card__lead">The staffing company that runs this customer's portal and receives its orders.</p>
+                    <ul class="console-rows" aria-label="Managed by">
+                        <li data-managed-by="@company.Id">
+                            <div class="console-row console-row--link">
+                                <span class="console-row__mark" aria-hidden="true">@Initials(company.Name)</span>
+                                <span class="console-row__text"><a class="console-row__name" href="@ConsolePath(company.Id)">@company.Name</a></span>
+                                <span class="console-pill" data-tone="@ToneOf(company.State)"><span class="console-pill__dot" aria-hidden="true"></span>@PlatformTenantList.StateLabel(company.State)</span>
+                                <MaterialSymbol Name="chevron_right" Class="console-row__go" />
+                            </div>
+                        </li>
+                    </ul>
+                </section>
+            }
+            else
+            {
+                <section class="console-card" aria-labelledby="console-portal-title">
+                    <header class="console-card__head">
+                        <h3 class="console-card__title" id="console-portal-title">Managed customers</h3>
+                        <span class="console-card__count">@Number(Summary.ManagedCustomers.Count)</span>
+                    </header>
+                    <p class="console-card__lead">Customer tenants this company manages for their customer portals.</p>
+                    @if (Summary.ManagedCustomers.Count == 0)
+                    {
+                        <div class="home-empty">
+                            <MaterialSymbol Name="storefront" />
+                            <div class="home-empty__text">
+                                <strong>No managed customers</strong>
+                                <span>This company manages no customer tenant.</span>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <ul class="console-rows" aria-label="Managed customers">
+                            @foreach (var customer in Summary.ManagedCustomers)
+                            {
+                                <li data-managed-customer="@customer.Id">
+                                    <div class="console-row console-row--link">
+                                        <span class="console-row__mark" aria-hidden="true">@Initials(customer.Name)</span>
+                                        <span class="console-row__text"><a class="console-row__name" href="@ConsolePath(customer.Id)">@customer.Name</a></span>
+                                        <span class="console-pill" data-tone="@ToneOf(customer.State)"><span class="console-pill__dot" aria-hidden="true"></span>@PlatformTenantList.StateLabel(customer.State)</span>
+                                        <MaterialSymbol Name="chevron_right" Class="console-row__go" />
+                                    </div>
+                                </li>
+                            }
+                        </ul>
+                    }
+                </section>
+            }
+        </div>
+
+        <section class="console-card console-card--lifted console-card--wide" aria-labelledby="console-organization-title">
+            <header class="console-card__head">
+                <h3 class="console-card__title" id="console-organization-title">Organization</h3>
+                <span class="console-card__count">@(Summary.Units.Count == 1 ? "1 unit" : $"{Number(Summary.Units.Count)} units")</span>
+            </header>
+            <p class="console-card__lead">The tenant's organization units. Select one to see what it is.</p>
+            <div class="@(this.selected is null ? "console-organization" : "console-organization console-organization--selected")">
+                <UnitTree Units="Summary.Units" SelectedId="@this.selected?.Id" SelectedChanged="Select" Label="@($"Organization units of {Summary.Name}")" />
+                @if (this.selected is { } unit)
+                {
+                    <section class="console-unit" aria-label="@($"Selected unit: {unit.Name}")">
+                        <p class="console-unit__eyebrow">Selected unit</p>
+                        <h4 class="console-unit__name">@unit.Name</h4>
+                        <dl class="console-facts">
+                            <dt>Type</dt>
+                            <dd>@EnumDisplayHelper.GetDisplayName(unit.UnitType)</dd>
+                            <dt>State</dt>
+                            <dd><span class="console-pill" data-tone="@(unit.InUse ? "calm" : "held")"><span class="console-pill__dot" aria-hidden="true"></span>@EnumDisplayHelper.GetDisplayName(unit.State)</span></dd>
+                            <dt>Description</dt>
+                            <dd>@(string.IsNullOrWhiteSpace(unit.Description) ? "None" : unit.Description)</dd>
+                            <dt>Units below</dt>
+                            <dd>@UnitsBelow(unit)</dd>
+                        </dl>
+                    </section>
+                }
+            </div>
+        </section>
+    </div>
+</div>
+</HomeBoard>
+
+@code {
+    [Parameter, EditorRequired] public TenantConsoleSummary Summary { get; set; } = null!;
+
+    private OrganizationUnitNode? selected;
+    private Guid shownTenant;
+
+    private string NameId => $"console-name-{Summary.Id:N}";
+
+    private string StateDescription => EnumDisplayHelper.GetDescription(Summary.State) ?? string.Empty;
+
+    private string StateTone => Summary.State switch
+    {
+        TenantState.Active => "calm",
+        TenantState.Setup => "attention",
+        _ => "held",
+    };
+
+    private string KindText => Summary.IsPlatformTenant ? "Platform tenant" : Summary.ManagedBy is not null ? "Customer portal" : "Staffing company";
+
+    private string KindIcon => Summary.IsPlatformTenant ? "hub" : Summary.ManagedBy is not null ? "storefront" : "apartment";
+
+    protected override void OnParametersSet()
+    {
+        if (this.shownTenant != Summary.Id)
+        {
+            this.shownTenant = Summary.Id;
+            this.selected = null;
+        }
+        else if (this.selected is { } selected)
+        {
+            this.selected = Summary.Units.FirstOrDefault(unit => unit.Id == selected.Id);
+        }
+    }
+
+    private void Select(OrganizationUnitNode unit) => this.selected = unit;
+
+    private string UnitsBelow(OrganizationUnitNode unit)
+    {
+        var below = Summary.Units.Where(child => child.ParentId == unit.Id).Select(child => child.Name).Order(StringComparer.CurrentCultureIgnoreCase).ToList();
+        return below.Count == 0 ? "None" : string.Join(", ", below);
+    }
+
+    private static string ToneOf(TenantState state) => state switch
+    {
+        TenantState.Active => "calm",
+        TenantState.Setup => "attention",
+        _ => "held",
+    };
+
+    private string TabPath(string tab) => $"{ConsolePath(Summary.Id)}/{tab}";
+
+    private static string ConsolePath(Guid tenantId) => $"/superadmin/tenants/{tenantId}";
+
+    private static string Number(int value) => value.ToString(CultureInfo.InvariantCulture);
+
+    private static string Initials(string name) =>
+        string.Concat(name.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(part => char.ToUpperInvariant(part[0])));
+}

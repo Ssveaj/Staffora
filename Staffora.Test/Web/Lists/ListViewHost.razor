@@ -1,0 +1,53 @@
+@using Staffora.Blazor.Components.Common.List
+@using Staffora.Core.Lists
+@using Staffora.Core.Models
+
+<ListView @ref="List"
+          TItem="ListTestRow"
+          Id="rows"
+          Label="Test rows"
+          ItemName="row"
+          ItemsName="rows"
+          Definition="Definition"
+          Load="Source.LoadAsync"
+          RowKey="row => row.Id"
+          RowLabel="row => row.Name"
+          RowState="row => ListRowState.Of(row.IsActive)"
+          OnOpen="OnOpen"
+          BindAddress="BindAddress"
+          QuickFilter="@QuickFilter"
+          Cards="@(AsCards ? CardOf : null)"
+          TotalChanged="@(total => OnTotal?.Invoke(total))">
+    <Columns>
+        <ListColumn TItem="ListTestRow" Title="Name" Primary="true">@context.Name</ListColumn>
+        <ListColumn TItem="ListTestRow" Title="Team">@context.Team</ListColumn>
+    </Columns>
+</ListView>
+
+@code {
+    [Parameter, EditorRequired] public FakeRowSource Source { get; set; } = null!;
+
+    [Parameter] public ListDefinition Definition { get; set; } = FakeRowSource.Definition;
+
+    [Parameter] public Func<ListTestRow, Task>? OnOpen { get; set; }
+
+    [Parameter] public bool BindAddress { get; set; } = true;
+
+    [Parameter] public string? QuickFilter { get; set; }
+
+    [Parameter] public bool AsCards { get; set; }
+
+    [Parameter] public Action<int>? OnTotal { get; set; }
+
+    private static ListCard CardOf(ListTestRow row) => new(row.Name)
+    {
+        Date = new DateOnly(2027, 2, 1),
+        Facts = [new("groups", row.Team)],
+        Hint = "Open to see the row",
+        Badge = row.IsActive ? null : "Inactive",
+        BadgeKey = "inactive",
+        EdgeColor = "#2196F3",
+    };
+
+    public ListView<ListTestRow>? List { get; private set; }
+}

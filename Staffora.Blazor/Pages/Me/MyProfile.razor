@@ -1,0 +1,71 @@
+@page "/me/profile"
+@attribute [Authorize]
+@attribute [CustomerPortalPage]
+@inject UserService UserService
+@inject UserSessionService UserSessionService
+
+<PageScaffold>
+    <Header>
+        <PageHeader Title="My profile"
+                    Description="Your name, email address and user name. Your organization's administrators change them, and your password, for you."
+                    Icon="account_circle"
+                    RootText="My work"
+                    RootPath="/me/overview" />
+    </Header>
+    <Main>
+        @if (this.isLoading)
+        {
+            <LoadingState Text="Loading your profile…" />
+        }
+        else
+        {
+            <PageSection Title="Personal information" Description="Ask your organization's administrator to change any of these or to give you a new password.">
+                <RadzenRow Gap="1rem">
+                    <RadzenColumn Size="12" SizeMD="6">
+                        <RadzenFormField Text="First name" Component="profile-first-name" Style="width: 100%;">
+                            <RadzenTextBox Name="profile-first-name" Value="@this.firstName" ReadOnly="true" />
+                        </RadzenFormField>
+                    </RadzenColumn>
+                    <RadzenColumn Size="12" SizeMD="6">
+                        <RadzenFormField Text="Last name" Component="profile-last-name" Style="width: 100%;">
+                            <RadzenTextBox Name="profile-last-name" Value="@this.lastName" ReadOnly="true" />
+                        </RadzenFormField>
+                    </RadzenColumn>
+                    <RadzenColumn Size="12" SizeMD="6">
+                        <RadzenFormField Text="Email" Component="profile-email" Style="width: 100%;">
+                            <RadzenTextBox Name="profile-email" Value="@this.email" ReadOnly="true" />
+                        </RadzenFormField>
+                    </RadzenColumn>
+                    <RadzenColumn Size="12" SizeMD="6">
+                        <RadzenFormField Text="Username" Component="profile-username" Style="width: 100%;">
+                            <RadzenTextBox Name="profile-username" Value="@this.userName" ReadOnly="true" />
+                        </RadzenFormField>
+                    </RadzenColumn>
+                </RadzenRow>
+            </PageSection>
+        }
+    </Main>
+</PageScaffold>
+
+@code {
+    private bool isLoading = true;
+
+    private string firstName = "";
+    private string lastName = "";
+    private string email = "";
+    private string userName = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var userId = UserSessionService.CurrentUserId;
+        if (userId != Guid.Empty && await UserService.GetUserByIdAsync(userId) is { IsSuccess: true, Value: { } user })
+        {
+            this.firstName = user.FirstName;
+            this.lastName = user.LastName;
+            this.email = user.Email ?? "";
+            this.userName = user.UserName ?? "";
+        }
+
+        this.isLoading = false;
+    }
+}

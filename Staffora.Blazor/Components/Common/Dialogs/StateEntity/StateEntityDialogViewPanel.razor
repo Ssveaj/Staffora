@@ -1,0 +1,37 @@
+@{
+    var shown = Context.ActiveViewKey == Key;
+}
+@if (Context.HasViewTabs && Context.OfferedViews.Any(view => view.Key == Key))
+{
+    <div class="state-entity-dialog-view" role="tabpanel" id="@Context.ViewPanelId(Key)" aria-labelledby="@Context.ViewTabId(Key)" data-view="@Key" hidden="@(!shown)">
+        @if (Context.IsViewMounted(Key))
+        {
+            @ChildContent
+        }
+    </div>
+}
+else if (shown)
+{
+    @ChildContent
+}
+
+@code {
+    [CascadingParameter] public StateEntityDialogContext Context { get; set; } = null!;
+
+    [Parameter, EditorRequired] public string Key { get; set; } = string.Empty;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        if (Context is null)
+        {
+            throw new InvalidOperationException($"A {nameof(StateEntityDialogViewPanel)} is placed in a state-entity dialog's body, inside its layout.");
+        }
+
+        if (Context.ViewNamed(Key) is null)
+        {
+            throw new InvalidOperationException($"The {Context.EntityType.Name} dialog's body places the view '{Key}', which its context does not declare.");
+        }
+    }
+}

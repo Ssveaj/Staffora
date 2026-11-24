@@ -1,0 +1,163 @@
+@inject OrganizationService OrganizationService
+@inject PermissionService PermissionService
+
+<div class="org-units">
+    <div class="org-units__tree">
+        @if (this.loadError is not null)
+        {
+            <RadzenAlert AlertStyle="AlertStyle.Danger" Variant="Variant.Flat" Shade="Shade.Lighter" AllowClose="false">@this.loadError</RadzenAlert>
+        }
+        else
+        {
+            <UnitTree Units="this.units" SelectedId="@this.selected?.Id" SelectedChanged="Select" />
+        }
+    </div>
+    <section class="org-units__detail" aria-label="@(this.selected?.Name ?? "Unit")">
+        @if (this.selected is { } unit)
+        {
+            <header class="org-unit-head">
+                <div class="org-unit-head__text">
+                    <h2 class="org-unit-head__title">@unit.Name</h2>
+                    <p class="org-unit-head__facts">
+                        @foreach (var fact in FactsOf(unit))
+                        {
+                            <span class="org-unit-head__fact">@fact</span>
+                        }
+                    </p>
+                </div>
+                @if (UnitActions is not null)
+                {
+                    <div class="org-unit-head__actions">
+                        @UnitActions(unit)
+                    </div>
+                }
+            </header>
+
+            @if (this.canSeePeople)
+            {
+                <TabBar Items="tabItems" Selected="@this.tab" SelectedChanged="@(key => this.tab = key)" Label="Unit views" IdPrefix="@this.idPrefix" PanelId="@PanelId" Class="org-tabs" />
+                <div role="tabpanel" id="@PanelId" aria-labelledby="@TabBar.TabId(this.idPrefix, this.tab)" class="org-tabs__panel">
+                    <div hidden="@(this.tab != PeopleTab)">
+                        <RoleAssignmentView @key="unit.Id"
+                                            TenantId="@TenantId"
+                                            OrganizationUnitId="@unit.Id"
+                                            UnitName="@unit.Name"
+                                            UnitType="@unit.UnitType"
+                                            IsActive="@unit.InUse"
+                                            PeopleCounted="@(count => this.peopleCount = count)" />
+                    </div>
+                    @if (this.tab == InformationTab)
+                    {
+                        @Description(unit)
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="org-tabs__panel">
+                    @Description(unit)
+                </div>
+            }
+        }
+        else
+        {
+            <p class="org-units__hint">Select a unit in the tree to view its details.</p>
+        }
+    </section>
+</div>
+
+@code {
+    private const string PeopleTab = "people";
+    private const string InformationTab = "information";
+
+    private static readonly IReadOnlyList<TabBarItem> tabItems = [new(PeopleTab, "People"), new(InformationTab, "Information")];
+
+    [Parameter, EditorRequired] public Guid TenantId { get; set; }
+
+    [Parameter] public RenderFragment<OrganizationUnitNode>? UnitActions { get; set; }
+
+    public IReadOnlyList<OrganizationUnitNode> Units => this.units;
+
+    private readonly string idPrefix = $"org-unit-{Guid.NewGuid():N}";
+    private List<OrganizationUnitNode> units = [];
+    private OrganizationUnitNode? selected;
+    private string? loadError;
+    private bool canSeePeople;
+    private string tab = PeopleTab;
+    private int? peopleCount;
+
+    private string PanelId => $"{this.idPrefix}-panel";
+
+    protected override async Task OnInitializedAsync()
+    {
+        this.canSeePeople = await PermissionService.HasPermissionAsync(RolePermission.RolesView);
+        await LoadTreeAsync();
+        this.selected ??= this.units.FirstOrDefault(unit => unit.IsRoot);
+    }
+
+    public async Task ReloadAsync()
+    {
+        await LoadTreeAsync();
+        StateHasChanged();
+    }
+
+    private async Task LoadTreeAsync()
+    {
+        var result = await OrganizationService.FetchUnitTreeAsync(TenantId);
+        this.loadError = result.IsSuccess ? null : result.Error;
+        this.units = result.IsSuccess ? result.Value ?? [] : [];
+        this.selected = this.selected is { } selected ? this.units.FirstOrDefault(unit => unit.Id == selected.Id) : null;
+    }
+
+    private void Select(OrganizationUnitNode unit)
+    {
+        if (this.selected?.Id != unit.Id)
+        {
+            this.tab = PeopleTab;
+            this.peopleCount = null;
+        }
+
+        this.selected = unit;
+    }
+
+    private IEnumerable<string> FactsOf(OrganizationUnitNode unit)
+    {
+        yield return EnumDisplayHelper.GetDisplayName(unit.UnitType);
+        if (unit.IsRoot)
+        {
+            yield return "The whole company";
+        }
+        else if (this.units.FirstOrDefault(other => other.Id == unit.ParentId) is { } parent)
+        {
+            yield return $"Below {parent.Name}";
+        }
+
+        if (!unit.InUse)
+        {
+            yield return EnumDisplayHelper.GetDisplayName(unit.State);
+        }
+
+        if (this.canSeePeople && this.peopleCount is { } people && !OrganizationStructurePolicy.IsGrouping(unit.UnitType))
+        {
+            yield return people == 1 ? "1 person" : $"{people} people";
+        }
+
+        var below = this.units.Count(other => other.ParentId == unit.Id);
+        if (below > 0)
+        {
+            yield return below == 1 ? "1 unit below" : $"{below} units below";
+        }
+    }
+
+    private static RenderFragment Description(OrganizationUnitNode unit) => __builder =>
+    {
+        if (string.IsNullOrWhiteSpace(unit.Description))
+        {
+            <p class="org-units__hint">No description provided.</p>
+        }
+        else
+        {
+            <p class="org-units__description">@unit.Description</p>
+        }
+    };
+}

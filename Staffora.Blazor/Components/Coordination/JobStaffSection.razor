@@ -1,0 +1,64 @@
+@using Staffora.Core.Models
+
+@if (Entries is { } entries)
+{
+    <section class="job-staff" data-job-staff aria-labelledby="@TitleId">
+        <h3 class="job-staff__title" id="@TitleId">Staff</h3>
+        @if (entries.Count == 0)
+        {
+            <p class="job-staff__empty" data-job-staff-empty>No staff yet. Add the job's slots under Slots.</p>
+        }
+        else
+        {
+            <ul class="job-staff__slots">
+                @foreach (var entry in entries)
+                {
+                    <li @key="entry.SlotId" class="job-staff__slot" data-staff-slot="@entry.Name">
+                        <span class="job-staff__name">@entry.Name</span>
+                        <span class="job-staff__people">
+                            @foreach (var name in entry.Assigned)
+                            {
+                                <span class="job-staff__person" data-assigned>@name</span>
+                            }
+                            @for (var open = 0; open < entry.Open; open++)
+                            {
+                                <span class="job-staff__open" data-open>Open</span>
+                            }
+                        </span>
+                        @if (entry.Waiting is { } waiting)
+                        {
+                            <span class="job-staff__waiting" data-waiting>@waiting</span>
+                        }
+                        @if (entry.Open > 0 && OffersStaffing)
+                        {
+                            <button type="button" class="job-staff__find" data-find-staff="@entry.Name" aria-label="@($"Find staff for {entry.Name}")" @onclick="() => FindStaffAsync(entry)">
+                                <MaterialSymbol Name="person_search" />Find staff
+                            </button>
+                        }
+                    </li>
+                }
+            </ul>
+        }
+    </section>
+}
+
+@code {
+    [CascadingParameter] public StateEntityDialogContext? Dialog { get; set; }
+
+    [Parameter] public IReadOnlyList<JobStaffEntry>? Entries { get; set; }
+
+    [Parameter] public int Version { get; set; }
+
+    private string TitleId => $"{Dialog?.DomId ?? "job"}-staff-title";
+
+    private bool OffersStaffing => Dialog?.OfferedViews.Any(view => view.Key == JobDialogContext.StaffingView) == true;
+
+    private async Task FindStaffAsync(JobStaffEntry entry)
+    {
+        if (Dialog is JobDialogContext job)
+        {
+            job.StaffingSlot = entry.SlotId;
+            await job.SelectViewAsync(JobDialogContext.StaffingView);
+        }
+    }
+}

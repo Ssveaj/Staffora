@@ -1,0 +1,70 @@
+@using Staffora.Blazor.Components.Common.Dialogs.StateEntity
+@using Staffora.Blazor.Components.Common.List
+@using Staffora.Blazor.Components.Common.WorkflowFields
+@using Staffora.Blazor.Helper
+@using Staffora.Test.Integration.Infrastructure
+@using Radzen
+@using Radzen.Blazor
+@implements IStateEntityDialog<TestParentDialogContext>
+@inject DialogService DialogService
+@inject TestChildDialogService ChildService
+
+<StateEntityDialogViewPanel Key="@TestParentDialogContext.InfoView">
+    <div class="test-parent-dialog" style="display: flex; flex-direction: column; gap: var(--space-3);">
+        <StateFieldTextBox @bind-Value="Context.Entity!.Name" Label="Name" MaxLength="200" />
+        <StateFieldTextArea @bind-Value="Context.Entity!.Notes" Label="Notes" MaxLength="500" />
+        <StateAreaFieldset Area="@TestParentWorkflowAttribute.AreaPlanning" Legend="Planning">
+            <StateFieldNumeric TValue="int?" @bind-Value="Context.Entity!.Priority" Label="Priority" />
+            <StateFieldDatePicker TValue="DateOnly?" @bind-Value="Context.Entity!.StartsOn" Label="Starts on" />
+        </StateAreaFieldset>
+        <StateCustomFields TValue="TestParentAttribute" Values="@Context.Entity!.Attributes" NamePrefix="test-parent-attribute" />
+    </div>
+</StateEntityDialogViewPanel>
+<StateEntityDialogViewPanel Key="@TestParentDialogContext.ChildrenView">
+    <StateFieldTextArea @bind-Value="Context.Entity!.Notes" Label="Notes" MaxLength="500" Name="test-parent-children-notes" />
+    <StateEntityDialogChildList TItem="TestChildRow"
+                                View="@TestParentDialogContext.ChildrenView"
+                                RowKey="@(row => row.Id)"
+                                RowLabel="@(row => row.Name)"
+                                RowStateOf="@(row => row.State)"
+                                Label="Children"
+                                ItemName="child"
+                                ItemsName="children"
+                                EmptyTitle="No children yet"
+                                OpenRow="@OpenChildAsync">
+        <Columns>
+            <ListColumn TItem="TestChildRow" Title="Name" Primary="true">@context.Name</ListColumn>
+            <ListColumn TItem="TestChildRow" Title="Pinned">@(context.IsPinned ? "Yes" : "No")</ListColumn>
+        </Columns>
+    </StateEntityDialogChildList>
+</StateEntityDialogViewPanel>
+
+@code {
+    private int? shownVersion;
+
+    [Parameter, EditorRequired] public TestParentDialogContext Context { get; set; } = null!;
+
+    protected override void OnParametersSet()
+    {
+        if (this.shownVersion != Context.Version)
+        {
+            this.shownVersion = Context.Version;
+            Context.DisplayName = string.IsNullOrWhiteSpace(Context.Entity!.Name) ? null : Context.Entity.Name;
+        }
+    }
+
+    private Task<StateEntityDialogResult> OpenChildAsync(TestChildRow row) => TestChildDialog.OpenAsync(DialogService, ChildService, row.Id);
+
+    internal static TestParentDialogContext ContextFor(TestParentDialogService service, Guid? parentId) =>
+        new(service, parentId) { DefaultTitle = "Parent", CreateTitle = "New parent", EntityIcon = "folder" };
+
+    public static Task<StateEntityDialogResult> OpenAsync(DialogService dialogService, TestParentDialogService service, Guid parentId, StateEntityDialogOptions? options = null) =>
+        dialogService.OpenStateEntityDialogAsync<TestParentDialog, TestParentDialogContext>(ContextFor(service, parentId), options);
+
+    public static Task<StateEntityDialogResult> OpenCreateAsync(DialogService dialogService, TestParentDialogService service) =>
+        dialogService.OpenStateEntityDialogAsync<TestParentDialog, TestParentDialogContext>(ContextFor(service, null));
+
+    public static Task<StateEntityDialogResult> OpenSessionAsync(DialogService dialogService, TestParentDialogService service, IReadOnlyList<Guid> parentIds, int start) =>
+        dialogService.OpenStateEntityDialogSessionAsync(new StateEntityDialogSession(
+            [.. parentIds.Select(id => StateEntityDialogTarget.For<TestParentDialog, TestParentDialogContext>(ContextFor(service, id)))], start));
+}

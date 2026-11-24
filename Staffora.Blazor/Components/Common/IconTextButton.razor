@@ -1,0 +1,44 @@
+<RadzenButton ButtonStyle="@ButtonStyle"
+              Variant="@Variant"
+              Size="@Size"
+              Shade="@Shade"
+              Disabled="@Disabled"
+              IsBusy="@IsBusy"
+              Click="@Click"
+              @attributes="AdditionalAttributes">
+    @if (IsBusy)
+    {
+        <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" Size="ProgressBarCircularSize.ExtraSmall" aria-hidden="true" />
+        <span class="rz-button-text">@Text</span>
+    }
+    else
+    {
+        @if (!string.IsNullOrWhiteSpace(Icon))
+        {
+            <i class="notranslate rz-button-icon-left rzi" aria-hidden="true">@Icon</i>
+        }
+        <span class="rz-button-text">@Text</span>
+    }
+</RadzenButton>
+
+@code {
+    [Parameter, EditorRequired] public string Text { get; set; } = string.Empty;
+
+    [Parameter] public string? Icon { get; set; }
+
+    [Parameter] public ButtonStyle ButtonStyle { get; set; } = ButtonStyle.Primary;
+
+    [Parameter] public Variant Variant { get; set; } = Variant.Filled;
+
+    [Parameter] public ButtonSize Size { get; set; } = ButtonSize.Medium;
+
+    [Parameter] public Shade Shade { get; set; } = Shade.Default;
+
+    [Parameter] public bool Disabled { get; set; }
+
+    [Parameter] public bool IsBusy { get; set; }
+
+    [Parameter] public EventCallback<MouseEventArgs> Click { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)] public IReadOnlyDictionary<string, object>? AdditionalAttributes { get; set; }
+}

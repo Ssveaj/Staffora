@@ -1,0 +1,181 @@
+@using System.Reflection
+@using Microsoft.AspNetCore.Authorization
+@implements IDisposable
+@inject UrlStateService UrlState
+@inject IServiceProvider Services
+@inject ILogger<StateEntityDialogRestoreHost> Log
+@inject NavigationManager Navigation
+
+@code {
+    internal static readonly TimeSpan ShownWait = TimeSpan.FromSeconds(10);
+
+    private static readonly HashSet<string> formTokens = [.. typeof(DialogTokens).GetFields(BindingFlags.Public | BindingFlags.Static)
+        .Where(field => field is { IsLiteral: true } && field.FieldType == typeof(string))
+        .Select(field => (string)field.GetRawConstantValue()!)];
+
+    private readonly CancellationTokenSource stop = new();
+
+    [CascadingParameter] private Task<AuthenticationState>? AuthenticationState { get; set; }
+
+    [CascadingParameter] private RouteData? Route { get; set; }
+
+    internal Task Restoring { get; private set; } = Task.CompletedTask;
+
+    protected override void OnInitialized() => Navigation.LocationChanged += OnLocationChanged;
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        var chain = UrlState.TakeArrivedDialogChain();
+        if (chain.Count > 0)
+        {
+            Restoring = RestoreAsync(chain);
+        }
+    }
+
+    private async Task<bool> PageAuthorizedAsync()
+    {
+        if (AuthenticationState is null || Route is null)
+        {
+            return false;
+        }
+
+        var user = (await AuthenticationState).User;
+        if (user.Identity?.IsAuthenticated is not true)
+        {
+            return false;
+        }
+
+        var attributes = Route.PageType.GetCustomAttributes(inherit: true);
+        var data = attributes.OfType<IAuthorizeData>().ToArray();
+        if (data.Length == 0 || attributes.OfType<IAllowAnonymous>().Any())
+        {
+            return true;
+        }
+
+        var policy = await AuthorizationPolicy.CombineAsync(Services.GetRequiredService<IAuthorizationPolicyProvider>(), data);
+        return policy is null || (await Services.GetRequiredService<IAuthorizationService>().AuthorizeAsync(user, Route, policy)).Succeeded;
+    }
+
+    private async Task RestoreAsync(IReadOnlyList<DialogStackSegment> chain)
+    {
+        try
+        {
+            if (!await PageAuthorizedAsync())
+            {
+                Log.LogDebug("The address names {Count} dialogs on a page the session may not open; nothing is reopened.", chain.Count);
+                return;
+            }
+
+            var routes = Services.GetRequiredService<DialogRouteRegistry>();
+            var dialogs = Services.GetRequiredService<DialogService>();
+            var workflows = Services.GetRequiredService<WorkflowService>();
+            var clock = Services.GetRequiredService<TimeProvider>();
+            var seen = new HashSet<DialogStackSegment>();
+            StateEntityDialogContext? below = null;
+            for (var level = 0; level < chain.Count && !this.stop.IsCancellationRequested; level++)
+            {
+                var segment = chain[level];
+                if (!seen.Add(segment))
+                {
+                    Log.LogWarning("The address names the dialog {Token} over {Id} twice; the chain is reopened up to level {Level}.", segment.Token, segment.Id, level);
+                    return;
+                }
+
+                if (segment.GuidId is not { } id)
+                {
+                    Log.LogWarning("The address names the dialog {Token} over {Id}, which is not a row's key; the chain is reopened up to level {Level}.", segment.Token, segment.Id, level);
+                    return;
+                }
+
+                if (routes.Find(segment.Token) is not { } route)
+                {
+                    if (formTokens.Contains(segment.Token))
+                    {
+                        Log.LogDebug("The address names the dialog {Token}, which a link does not reopen; the chain is reopened up to level {Level}.", segment.Token, level);
+                    }
+                    else
+                    {
+                        Log.LogWarning("The address names the dialog {Token}, which no dialog declares; the chain is reopened up to level {Level}.", segment.Token, level);
+                    }
+
+                    return;
+                }
+
+                var arrival = new StateEntityDialogArrival(workflows, clock, Services, Log, dialogs, this.stop.Token);
+                Task<StateEntityDialogResult> closing;
+                try
+                {
+                    var view = level == 0 ? DialogViewOnPageAttribute.For(Route?.PageType, segment.Token) : null;
+                    closing = route.InvokeOpenerAsync(dialogs, Services, id, new StateEntityDialogOptions { Arrival = arrival, View = view });
+                }
+                catch (Exception exception)
+                {
+                    arrival.Abandon();
+                    Log.LogWarning(exception, "The opener of the dialog {Token} failed; the chain is reopened up to level {Level}.", route.Token, level);
+                    return;
+                }
+
+                if (!arrival.WasConsulted)
+                {
+                    Log.LogWarning("The opener of the dialog {Token} did not hand its options to the door; the chain is reopened up to level {Level}.", route.Token, level);
+                    _ = ObserveAsync(closing, below: null, route.Token);
+                    return;
+                }
+
+                _ = ObserveAsync(closing, below, route.Token);
+                if (await arrival.Outcome is not { } session)
+                {
+                    return;
+                }
+
+                var shown = session.Current.Context;
+                try
+                {
+                    await shown.Shown.WaitAsync(ShownWait, this.stop.Token);
+                }
+                catch (TimeoutException)
+                {
+                    Log.LogWarning("The dialog {Token} did not render its header in time; the next dialog of the chain opens anyway.", route.Token);
+                }
+
+                below = shown;
+            }
+        }
+        catch (Exception) when (this.stop.IsCancellationRequested)
+        {
+        }
+        catch (Exception exception)
+        {
+            Log.LogError(exception, "Reopening the dialogs the address names failed.");
+        }
+    }
+
+    private async Task ObserveAsync(Task<StateEntityDialogResult> closing, StateEntityDialogContext? below, string token)
+    {
+        try
+        {
+            var result = await closing;
+            if (below is not null && (result.Changed || result.Deleted))
+            {
+                await below.ReloadAsync();
+            }
+        }
+        catch (Exception exception)
+        {
+            Log.LogError(exception, "The restored dialog {Token} failed as it closed.", token);
+        }
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e) => this.stop.Cancel();
+
+    public void Dispose()
+    {
+        Navigation.LocationChanged -= OnLocationChanged;
+        this.stop.Cancel();
+    }
+}

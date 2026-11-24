@@ -1,0 +1,215 @@
+@using Staffora.Core.Entities.Identity
+@using Staffora.Blazor.Components.Account
+@inject TenantRoleService TenantRoleService
+@inject RoleHoldingService RoleHoldingService
+@inject DialogService DialogService
+
+@if (this.isLoading)
+{
+    <LoadingState Text="Loading people…" Inline="true" />
+}
+else if (OrganizationStructurePolicy.IsGrouping(UnitType))
+{
+    <p class="org-people__note">@OrganizationStructurePolicy.GroupingHoldsNoRoles</p>
+}
+else if (this.loadError is not null)
+{
+    <p class="org-people__note">@this.loadError</p>
+}
+else
+{
+    var people = Filtered();
+    <div class="org-people">
+        @if (this.heldRoles.Count > 1 || CanAdd)
+        {
+            <div class="org-people__bar">
+                @if (this.heldRoles.Count > 1)
+                {
+                    <div class="org-people__filters" role="group" aria-label="Filter by role">
+                        <button type="button" class="org-filter" aria-pressed="@(this.roleFilter is null ? "true" : "false")" @onclick="@(() => this.roleFilter = null)">
+                            All <span class="org-filter__count">@this.people.Count</span>
+                        </button>
+                        @foreach (var role in this.heldRoles)
+                        {
+                            var on = this.roleFilter == role.Id;
+                            <button type="button" class="org-filter" aria-pressed="@(on ? "true" : "false")" @onclick="@(() => this.roleFilter = on ? null : role.Id)">
+                                @role.Name <span class="org-filter__count">@role.Count</span>
+                            </button>
+                        }
+                    </div>
+                }
+                @if (CanAdd)
+                {
+                    <IconTextButton Text="Add person" Icon="person_add" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.Small" Click="AddPersonAsync" />
+                }
+            </div>
+        }
+
+        @if (people.Count == 0)
+        {
+            <p class="org-people__note">No one holds a role on this unit yet.</p>
+        }
+        else
+        {
+            <ul class="org-people__list" aria-label="People">
+                @foreach (var person in people)
+                {
+                    <li class="org-person" @key="person.UserId">
+                        <span class="org-person__avatar" aria-hidden="true">@AccountMenu.Initials(person.Name)</span>
+                        <span class="org-person__who">
+                            <span class="org-person__name">@person.Name</span>
+                            @if (!string.IsNullOrWhiteSpace(person.Email))
+                            {
+                                <span class="org-person__email">@person.Email</span>
+                            }
+                        </span>
+                        <ul class="org-person__roles" aria-label="@($"Roles of {person.Name}")">
+                            @foreach (var holding in person.Holdings)
+                            {
+                                <li class="org-role-chip @(this.roleFilter == holding.TenantRoleId ? "org-role-chip--on" : null)" @key="holding.Id">
+                                    <span class="org-role-chip__name">@holding.TenantRole.Name</span>
+                                    @if (CanRemove(holding))
+                                    {
+                                        <button type="button" class="org-role-chip__remove" aria-label="@($"Remove the {holding.TenantRole.Name} role from {person.Name}")" title="Remove role" @onclick="@(() => RemoveAsync(holding, person.Name))">
+                                            <MaterialSymbol Name="close" />
+                                        </button>
+                                    }
+                                </li>
+                            }
+                        </ul>
+                    </li>
+                }
+            </ul>
+        }
+
+        @if (!IsActive)
+        {
+            <p class="org-people__note">@RoleHoldingService.InactiveUnitTakesNoRoles</p>
+        }
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public Guid TenantId { get; set; }
+    [Parameter, EditorRequired] public Guid OrganizationUnitId { get; set; }
+
+    [Parameter] public string? UnitName { get; set; }
+
+    [Parameter] public OrganizationUnitType UnitType { get; set; }
+
+    [Parameter] public bool IsActive { get; set; } = true;
+
+    [Parameter] public EventCallback<int> PeopleCounted { get; set; }
+
+    private List<OrganizationUnitUserRole> assignments = [];
+    private List<Person> people = [];
+    private List<HeldRole> heldRoles = [];
+    private Dictionary<Guid, TenantRole> roles = [];
+    private RoleHoldingChoices choices = RoleHoldingChoices.None;
+    private bool isLoading = true;
+    private string? loadError;
+    private Guid? roleFilter;
+
+    private bool canManage;
+
+    private IReadOnlySet<RolePermission> grantable = new HashSet<RolePermission>();
+
+    private Guid? previousOrganizationUnitId;
+
+    private bool CanAdd => this.canManage && IsActive && this.choices.Roles.Count > 0;
+
+    private bool CanRemove(OrganizationUnitUserRole holding) =>
+        this.canManage && this.roles.TryGetValue(holding.TenantRoleId, out var role) && role.Permissions.All(permission => this.grantable.Contains(permission.Permission));
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (OrganizationUnitId != this.previousOrganizationUnitId)
+        {
+            this.previousOrganizationUnitId = OrganizationUnitId;
+            this.roleFilter = null;
+            await LoadAsync();
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        this.isLoading = true;
+
+        var assignmentsResult = await RoleHoldingService.GetAssignmentsByUnitAsync(OrganizationUnitId);
+        this.loadError = assignmentsResult.IsSuccess ? null : assignmentsResult.Error;
+        this.assignments = assignmentsResult.IsSuccess ? assignmentsResult.Value ?? [] : [];
+
+        var rolesResult = await TenantRoleService.GetTenantRolesAsync(TenantId);
+        this.roles = rolesResult.IsSuccess && rolesResult.Value is { } tenantRoles ? tenantRoles.ToDictionary(role => role.Id) : [];
+
+        this.canManage = await RoleHoldingService.CanManageRoleHoldingsAsync(TenantId);
+        this.grantable = this.canManage ? await TenantRoleService.GetGrantablePermissionsAsync() : new HashSet<RolePermission>();
+        var choicesResult = this.canManage ? await RoleHoldingService.GetRoleHoldingChoicesAsync(TenantId) : null;
+        this.choices = choicesResult is { IsSuccess: true, Value: { } offered } ? offered : RoleHoldingChoices.None;
+
+        this.people = this.assignments
+            .GroupBy(assignment => assignment.UserId)
+            .Select(group => new Person(group.Key, NameOf(group.First().User), group.First().User.Email, [.. group.OrderBy(holding => holding.TenantRole.Name, StringComparer.CurrentCultureIgnoreCase)]))
+            .OrderBy(person => person.Name, StringComparer.CurrentCultureIgnoreCase)
+            .ToList();
+        this.heldRoles = this.assignments
+            .GroupBy(assignment => assignment.TenantRoleId)
+            .Select(group => new HeldRole(group.Key, group.First().TenantRole.Name, group.Select(holding => holding.UserId).Distinct().Count()))
+            .OrderBy(role => role.Name, StringComparer.CurrentCultureIgnoreCase)
+            .ToList();
+        if (this.roleFilter is { } filter && this.heldRoles.All(role => role.Id != filter))
+        {
+            this.roleFilter = null;
+        }
+
+        this.isLoading = false;
+        await PeopleCounted.InvokeAsync(this.people.Count);
+    }
+
+    private List<Person> Filtered() => this.roleFilter is { } filter
+        ? [.. this.people.Where(person => person.Holdings.Any(holding => holding.TenantRoleId == filter))]
+        : this.people;
+
+    private static string NameOf(ApplicationUser user)
+    {
+        var name = $"{user.FirstName} {user.LastName}".Trim();
+        return name.Length > 0 ? name : user.Email ?? user.UserName ?? "Unknown user";
+    }
+
+    private async Task AddPersonAsync()
+    {
+        if (await AddRoleHoldingDialog.OpenForUnitAsync(DialogService, OrganizationUnitId, TenantId, UnitName, this.choices))
+        {
+            await LoadAsync();
+            StateHasChanged();
+        }
+    }
+
+    private async Task RemoveAsync(OrganizationUnitUserRole holding, string personName)
+    {
+        var confirmed = await DialogService.ConfirmAsync(
+            $"{personName} will no longer hold the {holding.TenantRole.Name} role on this unit.",
+            "Remove role",
+            okText: "Remove role",
+            destructive: true);
+        if (!confirmed)
+        {
+            return;
+        }
+
+        var result = await RoleHoldingService.RemoveUserFromRoleAsync(holding.Id);
+        if (result.IsSuccess)
+        {
+            await LoadAsync();
+            StateHasChanged();
+        }
+        else
+        {
+            await DialogService.ShowErrorAsync(result.Error ?? "Failed to remove assignment.", "The role could not be removed");
+        }
+    }
+
+    private sealed record Person(Guid UserId, string Name, string? Email, IReadOnlyList<OrganizationUnitUserRole> Holdings);
+
+    private sealed record HeldRole(Guid Id, string Name, int Count);
+}

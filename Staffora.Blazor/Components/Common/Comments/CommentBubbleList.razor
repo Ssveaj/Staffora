@@ -1,0 +1,255 @@
+@using Staffora.Core.Entities.Comments
+@using Staffora.Core.Models
+@using Staffora.Core.Workflow
+@using Staffora.Services.Comments
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+@inject TimeProvider Clock
+
+<div class="@SurfaceClass" data-surface="@(AsNotes ? "notes" : "conversation")">
+    @if (TotalCount > Comments.Count)
+    {
+        <p class="comment-bubbles__more">Showing the newest @Comments.Count of @TotalCount comments.</p>
+    }
+
+    @if (Comments.Count == 0)
+    {
+        <div class="comment-bubbles__start">
+            <span class="comment-bubbles__start-icon"><MaterialSymbol Name="@(AsNotes ? "sticky_note_2" : "chat_bubble")" /></span>
+            <p class="comment-bubbles__empty">@EmptyText</p>
+        </div>
+    }
+    else
+    {
+        var today = CommentDays.Today(Clock.GetUtcNow(), TimeZoneId);
+        DateOnly? day = null;
+        <div class="comment-bubbles__scroller">
+        <ol class="comment-bubbles__list" aria-label="@Label" tabindex="0">
+            @foreach (var comment in Comments)
+            {
+                var commentDay = DateOnly.FromDateTime(comment.At.DateTime);
+                var newDay = !AsNotes && commentDay != day;
+                day = commentDay;
+                <li @key="comment.Id" class="comment-bubbles__item" data-comment="@comment.Id" data-kind="@comment.Kind.ToString().ToLowerInvariant()" data-own="@(comment.IsOwn ? "true" : "false")">
+                    @if (newDay)
+                    {
+                        <p class="comment-bubbles__divider comment-bubbles__divider--day"><span>@CommentDays.DayLabel(commentDay, today)</span></p>
+                    }
+                    @if (comment.Id == MarkedCommentId && !string.IsNullOrEmpty(MarkerLabel))
+                    {
+                        <p class="comment-bubbles__divider comment-bubbles__divider--new" data-marker><span>@MarkerLabel</span></p>
+                    }
+                    <article class="@BubbleClass(comment)">
+                        <p class="comment-bubble__meta">
+                            <span class="comment-bubble__author">@comment.Author</span>
+                            @if (comment.IsOwn)
+                            {
+                                <span class="visually-hidden"> (you)</span>
+                            }
+                            <time class="comment-bubble__time"
+                                  datetime="@comment.At.ToString("o", System.Globalization.CultureInfo.InvariantCulture)"
+                                  title="@CommentDays.FullLabel(comment.At)">@(AsNotes ? CommentDays.WhenLabel(comment.At, today) : CommentDays.TimeLabel(comment.At))</time>
+                        </p>
+                        <p class="comment-bubble__text">@comment.Text</p>
+                    </article>
+                </li>
+            }
+        </ol>
+        </div>
+    }
+
+    @if (CanPost && OnPost is not null)
+    {
+        <div class="comment-bubbles__composer">
+            <label class="visually-hidden" for="@InputId">Write a comment</label>
+            <div class="comment-bubbles__field">
+                <textarea @ref="this.input"
+                          id="@InputId"
+                          name="@InputName"
+                          class="comment-bubbles__input"
+                          rows="1"
+                          maxlength="@MaxLength"
+                          placeholder="@Placeholder"
+                          aria-describedby="@HintId"
+                          value="@this.draft"
+                          @oninput="OnInput"
+                          @onkeydown="OnKeyDownAsync"></textarea>
+                <button type="button"
+                        class="comment-bubbles__send"
+                        aria-label="Post"
+                        title="Post"
+                        data-post-comment="@InputName"
+                        aria-busy="@(this.posting ? "true" : "false")"
+                        @onclick="PostAsync">
+                    <MaterialSymbol Name="@(this.posting ? "hourglass_top" : "send")" />
+                </button>
+            </div>
+            <p class="comment-bubbles__hint" id="@HintId">Enter posts · Shift+Enter starts a new line</p>
+            @if (this.error is not null)
+            {
+                <p class="comment-bubbles__error" role="alert">@this.error</p>
+            }
+        </div>
+    }
+    <p class="visually-hidden" role="status">@this.status</p>
+</div>
+
+@code {
+    private ElementReference input;
+    private IJSObjectReference? module;
+    private bool attached;
+    private string? draft;
+    private string? error;
+    private string? status;
+    private bool posting;
+    private Guid? newestShown;
+
+    [Parameter, EditorRequired] public IReadOnlyList<CommentEntry> Comments { get; set; } = [];
+
+    [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired] public string InputName { get; set; } = string.Empty;
+
+    [Parameter] public int TotalCount { get; set; }
+
+    [Parameter] public bool CanPost { get; set; }
+
+    [Parameter] public Func<string, Task<Result>>? OnPost { get; set; }
+
+    [Parameter] public int MaxLength { get; set; } = Comment.MaxTextLength;
+
+    [Parameter] public string EmptyText { get; set; } = "No comments yet.";
+
+    [Parameter] public string Placeholder { get; set; } = "Write a comment";
+
+    [Parameter] public bool AsNotes { get; set; }
+
+    [Parameter] public string? TimeZoneId { get; set; }
+
+    [Parameter] public Guid? MarkedCommentId { get; set; }
+
+    [Parameter] public string? MarkerLabel { get; set; }
+
+    [Parameter] public string? Draft { get; set; }
+
+    [Parameter] public Action<string?>? DraftChanged { get; set; }
+
+    private string InputId => $"{InputName}-input";
+
+    private string HintId => $"{InputName}-hint";
+
+    private string SurfaceClass => AsNotes ? "comment-bubbles comment-bubbles--notes" : "comment-bubbles comment-bubbles--conversation";
+
+    private static string BubbleClass(CommentEntry comment) =>
+        $"comment-bubble {(comment.IsOwn ? "comment-bubble--own" : "comment-bubble--other")}";
+
+    protected override void OnInitialized() => this.draft = Draft;
+
+    protected override void OnParametersSet()
+    {
+        var newest = Comments.Count > 0 ? Comments[^1] : null;
+        if (this.newestShown is not null && newest is { IsOwn: false } arrived && arrived.Id != this.newestShown)
+        {
+            this.status = $"New comment from {arrived.Author}.";
+        }
+
+        this.newestShown = newest?.Id;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (this.attached || !CanPost || OnPost is null)
+        {
+            return;
+        }
+
+        this.attached = true;
+        try
+        {
+            this.module = await JS.InvokeAsync<IJSObjectReference>("import", "./scripts/comment-composer.js");
+            await this.module.InvokeVoidAsync("attachComposer", this.input);
+        }
+        catch (Exception exception) when (exception is JSException or JSDisconnectedException or TaskCanceledException or ObjectDisposedException or InvalidOperationException)
+        {
+        }
+    }
+
+    private void OnInput(ChangeEventArgs args)
+    {
+        this.draft = args.Value as string;
+        DraftChanged?.Invoke(this.draft);
+    }
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs args)
+    {
+        if (args is { Key: "Enter", ShiftKey: false, AltKey: false, IsComposing: false })
+        {
+            await PostAsync();
+        }
+    }
+
+    private async Task PostAsync()
+    {
+        if (this.posting || OnPost is null)
+        {
+            return;
+        }
+
+        this.status = null;
+        if (string.IsNullOrWhiteSpace(this.draft))
+        {
+            this.error = "Write a comment first.";
+            return;
+        }
+
+        this.posting = true;
+        this.error = null;
+        try
+        {
+            var posted = await OnPost(this.draft);
+            if (posted.IsSuccess)
+            {
+                this.draft = null;
+                DraftChanged?.Invoke(null);
+                this.status = string.IsNullOrWhiteSpace(posted.Message) ? CommentService.Posted : posted.Message;
+                this.newestShown = Comments.Count > 0 ? Comments[^1].Id : null;
+            }
+            else
+            {
+                this.error = string.IsNullOrWhiteSpace(posted.Error) ? "The comment could not be posted. Try again." : posted.Error;
+            }
+        }
+        finally
+        {
+            this.posting = false;
+        }
+
+        StateHasChanged();
+        await FocusInputAsync();
+    }
+
+    private async Task FocusInputAsync()
+    {
+        try
+        {
+            await this.input.FocusAsync();
+        }
+        catch (Exception exception) when (exception is JSException or JSDisconnectedException or TaskCanceledException or ObjectDisposedException or InvalidOperationException)
+        {
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (this.module is not null)
+            {
+                await this.module.DisposeAsync();
+            }
+        }
+        catch (Exception exception) when (exception is JSDisconnectedException or TaskCanceledException)
+        {
+        }
+    }
+}

@@ -1,0 +1,92 @@
+.reconnect-banner {
+    position: fixed;
+    bottom: var(--space-4);
+    left: var(--space-4);
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    box-sizing: border-box;
+    max-width: min(26rem, calc(100vw - 2rem));
+    color: var(--color-text);
+    font-size: var(--font-size-sm);
+}
+
+.reconnect-banner > * {
+    display: none;
+}
+
+.reconnect-banner.components-reconnect-show,
+.reconnect-banner.components-reconnect-retrying,
+.reconnect-banner.components-reconnect-failed,
+.reconnect-banner.components-reconnect-paused,
+.reconnect-banner.components-reconnect-resume-failed {
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-pop);
+}
+
+.components-reconnect-show > .reconnect-banner__spinner,
+.components-reconnect-retrying > .reconnect-banner__spinner,
+.components-reconnect-failed > .reconnect-banner__spinner,
+.components-reconnect-paused > .reconnect-banner__spinner,
+.components-reconnect-resume-failed > .reconnect-banner__spinner,
+.components-reconnect-show > .components-reconnect-first-attempt-visible,
+.components-reconnect-retrying > .components-reconnect-repeated-attempt-visible,
+.components-reconnect-failed > .components-reconnect-failed-visible,
+.components-reconnect-paused > .components-pause-visible,
+.components-reconnect-resume-failed > .components-resume-failed-visible {
+    display: block;
+}
+
+.components-reconnect-show.components-reconnect-retrying > .components-reconnect-first-attempt-visible {
+    display: none;
+}
+
+.components-reconnect-failed > .reconnect-banner__spinner,
+.components-reconnect-resume-failed > .reconnect-banner__spinner {
+    animation: none;
+    border-color: var(--color-danger-dot);
+}
+
+.components-reconnect-paused > .reconnect-banner__spinner {
+    animation: none;
+    border-color: var(--color-border-strong);
+}
+
+.components-reconnect-failed > button.components-reconnect-failed-visible,
+.components-reconnect-paused > button.components-pause-visible,
+.components-reconnect-resume-failed > button.components-resume-failed-visible {
+    display: inline-flex;
+}
+
+.reconnect-banner__text {
+    margin: 0;
+    line-height: var(--line-height-snug);
+}
+
+.reconnect-banner__button {
+    flex-shrink: 0;
+    align-items: center;
+    min-height: var(--control-height-sm);
+    margin-left: auto;
+    padding: 0 var(--space-3);
+    border: 1px solid var(--color-accent);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+    color: var(--color-accent);
+    font: inherit;
+    font-weight: var(--font-weight-semibold);
+    cursor: pointer;
+}
+
+    .reconnect-banner__button:hover {
+        background: var(--color-accent-soft);
+    }
+
+    .reconnect-banner__button:focus-visible {
+        outline: none;
+        box-shadow: var(--focus-ring);
+    }

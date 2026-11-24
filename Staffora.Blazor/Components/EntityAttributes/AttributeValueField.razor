@@ -1,0 +1,170 @@
+@using Staffora.Core.Entities.EntityAttributes
+@using Staffora.Core.Workflow.FieldAccess
+@using Staffora.Blazor.Components.Common.Dialogs.StateEntity
+
+@if (!IsHidden)
+{
+<div class="attribute-value-field" data-attribute-field="@Definition.Id" data-value-type="@Definition.ValueType.ToString().ToLowerInvariant()" data-access="@AccessName">
+    @switch (Definition.ValueType)
+    {
+        case AttributeValueType.Text:
+            <RadzenFormField Component="@InputName" Style="width: 100%;" Text="@Definition.Name" TextTemplate="@(IsRequired ? LabelTemplate : null)">
+                <RadzenTextBox Name="@InputName" Value="@Value.StringValue" ValueChanged="@((string? text) => SetAsync(value => value.StringValue = text))"
+                               MaxLength="AttributeValueRules.TextMaxLength" Disabled="@Disabled" ReadOnly="@IsReadOnly" @attributes="RequiredAttributes" />
+            </RadzenFormField>
+            break;
+
+        case AttributeValueType.Integer:
+            <RadzenFormField Component="@InputName" Style="width: 100%;" Text="@Definition.Name" TextTemplate="@(IsRequired ? LabelTemplate : null)">
+                <RadzenNumeric TValue="int?" Name="@InputName" Value="@Value.Int32Value" ValueChanged="@((int? number) => SetAsync(value => value.Int32Value = number))"
+                               Disabled="@Disabled" ReadOnly="@IsReadOnly" ShowUpDown="@(!IsReadOnly)" InputAttributes="@RequiredAttributes" />
+            </RadzenFormField>
+            break;
+
+        case AttributeValueType.Number:
+            <RadzenFormField Component="@InputName" Style="width: 100%;" Text="@Definition.Name" TextTemplate="@(IsRequired ? LabelTemplate : null)">
+                <RadzenNumeric TValue="double?" Name="@InputName" Value="@Value.DoubleValue" ValueChanged="@((double? number) => SetAsync(value => value.DoubleValue = number))"
+                               Disabled="@Disabled" ReadOnly="@IsReadOnly" ShowUpDown="@(!IsReadOnly)" InputAttributes="@RequiredAttributes" />
+            </RadzenFormField>
+            break;
+
+        case AttributeValueType.Date:
+            <RadzenFormField Component="@InputName" Style="width: 100%;" Text="@Definition.Name" TextTemplate="@(IsRequired ? LabelTemplate : null)">
+                <RadzenDatePicker TValue="DateOnly?" Name="@InputName" Value="@Value.DateValue" ValueChanged="@((DateOnly? day) => SetAsync(value => value.DateValue = day))"
+                                  DateFormat="yyyy-MM-dd" AllowClear="@(!IsReadOnly && !IsRequired)" Disabled="@Disabled" ReadOnly="@IsReadOnly" InputAttributes="@RequiredAttributes"
+                                  PopupRenderMode="PopupRenderMode.OnDemand" />
+            </RadzenFormField>
+            break;
+
+        case AttributeValueType.Boolean when IsReadOnly:
+            <RadzenFormField Component="@InputName" Style="width: 100%;" Text="@Definition.Name">
+                <RadzenTextBox Name="@InputName" Value="@(Value.BooleanValue == true ? "Yes" : "No")" ReadOnly="true" />
+            </RadzenFormField>
+            break;
+
+        case AttributeValueType.Boolean:
+            <div class="attribute-value-field__check">
+                <RadzenCheckBox TValue="bool" Name="@InputName" InputAttributes="@FieldLabel.CheckBoxInput" aria-label="@Definition.Name"
+                                Value="@(Value.BooleanValue ?? false)" ValueChanged="@((bool on) => SetAsync(value => value.BooleanValue = on))" Disabled="@Disabled" />
+                <RadzenLabel Text="@Definition.Name" Component="@InputName" />
+            </div>
+            break;
+
+        case AttributeValueType.Choice when IsReadOnly:
+            <RadzenFormField Component="@InputName" Style="width: 100%;" Text="@Definition.Name">
+                <RadzenTextBox Name="@InputName" Value="@ChosenText" ReadOnly="true" />
+            </RadzenFormField>
+            break;
+
+        case AttributeValueType.Choice:
+            <RadzenFormField Component="@InputName" Style="width: 100%;" Text="@Definition.Name" TextTemplate="@(IsRequired ? LabelTemplate : null)">
+                <RadzenDropDown TValue="string" Name="@InputName" InputAttributes="@FieldLabel.Of(Definition.Name)" Data="@ChoiceOptions"
+                                TextProperty="@nameof(ChoiceItem.Text)" ValueProperty="@nameof(ChoiceItem.Key)" AllowClear="@(!IsReadOnly && !IsRequired)" Placeholder="None"
+                                Value="@Value.StringValue" ValueChanged="@((string? key) => SetAsync(value => value.StringValue = string.IsNullOrEmpty(key) ? null : key))" Disabled="@Disabled" ReadOnly="@IsReadOnly"
+                                aria-label="@Definition.Name" @attributes="ComboboxAttributes" />
+            </RadzenFormField>
+            break;
+
+        default:
+            <p class="attribute-value-field__unsupported">@Definition.Name: this field's type takes no values.</p>
+            break;
+    }
+    @if (NeededBefore is { } steps)
+    {
+        <p id="@HintId" class="attribute-value-field__needed-before">@steps</p>
+    }
+</div>
+}
+
+@code {
+    private static readonly IReadOnlyDictionary<string, object> AriaRequired = new Dictionary<string, object> { ["aria-required"] = "true" };
+
+    private static readonly IReadOnlyDictionary<string, object> NoAttributes = new Dictionary<string, object>();
+
+    [Parameter, EditorRequired] public IEntityAttributeDefinition Definition { get; set; } = null!;
+
+    [Parameter, EditorRequired] public IEntityAttributeValue Value { get; set; } = null!;
+
+    [Parameter] public string NamePrefix { get; set; } = "attribute";
+
+    [Parameter] public bool Disabled { get; set; }
+
+    [Parameter] public EventCallback Changed { get; set; }
+
+    [CascadingParameter] public StateEntityDialogContext? DialogContext { get; set; }
+
+    public string InputName => $"{NamePrefix}-{Definition.Id}";
+
+    private FieldAccessFlags? AreaAccess { get; set; }
+
+    private bool IsHidden => AreaAccess is { } access && !access.HasFlag(FieldAccessFlags.Visible);
+
+    private bool IsReadOnly => AreaAccess is { } access && !access.HasFlag(FieldAccessFlags.Editable);
+
+    private CustomFieldRequirement Requirement { get; set; } = CustomFieldRequirement.None;
+
+    private bool CanBeRequired => Definition.IsRequired && AreaAccess is { } access && access.HasFlag(FieldAccessFlags.Editable) && Definition.ValueType != AttributeValueType.Boolean;
+
+    private bool IsRequired => CanBeRequired && Requirement.IsRequired;
+
+    private string? NeededBefore => CanBeRequired && !Requirement.IsRequired && Requirement.NeededBefore.Count > 0
+        ? $"Needed before {JoinNames(Requirement.NeededBefore)}"
+        : null;
+
+    private string HintId => $"{InputName}-needed-before";
+
+    private IReadOnlyDictionary<string, object> RequiredAttributes =>
+        IsRequired ? AriaRequired
+        : NeededBefore is not null ? new Dictionary<string, object> { ["aria-describedby"] = HintId }
+        : NoAttributes;
+
+    private static readonly IReadOnlyDictionary<string, object> AriaReadOnly = new Dictionary<string, object> { ["aria-readonly"] = "true" };
+
+    private IReadOnlyDictionary<string, object> ComboboxAttributes => IsReadOnly ? AriaReadOnly : RequiredAttributes;
+
+    private string AccessName => AreaAccess is null ? (Disabled ? "disabled" : "editable") : IsRequired ? "required" : IsReadOnly ? "read-only" : "editable";
+
+    protected override void OnParametersSet()
+    {
+        AreaAccess = DialogContext?.AreaAccessOf(WorkflowAreas.Attributes);
+        Requirement = DialogContext?.RequirementOf(Definition.GetType()) ?? CustomFieldRequirement.None;
+    }
+
+    private static string JoinNames(IReadOnlyList<string> names) =>
+        names.Count == 1 ? names[0] : $"{string.Join(", ", names.Take(names.Count - 1))} and {names[^1]}";
+
+    private RenderFragment LabelTemplate => __builder =>
+    {
+        <text>@Definition.Name</text><span class="attribute-value-field__required-mark" aria-hidden="true">*</span>
+    };
+
+    private string ChosenText => Value.StringValue is { } held ? ChoiceOptions.FirstOrDefault(item => item.Key == held)?.Text ?? held : "None";
+
+    private IReadOnlyList<ChoiceItem> ChoiceOptions
+    {
+        get
+        {
+            var items = Definition.Options.Where(option => !option.IsRetired).Select(option => new ChoiceItem(option.Key, option.Label)).ToList();
+            if (Value.StringValue is { } held && items.All(item => item.Key != held))
+            {
+                var option = Definition.Options.FirstOrDefault(candidate => candidate.Key == held);
+                items.Add(new ChoiceItem(held, option is null ? "(unknown option)" : $"{option.Label} (retired)"));
+            }
+
+            return items;
+        }
+    }
+
+    private async Task SetAsync(Action<IEntityAttributeValue> write)
+    {
+        if (IsReadOnly || Disabled)
+        {
+            return;
+        }
+
+        write(Value);
+        await Changed.InvokeAsync();
+    }
+
+    private sealed record ChoiceItem(string Key, string Text);
+}

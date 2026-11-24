@@ -1,0 +1,111 @@
+@using Staffora.Core.Entities.Tenancy
+@using Staffora.Core.Workflow.FieldAccess
+
+@if (Access.HasFlag(FieldAccessFlags.Visible))
+{
+    <div class="state-permission-matrix" data-area="@Area" data-access="@(Editable ? "editable" : "read-only")">
+        @if (!Editable)
+        {
+            <p class="state-permission-matrix__note">The permissions are read-only.</p>
+        }
+
+        @foreach (var all in this.groups)
+        {
+            var group = all.Where(IsListed).ToList();
+            if (group.Count == 0)
+            {
+                continue;
+            }
+
+            var area = EnumDisplayHelper.GetDisplayName(all.Key);
+            <RadzenFieldset Text="@area" ExpandAriaLabel="@($"Show {area}")" CollapseAriaLabel="@($"Hide {area}")" ExpandTitle="@($"Show {area}")" CollapseTitle="@($"Hide {area}")"
+                            AllowCollapse="true" Collapsed="@(!group.Any(IsGranted))">
+                <RadzenStack Gap="0.25rem">
+                    @foreach (var permission in group)
+                    {
+                        var name = $"{NamePrefix}-{permission}";
+                        var label = EnumDisplayHelper.GetDisplayName(permission);
+                        <div class="state-permission-matrix__row" data-permission="@permission">
+                            <RadzenCheckBox TValue="bool"
+                                            Name="@name"
+                                            InputAttributes="@FieldLabel.CheckBoxInput"
+                                            aria-label="@label"
+                                            Value="@IsGranted(permission)"
+                                            Disabled="@(!MayChange(permission))"
+                                            Change="@(on => Toggle(permission, on))" />
+                            <RadzenLabel Text="@label" Component="@name" class="ms-1" />
+                            @if (Editable && !Grantable.Contains(permission))
+                            {
+                                <small class="text-muted ms-1">(you do not hold it)</small>
+                            }
+                        </div>
+                    }
+                </RadzenStack>
+            </RadzenFieldset>
+        }
+    </div>
+}
+
+@code {
+    private readonly Dictionary<RolePermission, TenantRolePermission> removed = [];
+    private ICollection<TenantRolePermission>? rowsOf;
+    private IReadOnlyList<IGrouping<PermissionArea, RolePermission>> groups = [];
+
+    [CascadingParameter] public StateEntityDialogContext? DialogContext { get; set; }
+
+    [Parameter, EditorRequired] public string Area { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired] public ICollection<TenantRolePermission> Values { get; set; } = null!;
+
+    [Parameter, EditorRequired] public IReadOnlySet<RolePermission> Grantable { get; set; } = new HashSet<RolePermission>();
+
+    [Parameter] public IReadOnlySet<RolePermission>? Offered { get; set; }
+
+    [Parameter, EditorRequired] public string NamePrefix { get; set; } = "permission";
+
+    private FieldAccessFlags Access { get; set; }
+
+    private bool Editable => Access.HasFlag(FieldAccessFlags.Editable);
+
+    protected override void OnParametersSet()
+    {
+        Access = (DialogContext ?? throw new InvalidOperationException("StatePermissionMatrix is part of a state-entity dialog's body; its layout cascades the dialog's context.")).AreaAccessOf(Area);
+        if (this.groups.Count == 0)
+        {
+            this.groups = [.. EnumDisplayHelper.GetPermissionsByArea()];
+        }
+
+        if (!ReferenceEquals(this.rowsOf, Values))
+        {
+            this.rowsOf = Values;
+            this.removed.Clear();
+        }
+    }
+
+    private bool IsGranted(RolePermission permission) => Values.Any(row => row.Permission == permission);
+
+    private bool IsListed(RolePermission permission) => Offered is null || Offered.Contains(permission) || IsGranted(permission);
+
+    private bool MayChange(RolePermission permission) => Editable && Grantable.Contains(permission);
+
+    private void Toggle(RolePermission permission, bool granted)
+    {
+        if (!MayChange(permission))
+        {
+            return;
+        }
+
+        var held = Values.FirstOrDefault(row => row.Permission == permission);
+        if (granted && held is null)
+        {
+            Values.Add(this.removed.Remove(permission, out var earlier) ? earlier : new TenantRolePermission { Permission = permission });
+        }
+        else if (!granted && held is not null)
+        {
+            Values.Remove(held);
+            this.removed[permission] = held;
+        }
+
+        DialogContext!.NotifyEdited();
+    }
+}

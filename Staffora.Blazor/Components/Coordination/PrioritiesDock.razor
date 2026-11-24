@@ -1,0 +1,330 @@
+@implements IDisposable
+@using System.Globalization
+@using Staffora.Core.Scheduling
+@using Staffora.Services.Coordination
+@using Staffora.Services.Jobs
+@using Staffora.Services.Scheduling
+@inject CoordinationService Workspace
+@inject JobService JobService
+@inject ResourceAbsenceService AbsenceService
+@inject DialogService DialogService
+@inject UrlStateService UrlState
+
+<section class="@DockClass" aria-labelledby="priorities-title" data-priorities data-dock="@this.fold.Value.ToString().ToLowerInvariant()">
+    @if (this.fold.Value == PanelState.Closed)
+    {
+        <div class="priorities__bar">
+            <MaterialSymbol Name="flag" Class="priorities__flag" />
+            <h2 class="priorities__bar-title" id="priorities-title">Priorities</h2>
+            <span class="priorities__count" data-priorities-total>@(this.board?.Total ?? 0)</span>
+            @if (this.board is { } folded)
+            {
+                <ul class="priorities__bar-tabs" aria-label="Waiting, by tab">
+                    @foreach (var tab in Enum.GetValues<PriorityTab>().Where(tab => tab != PriorityTab.All && folded.CountOf(tab) > 0))
+                    {
+                        <li @key="tab" data-priorities-bar-tab="@tab.ToString().ToLowerInvariant()"><span class="@($"priorities__dot priorities__dot--{tab.ToString().ToLowerInvariant()}")" aria-hidden="true"></span>@PriorityList.TabTitle(tab) @folded.CountOf(tab)</li>
+                    }
+                </ul>
+            }
+            <button type="button" class="priorities__fold" aria-label="Show Priorities" aria-expanded="false" data-priorities-fold @onclick="() => SetFold(PanelState.Open)">
+                <MaterialSymbol Name="keyboard_arrow_up" />
+            </button>
+        </div>
+    }
+    else
+    {
+        <div class="priorities__head">
+            <div class="priorities__title">
+                <h2 id="priorities-title"><MaterialSymbol Name="flag" Class="priorities__flag" />Priorities<span class="priorities__count" data-priorities-total>@(this.board?.Total ?? 0)</span></h2>
+                <p>Everything waiting on you, most urgent first</p>
+            </div>
+            <TabBar Items="TabItems()" Selected="@KeyOf(this.tab.Value)" SelectedChanged="SelectTabAsync" Label="Kinds of work" IdPrefix="priorities-tab" PanelId="priorities-panel" ItemAttribute="data-priorities-tab" Class="priorities__tabs" />
+            @if (this.searchOpen || this.search.Value.Length > 0)
+            {
+                <span class="priorities__search">
+                    <MaterialSymbol Name="search" Class="priorities__search-icon" />
+                    <input type="search" name="priorities-search" class="priorities__search-input" aria-label="Search priorities" placeholder="Search"
+                           value="@this.searchText" maxlength="@PriorityList.MaxSearchLength" data-priorities-search
+                           @oninput="args => this.searchText = args.Value?.ToString() ?? string.Empty" @onkeydown="OnSearchKeyAsync" @onblur="CommitSearchAsync" />
+                </span>
+            }
+            else
+            {
+                <button type="button" class="priorities__icon" aria-label="Search priorities" title="Search priorities" data-priorities-search-open @onclick="() => this.searchOpen = true">
+                    <MaterialSymbol Name="search" />
+                </button>
+            }
+            @if (this.day.Value is { } chosen)
+            {
+                <button type="button" class="priorities__day" aria-pressed="true" data-priorities-day="@chosen.ToString("yyyy'-'MM'-'dd", CultureInfo.InvariantCulture)" @onclick="ClearDayAsync">
+                    <MaterialSymbol Name="event" />@chosen.ToString("ddd d", CultureInfo.InvariantCulture)<span class="priorities__day-count">@(this.board?.Total ?? 0)</span><span class="visually-hidden">, only @chosen.ToString("dddd d MMMM", CultureInfo.InvariantCulture). Show every day</span><MaterialSymbol Name="close" />
+                </button>
+            }
+            <button type="button" class="priorities__fold" aria-label="Fold Priorities to a bar" aria-expanded="true" data-priorities-fold @onclick="() => SetFold(PanelState.Closed)">
+                <MaterialSymbol Name="keyboard_arrow_down" />
+            </button>
+        </div>
+
+        <div class="priorities__body" id="priorities-panel" role="tabpanel" aria-labelledby="@($"priorities-tab-{this.tab.Value.ToString().ToLowerInvariant()}")">
+            @if (this.error is { } failed)
+            {
+                <EmptyState Icon="error" Title="Priorities could not be shown" Text="@failed" Tone="UiTone.Warning" Role="alert" />
+            }
+            else if (this.board is null)
+            {
+                <LoadingState Text="Reading priorities…" Inline="true" />
+            }
+            else if (this.board.Items.Count == 0)
+            {
+                <EmptyState Icon="task_alt" Title="Nothing waits on you" Text="@EmptyText" />
+            }
+            else
+            {
+                <ul class="priorities-list" aria-label="Waiting on you, most urgent first" data-priorities-list>
+                    @foreach (var item in this.board.Items)
+                    {
+                        <li @key="item.Key" class="priorities-item" data-priorities-item="@item.Key" data-priorities-kind="@KindClass(item.Kind)" data-open-again="@(item.IsOpenAgain ? "true" : null)" @onclick="() => RunAsync(ActionsOf(item)[0])">
+                            <span class="@($"priorities-pill priorities-pill--{KindClass(item.Kind)}")">@item.Label</span>
+                            <span class="@(item.IsSoon ? "priorities-item__when priorities-item__when--soon" : "priorities-item__when")">@item.When</span>
+                            <span class="priorities-item__what"><b>@item.Title</b><span>@item.Text</span></span>
+                            <span class="priorities-item__meta">@item.Meta</span>
+                            <span class="priorities-item__actions">
+                                @foreach (var action in ActionsOf(item))
+                                {
+                                    <button type="button" class="@(action.Main ? "priorities-action priorities-action--main" : "priorities-action")" data-priorities-action="@action.Key"
+                                            aria-label="@($"{action.Label}: {item.Label}, {item.Title}, {item.Text}")" @onclick="() => RunAsync(action)" @onclick:stopPropagation="true">
+                                        @action.Label
+                                    </button>
+                                }
+                            </span>
+                        </li>
+                    }
+                    @if (this.board.HasMore)
+                    {
+                        <li class="priorities-list__more">
+                            <button type="button" data-priorities-more @onclick="ShowMoreAsync">
+                                Show more<MaterialSymbol Name="expand_more" /><span class="priorities-list__shown">@this.board.Items.Count of @this.board.CountOf(this.board.Tab) shown</span>
+                            </button>
+                        </li>
+                    }
+                </ul>
+            }
+        </div>
+    }
+    <p class="visually-hidden" role="status">@this.live</p>
+</section>
+
+@code {
+    public const string AddressPrefix = "prio";
+
+    private static readonly UrlStateKey<PriorityTab> tabKey = UrlStateKey.Enum(ListDefinition.AddressName(AddressPrefix, "tab"), PriorityTab.All);
+    private static readonly UrlStateKey<string> searchKey = UrlStateKey.Text(ListDefinition.AddressName(AddressPrefix, UrlStateKeys.Search), PriorityList.MaxSearchLength);
+    private static readonly UrlStateKey<DateOnly?> dayKey = UrlStateKey.Date(ListDefinition.AddressName(AddressPrefix, UrlStateKeys.Day), ScheduleRules.HasReadableWeek);
+    private static readonly UrlStateKey<PanelState> foldKey = UrlStateKey.Enum(UrlStateKeys.Dock, PanelState.Open);
+
+    private UrlStateValue<PriorityTab> tab = null!;
+    private UrlStateValue<string> search = null!;
+    private UrlStateValue<DateOnly?> day = null!;
+    private UrlStateValue<PanelState> fold = null!;
+    private PriorityBoard? board;
+    private string? error;
+    private string searchText = string.Empty;
+    private bool searchOpen;
+    private string live = string.Empty;
+    private int reading;
+
+    private int shown = PriorityList.PageSize;
+
+    [Parameter, EditorRequired] public Func<Task<Result<CoordinationSnapshot>>> Snapshot { get; set; } = null!;
+
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    internal PriorityBoard? Board => this.board;
+
+    private string DockClass => this.fold.Value == PanelState.Closed ? "priorities priorities--folded" : "priorities";
+
+    private string EmptyText => this.day.Value is { } chosen
+        ? $"Nothing that happens on {chosen.ToString("dddd d MMMM", CultureInfo.InvariantCulture)} waits on you. Show every day with the day's chip."
+        : this.search.Value.Length > 0 ? "Nothing waiting matches the search." : "No order, slot, question or absence waits on you now.";
+
+    protected override void OnInitialized()
+    {
+        this.tab = UrlState.Bind(tabKey, exclusive: true);
+        this.search = UrlState.Bind(searchKey, exclusive: true);
+        this.day = UrlState.Bind(dayKey, exclusive: true);
+        this.fold = UrlState.Bind(foldKey, exclusive: true);
+        this.searchText = this.search.Value;
+        this.tab.Changed += OnAddressChanged;
+        this.search.Changed += OnAddressChanged;
+        this.day.Changed += OnAddressChanged;
+        this.fold.Changed += OnFoldChanged;
+    }
+
+    protected override Task OnInitializedAsync() => ReloadAsync();
+
+    public async Task ReloadAsync()
+    {
+        var mine = ++this.reading;
+        var snapshot = await Snapshot();
+        if (mine != this.reading)
+        {
+            return;
+        }
+
+        if (!snapshot.IsSuccess || snapshot.Value is not { } read)
+        {
+            (this.board, this.error) = (null, snapshot.Error ?? CoordinationService.ReadFailed);
+            StateHasChanged();
+            return;
+        }
+
+        var answer = await Workspace.ReadPrioritiesAsync(read, new PriorityQuery(this.tab.Value, this.search.Value, this.day.Value, this.shown));
+        if (mine != this.reading)
+        {
+            return;
+        }
+
+        if (answer.IsSuccess)
+        {
+            (this.board, this.error) = (answer.Value, null);
+        }
+        else
+        {
+            (this.board, this.error) = (null, answer.Error);
+        }
+
+        StateHasChanged();
+    }
+
+    public async Task ShowDayAsync(DateOnly day)
+    {
+        this.fold.Value = PanelState.Open;
+        this.day.Value = day;
+        this.shown = PriorityList.PageSize;
+        this.live = $"Priorities show what happens on {day.ToString("dddd d MMMM", CultureInfo.InvariantCulture)}.";
+        await ReloadAsync();
+    }
+
+    private async Task SetTabAsync(PriorityTab tab)
+    {
+        this.tab.Value = tab;
+        this.shown = PriorityList.PageSize;
+        await ReloadAsync();
+    }
+
+    private IReadOnlyList<TabBarItem> TabItems() =>
+        [.. Enum.GetValues<PriorityTab>().Select(tab => new TabBarItem(KeyOf(tab), PriorityList.TabTitle(tab), this.board?.CountOf(tab) ?? 0))];
+
+    private static string KeyOf(PriorityTab tab) => tab.ToString().ToLowerInvariant();
+
+    private Task SelectTabAsync(string key) =>
+        Enum.TryParse<PriorityTab>(key, ignoreCase: true, out var tab) ? SetTabAsync(tab) : Task.CompletedTask;
+
+    private async Task OnSearchKeyAsync(KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter")
+        {
+            await CommitSearchAsync();
+        }
+    }
+
+    private async Task CommitSearchAsync()
+    {
+        var text = this.searchText.Trim();
+        if (text == this.search.Value)
+        {
+            return;
+        }
+
+        this.search.Value = text;
+        this.shown = PriorityList.PageSize;
+        await ReloadAsync();
+    }
+
+    private async Task ClearDayAsync()
+    {
+        this.day.Value = null;
+        this.shown = PriorityList.PageSize;
+        this.live = "Priorities show every day.";
+        await ReloadAsync();
+    }
+
+    private void SetFold(PanelState state) => this.fold.Value = state;
+
+    private async Task ShowMoreAsync()
+    {
+        this.shown = Math.Min(this.shown + PriorityList.PageSize, PriorityList.MaxShown);
+        this.live = "More priorities are shown.";
+        await ReloadAsync();
+    }
+
+    private void OnAddressChanged() => _ = InvokeAsync(() =>
+    {
+        this.searchText = this.search.Value;
+        this.shown = PriorityList.PageSize;
+        return ReloadAsync();
+    });
+
+    private void OnFoldChanged() => _ = InvokeAsync(StateHasChanged);
+
+    private static IReadOnlyList<PriorityAction> ActionsOf(PriorityItem item) => item.Kind switch
+    {
+        PriorityItemKind.StaffQuestions or PriorityItemKind.CustomerMessages => [new("answer", "Answer", true, item.Target, item.TargetId)],
+        _ => [new("open", "Open", true, item.Target, item.TargetId)],
+    };
+
+    private async Task RunAsync(PriorityAction action)
+    {
+        switch (action.Target)
+        {
+            case PriorityTarget.Absence:
+                await AbsenceDialog.OpenAsync(DialogService, AbsenceService, action.Id);
+                break;
+            case PriorityTarget.AbsenceImpact:
+                await AbsenceDialog.OpenImpactAsync(DialogService, AbsenceService, action.Id);
+                break;
+            case PriorityTarget.Job:
+                await JobDialog.OpenAsync(DialogService, JobService, action.Id);
+                break;
+            default:
+                return;
+        }
+
+        if (OnChanged.HasDelegate)
+        {
+            await OnChanged.InvokeAsync();
+        }
+        else
+        {
+            await ReloadAsync();
+        }
+    }
+
+    private static string KindClass(PriorityItemKind kind) => kind switch
+    {
+        PriorityItemKind.AbsenceImpact => "absent",
+        PriorityItemKind.OrdersToAnswer => "order",
+        PriorityItemKind.AtRisk => "risk",
+        PriorityItemKind.ToRequestOrAssign => "uncovered",
+        PriorityItemKind.UnansweredRequests => "unanswered",
+        PriorityItemKind.WaitingForPick => "pick",
+        PriorityItemKind.StaffQuestions => "question",
+        PriorityItemKind.CustomerMessages => "message",
+        PriorityItemKind.AbsenceToApprove => "absence",
+        _ => "behind",
+    };
+
+    public void Dispose()
+    {
+        this.tab.Changed -= OnAddressChanged;
+        this.search.Changed -= OnAddressChanged;
+        this.day.Changed -= OnAddressChanged;
+        this.fold.Changed -= OnFoldChanged;
+        this.tab.Dispose();
+        this.search.Dispose();
+        this.day.Dispose();
+        this.fold.Dispose();
+    }
+
+    private sealed record PriorityAction(string Key, string Label, bool Main, PriorityTarget Target, Guid Id);
+}

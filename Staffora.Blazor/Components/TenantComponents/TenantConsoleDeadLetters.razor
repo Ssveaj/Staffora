@@ -1,0 +1,48 @@
+@inject PlatformConsoleService PlatformConsole
+@inject DialogService DialogService
+
+<ListView TItem="PlatformDeadLetterRow"
+          Id="tenant-dead-letters"
+          Label="Dead letters"
+          ItemName="dead letter"
+          ItemsName="dead letters"
+          Definition="PlatformDeadLetterList.Definition"
+          Load="this.Load"
+          RowKey="letter => letter.Id"
+          RowLabel="letter => letter.Kind"
+          OnOpen="OpenLetterAsync"
+          SearchPlaceholder="Kind of message"
+          EmptyIcon="mark_email_read"
+          EmptyTitle="No dead letters"
+          EmptyText="Every message between this tenant and its linked tenants was delivered or is still on its way.">
+    <Columns>
+        <ListColumn TItem="PlatformDeadLetterRow" Title="Kind" Primary="true">
+            <code class="dead-letter__kind">@context.Kind</code>
+        </ListColumn>
+        <ListColumn TItem="PlatformDeadLetterRow" Title="Direction">
+            <span data-direction="@(context.Sent ? PlatformDeadLetterList.Sent : PlatformDeadLetterList.Received)">@DirectionText(context)</span>
+        </ListColumn>
+        <ListColumn TItem="PlatformDeadLetterRow" Title="Attempts">
+            @context.Attempts
+        </ListColumn>
+        <ListColumn TItem="PlatformDeadLetterRow" Title="Given up">
+            @TimeText(context.GivenUp)
+        </ListColumn>
+        <ListColumn TItem="PlatformDeadLetterRow" Title="Last failure">
+            @(context.LastFailure ?? "Not recorded")
+        </ListColumn>
+    </Columns>
+</ListView>
+
+@code {
+    [Parameter, EditorRequired] public Guid TenantId { get; set; }
+
+    private Task<Result<ListPage<PlatformDeadLetterRow>>> Load(ListQuery query) => this.PlatformConsole.QueryDeadLettersAsync(this.TenantId, query);
+
+    private Task OpenLetterAsync(PlatformDeadLetterRow letter) =>
+        this.DialogService.OpenFormDialogAsync<DeadLetterDialog>("Dead letter", parameters => parameters.Set(dialog => dialog.Letter, letter), new FormDialogOptions { Width = "560px", Icon = "unsubscribe" });
+
+    internal static string DirectionText(PlatformDeadLetterRow letter) => letter.Sent ? $"Sent to {letter.OtherTenant}" : $"From {letter.OtherTenant}";
+
+    internal static string TimeText(DateTime? instant) => instant is { } value ? $"{value:yyyy-MM-dd HH:mm} UTC" : "Not recorded";
+}

@@ -1,0 +1,161 @@
+.history-step {
+    --history-marker-size: 1.5rem;
+    position: relative;
+    display: grid;
+    grid-template-columns: var(--history-marker-size) minmax(0, 1fr);
+    column-gap: var(--space-3);
+    min-width: 0;
+}
+
+.history-step--compact {
+    --history-marker-size: 1.25rem;
+    column-gap: var(--space-2);
+}
+
+.history-step--linked::after {
+    content: "";
+    position: absolute;
+    top: calc(var(--history-marker-size) + 4px);
+    bottom: calc(4px - var(--history-step-gap, var(--space-4)));
+    left: calc(var(--history-marker-size) / 2 - 1px);
+    width: 2px;
+    border-radius: var(--radius-full);
+    background: var(--color-border);
+}
+
+.history-step__marker {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--history-marker-size);
+    height: var(--history-marker-size);
+    border-radius: 50%;
+    background: var(--history-marker-fill, var(--color-accent-strong));
+    color: var(--history-marker-text, var(--color-on-accent));
+}
+
+.history-step__marker ::deep .history-step__marker-icon {
+    --icon-size: 0.875rem;
+    color: inherit;
+    font-variation-settings: 'FILL' 1;
+}
+
+.history-step--compact .history-step__marker ::deep .history-step__marker-icon {
+    --icon-size: 0.75rem;
+}
+
+.history-step__marker--stayed {
+    width: 0.625rem;
+    height: 0.625rem;
+    margin: calc((var(--history-marker-size) - 0.625rem) / 2);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--history-marker-fill, var(--color-accent-strong)) 22%, transparent);
+}
+
+.history-step__body {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.history-step__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-1) var(--space-2);
+    min-height: var(--history-marker-size);
+}
+
+.history-step__name {
+    color: var(--color-text);
+    font-weight: var(--font-weight-semibold);
+    line-height: var(--line-height-tight);
+    overflow-wrap: anywhere;
+}
+
+.history-step__states {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-1);
+    color: var(--color-text-muted);
+}
+
+.history-step__state {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    height: 1.25rem;
+    padding: 0 7px 0 4px;
+    border-radius: var(--radius-full);
+    background: var(--history-state-fill, var(--color-accent-strong));
+    color: var(--history-state-text, var(--color-on-accent));
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-semibold);
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.history-step--compact .history-step__state {
+    height: 1.125rem;
+    padding: 0 6px 0 3px;
+}
+
+.history-step__state ::deep .history-step__state-icon {
+    color: inherit;
+    font-size: 14px;
+    font-variation-settings: 'FILL' 1;
+}
+
+.history-step__states ::deep .history-step__arrow {
+    color: var(--color-text-muted);
+}
+
+.history-step__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 var(--space-1);
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+    overflow-wrap: anywhere;
+}
+
+.history-step--compact .history-step__meta {
+    font-size: var(--font-size-xs);
+}
+
+.history-step__meta time {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.history-step__notes {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: var(--space-1) 0 0;
+    padding: 0;
+    list-style: none;
+}
+
+.history-step__note,
+.history-step__notice {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-1);
+    color: var(--color-text-muted);
+    font-size: var(--font-size-xs);
+    line-height: var(--line-height-snug);
+    overflow-wrap: anywhere;
+}
+
+.history-step__note ::deep .history-step__note-icon,
+.history-step__notice ::deep .history-step__note-icon {
+    flex: none;
+    --icon-size: 0.875rem;
+    color: var(--color-text-subtle);
+}
+
+.history-step__notice[data-history-notice="Failed"] ::deep .history-step__note-icon {
+    color: var(--color-danger);
+}

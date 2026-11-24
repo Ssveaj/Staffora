@@ -1,0 +1,51 @@
+@using System.Globalization
+@using Staffora.Services.Platform
+
+<PageSection Class="retention-summary" Title="Retention" Description="@Description">
+    @if (Pass is { } pass)
+    {
+        <p class="retention-summary__when" data-retention-when>@LastPassText(pass)</p>
+        <div class="retention-summary__tiles" data-retention-counts>
+            <StatTile Icon="monitor_heart" Label="Error log entries removed" Value="@Number(pass.ErrorLogEntries)" />
+            <StatTile Icon="notifications" Label="Read notices removed" Value="@Number(pass.ReadNotices)" />
+            <StatTile Icon="swap_horiz" Label="Delivered messages removed" Value="@Number(pass.DeliveredMessages)" />
+            <StatTile Icon="delete_forever" Label="Tenants purged" Value="@PurgedText(pass)" />
+        </div>
+    }
+    else
+    {
+        <p class="retention-summary__when" data-retention-when>The retention pass has not run since the app started.</p>
+    }
+</PageSection>
+
+@code {
+    [Parameter]
+    public RetentionPass? Pass { get; set; }
+
+    [Parameter, EditorRequired]
+    public RetentionOptions Options { get; set; } = new();
+
+    private string Description =>
+        $"Every {IntervalText(Options.Interval)} the platform removes error-log entries after {Options.ErrorLogDays} days, read notices after {Options.ReadNoticeDays} days and delivered integration messages after {Options.ProcessedOutboxDays} days. A tenant scheduled for deletion is purged {Options.PendingDeletionGraceDays} days later: its data is removed and it is archived.";
+
+    private static string LastPassText(RetentionPass pass)
+    {
+        var finished = pass.Finished.UtcDateTime.ToString("d MMMM yyyy 'at' HH:mm", CultureInfo.InvariantCulture);
+        return pass.Failures switch
+        {
+            0 => $"Last pass on {finished} UTC.",
+            1 => $"Last pass on {finished} UTC. One removal could not finish, and the error log holds its reason.",
+            _ => $"Last pass on {finished} UTC. {Number(pass.Failures)} removals could not finish, and the error log holds their reasons.",
+        };
+    }
+
+    private static string PurgedText(RetentionPass pass) =>
+        pass.PurgedTenants == 0 ? "0" : $"{Number(pass.PurgedTenants)} ({Number(pass.PurgedRows)} rows)";
+
+    private static string Number(int value) => value.ToString("N0", CultureInfo.InvariantCulture);
+
+    private static string IntervalText(TimeSpan interval) =>
+        interval == TimeSpan.FromHours(1) ? "hour"
+        : interval.TotalHours >= 1 && interval.Minutes == 0 ? $"{(int)interval.TotalHours} hours"
+        : $"{(int)interval.TotalMinutes} minutes";
+}

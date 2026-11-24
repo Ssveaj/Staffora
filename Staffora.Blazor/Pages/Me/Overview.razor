@@ -1,0 +1,130 @@
+@page "/me/overview"
+@attribute [Authorize]
+@inject RoleHoldingService RoleHoldingService
+@inject UserSessionService UserSessionService
+@inject NavigationManager NavigationManager
+
+<PageScaffold>
+    <Header>
+        <PageHeader Title="My overview"
+                    Description="Your profile, access, and settings at a glance."
+                    Icon="account_circle">
+            <Meta>
+                <MetaItem Icon="person">@(UserSessionService.EffectiveUserName ?? UserSessionService.EffectiveEmail)</MetaItem>
+                <MetaItem Icon="badge">Application role: @ActiveApplicationRoleDisplay</MetaItem>
+            </Meta>
+        </PageHeader>
+    </Header>
+    <Main>
+        <PageSection Title="Account summary" Description="A quick overview of your account and assigned access.">
+            <div class="tile-grid">
+                <StatTile Icon="account_tree" Label="Units" Value="@UnitCount.ToString()" />
+                <StatTile Icon="badge" Label="Application role" Value="@ActiveApplicationRoleDisplay" Tone="UiTone.Success" />
+                <StatTile Icon="fact_check" Label="Role assignments" Value="@AssignmentCount.ToString()" Tone="UiTone.Warning" />
+            </div>
+        </PageSection>
+
+        <PageSection Title="Quick actions" Description="Your profile and the roles you hold.">
+            <div class="ui-card-grid">
+                <OverviewCard Title="My profile"
+                              Description="See your name, email address and user name."
+                              Icon="account_circle"
+                              Path="/me/profile" />
+                <OverviewCard Title="My roles"
+                              Description="View the roles you hold and the units they are held on."
+                              Icon="domain"
+                              Tone="UiTone.Info"
+                              Click="ScrollToRoles" />
+            </div>
+        </PageSection>
+
+        <section id="role-access">
+            <PageSection Title="My roles" Description="The roles you hold, by the unit each is held on. A role grants its permissions across the whole company.">
+                @if (this.holdings.Count == 0)
+                {
+                    <EmptyState Icon="domain_disabled" Title="No roles yet" Text="An administrator of your organization assigns you roles." />
+                }
+                else
+                {
+                    <div class="org-list">
+                        @foreach (var access in UnitAccess)
+                        {
+                            <div class="org-row">
+                                <div class="org-row__head">
+                                    <IconChip Icon="@access.Icon" />
+                                    <div class="org-row__text">
+                                        <strong>@access.UnitName</strong>
+                                        <span class="org-row__summary">@access.TypeName</span>
+                                    </div>
+                                    <RadzenBadge Text="@access.RoleCountLabel" BadgeStyle="BadgeStyle.Success" Variant="Variant.Flat" Shade="Shade.Lighter" />
+                                </div>
+
+                                <div class="role-badges">
+                                    @foreach (var roleName in access.RoleNames)
+                                    {
+                                        <RadzenBadge Text="@roleName" BadgeStyle="BadgeStyle.Info" Variant="Variant.Flat" Shade="Shade.Lighter" />
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            </PageSection>
+        </section>
+    </Main>
+</PageScaffold>
+
+@code
+{
+    private List<OrganizationUnitUserRole> holdings = [];
+    private int UnitCount => this.holdings.Select(holding => holding.OrganizationUnitId).Distinct().Count();
+    private int AssignmentCount => this.holdings.Count;
+    private string ActiveApplicationRoleDisplay => AppRoles.DisplayName(UserSessionService.ActiveApplicationRole);
+
+    private List<UnitAccessItem> UnitAccess => this.holdings
+        .GroupBy(holding => holding.OrganizationUnitId)
+        .Select(group => group.First().OrganizationUnit)
+        .OrderBy(unit => unit.UnitType == OrganizationUnitType.Company ? 0 : 1)
+        .ThenBy(unit => unit.Name, StringComparer.CurrentCultureIgnoreCase)
+        .Select(unit => new UnitAccessItem
+        {
+            UnitName = unit.Name,
+            TypeName = unit.UnitType == OrganizationUnitType.Company ? "The whole company" : EnumDisplayHelper.GetDisplayName(unit.UnitType),
+            Icon = Staffora.Core.CoreExtensions.GetIcon(unit.UnitType),
+            RoleNames = this.holdings.Where(holding => holding.OrganizationUnitId == unit.Id)
+                .Select(holding => holding.TenantRole.Name)
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(name => name)
+                .ToList(),
+        })
+        .ToList();
+
+    private async Task LoadHoldingsAsync()
+    {
+        var result = await RoleHoldingService.FetchOwnRoleHoldingsAsync();
+        if (result.IsSuccess && result.Value is not null)
+        {
+            this.holdings = result.Value;
+        }
+    }
+
+    private void ScrollToRoles()
+    {
+        NavigationManager.NavigateTo("/me/overview#role-access", forceLoad: false);
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadHoldingsAsync();
+    }
+
+    private sealed class UnitAccessItem
+    {
+        public string UnitName { get; set; } = string.Empty;
+        public string TypeName { get; set; } = string.Empty;
+        public string Icon { get; set; } = "account_tree";
+        public List<string> RoleNames { get; set; } = new();
+        public string RoleCountLabel => $"{RoleNames.Count} role{(RoleNames.Count == 1 ? string.Empty : "s")}";
+    }
+}

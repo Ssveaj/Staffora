@@ -1,0 +1,142 @@
+@page "/staffing/absence"
+@attribute [Authorize]
+@inject ResourceAbsenceService AbsenceService
+@inject IRuntimeExecutionContext Runtime
+@inject DialogService DialogService
+@inject PermissionService Permissions
+
+<PermissionView AnyOf="readers">
+    <Loading>
+        <PageScaffold>
+            <Main>
+                <LoadingState Text="Loading absences…" />
+            </Main>
+        </PageScaffold>
+    </Loading>
+    <Authorized>
+        <PageScaffold>
+            <Header>
+                <PageHeader Title="Absence"
+                            Count="@(this.count)"
+                            Description="Planned leave and sick leave: who is away, when, and whether it keeps them from being staffed."
+                            Icon="event_busy"
+                            RootText="Staffing">
+                    <Actions>
+                        @if (this.mayReportOwn)
+                        {
+                            <IconTextButton Text="Report absence"
+                                            Icon="event_busy"
+                                            ButtonStyle="@(this.mayRegister ? ButtonStyle.Light : ButtonStyle.Primary)"
+                                            Click="ReportOwnAsync" />
+                        }
+                        <PermissionView Permission="RolePermission.ManageResourceAbsence">
+                            <Authorized>
+                                <IconTextButton Text="Register absence"
+                                                Icon="person_off"
+                                                ButtonStyle="ButtonStyle.Primary"
+                                                Click="RegisterAsync" />
+                            </Authorized>
+                        </PermissionView>
+                    </Actions>
+                </PageHeader>
+            </Header>
+            <Main>
+                <PageSection>
+                    <ListView @ref="this.list"
+                              TItem="AbsenceRow"
+                              TotalChanged="@(total => this.count = total)"
+                              Id="absences"
+                              Label="Absences"
+                              ItemName="absence"
+                              ItemsName="absences"
+                              Definition="AbsenceList.Definition"
+                              Load="LoadAsync"
+                              RowKey="absence => absence.Id"
+                              RowLabel="absence => absence.Label"
+                              RowState="absence => ListRowState.Of(absence.State)"
+                              OnOpen="OpenAbsenceAsync"
+                              QuickFilter="@AbsenceList.Status"
+                              SearchPlaceholder="Staff's name or email"
+                              EmptyIcon="event_busy"
+                              EmptyText="No absence yet.">
+                        <Columns>
+                            <ListColumn TItem="AbsenceRow" Title="Staff" Primary="true">
+                                @context.Staff
+                            </ListColumn>
+                            <ListColumn TItem="AbsenceRow" Title="Kind">
+                                @context.KindLabel
+                            </ListColumn>
+                            <ListColumn TItem="AbsenceRow" Title="Period">
+                                @context.PeriodLabel
+                            </ListColumn>
+                            <ListColumn TItem="AbsenceRow" Title="Staffing">
+                                @context.BlocksLabel
+                            </ListColumn>
+                        </Columns>
+                    </ListView>
+                </PageSection>
+            </Main>
+        </PageScaffold>
+    </Authorized>
+    <NotAuthorized>
+        <PageScaffold>
+            <Header>
+                <PageHeader Title="Absence" Icon="event_busy" RootText="Staffing" />
+            </Header>
+            <Main>
+                <PageSection>
+                    <EmptyState Icon="lock" Title="Access denied" Text="You do not have permission to view absences." Tone="UiTone.Warning" Role="alert" />
+                </PageSection>
+            </Main>
+        </PageScaffold>
+    </NotAuthorized>
+</PermissionView>
+
+@code {
+    private static readonly RolePermission[] readers = [RolePermission.ViewResourceAbsence, RolePermission.ManageResourceAbsence, RolePermission.ApproveResourceAbsence, RolePermission.ReportOwnAbsence];
+
+    private ListView<AbsenceRow>? list;
+
+    private int? count;
+    private bool mayReportOwn;
+
+    private bool mayRegister;
+
+    protected override async Task OnInitializedAsync()
+    {
+        this.mayReportOwn = Runtime.EffectiveUserId is { } self && await AbsenceService.MayAddAbsenceForUserAsync(self);
+        this.mayRegister = await Permissions.HasPermissionAsync(RolePermission.ManageResourceAbsence);
+    }
+
+    private Task<Result<ListPage<AbsenceRow>>> LoadAsync(ListQuery query) => AbsenceService.QueryAbsencesAsync(query);
+
+    private async Task ReportOwnAsync()
+    {
+        if (Runtime.EffectiveUserId is not { } self)
+        {
+            return;
+        }
+
+        var result = await AbsenceDialog.OpenCreateAsync(DialogService, AbsenceService, self);
+        if (result.EntityId is not null && this.list is not null)
+        {
+            await this.list.ReloadAsync();
+        }
+    }
+
+    private async Task RegisterAsync()
+    {
+        if (await ChooseAbsenceStaffDialog.OpenAsync(DialogService) is not { } staff)
+        {
+            return;
+        }
+
+        var result = await AbsenceDialog.OpenCreateAsync(DialogService, AbsenceService, staff);
+        if (result.EntityId is not null && this.list is not null)
+        {
+            await this.list.ReloadAsync();
+        }
+    }
+
+    private Task OpenAbsenceAsync(AbsenceRow absence) => AbsenceDialog.OpenAsync(DialogService, AbsenceService, absence.Id);
+}

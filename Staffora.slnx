@@ -1,0 +1,76 @@
+<Solution>
+  <Folder Name="/.github/">
+    <File Path=".github/copilot-instructions.md" />
+    <File Path="README.md" />
+    <File Path="PRODUCT.md" />
+    <File Path="CLAUDE.md" />
+    <File Path=".gitignore" />
+    <File Path="global.json" />
+    <File Path=".editorconfig" />
+    <File Path=".gitattributes" />
+  </Folder>
+  <Folder Name="/docs/">
+    <File Path="docs/ARCHITECTURE.md" />
+    <File Path="docs/authorization.md" />
+    <File Path="docs/database.md" />
+    <File Path="docs/features.md" />
+    <File Path="docs/known-issues.md" />
+    <File Path="docs/roadmap.md" />
+  </Folder>
+  <Folder Name="/docs/features/">
+    <File Path="docs/features/user-creation-flow.md" />
+  </Folder>
+  <Folder Name="/docs/adr/">
+    <File Path="docs/adr/0001-workflow-engine-for-state-entities.md" />
+    <File Path="docs/adr/0002-workflowservice-orchestration.md" />
+    <File Path="docs/adr/0003-separate-superadmin-layout.md" />
+    <File Path="docs/adr/0005-code-style-and-english-ui.md" />
+    <File Path="docs/adr/0006-course-staffing-domain.md" />
+    <File Path="docs/adr/0007-cross-tenant-ordering-customer-portal.md" />
+    <File Path="docs/adr/0008-users-become-resources-through-a-role.md" />
+    <File Path="docs/adr/0009-state-entity-dialog-only-and-workflow-governed-attributes.md" />
+    <File Path="docs/adr/0010-comment-threads-per-audience.md" />
+    <File Path="docs/adr/0011-notifications-from-workflow-after-commit.md" />
+    <File Path="docs/adr/0012-platform-owner-and-tenant-onboarding.md" />
+    <File Path="docs/adr/0013-tenant-isolation-in-the-data-context.md" />
+    <File Path="docs/adr/0014-session-on-the-auth-cookie-audited-impersonation.md" />
+    <File Path="docs/adr/0015-dialogs-save-through-a-detached-entity-updater.md" />
+    <File Path="docs/adr/0016-deletion-cascades-through-child-workflows.md" />
+    <File Path="docs/adr/0017-dialogs-load-through-one-service-call.md" />
+    <File Path="docs/adr/0018-test-strategy.md" />
+    <File Path="docs/adr/0019-coordination-workspace.md" />
+    <File Path="docs/adr/0020-dates-and-times.md" />
+    <File Path="docs/adr/0021-one-organization-tree-per-tenant.md" />
+    <File Path="docs/adr/0022-data-model-conventions.md" />
+  </Folder>
+  <Folder Name="/docs/plans/">
+    <File Path="docs/plans/build-plan.md" />
+  </Folder>
+  <Folder Name="/.claude/">
+    <File Path=".claude/settings.json" />
+  </Folder>
+  <Folder Name="/.claude/hooks/">
+    <File Path=".claude/hooks/format-cs.ps1" />
+  </Folder>
+  <Folder Name="/.claude/skills/" />
+  <Folder Name="/.claude/skills/workflow-state-entities/">
+    <File Path=".claude/skills/workflow-state-entities/SKILL.md" />
+    <File Path=".claude/skills/workflow-state-entities/TRANSITION-ORCHESTRATION.md" />
+    <File Path=".claude/skills/workflow-state-entities/DIALOGS.md" />
+    <File Path=".claude/skills/workflow-state-entities/ATTRIBUTES.md" />
+  </Folder>
+  <Folder Name="/.claude/skills/tenant-isolation/">
+    <File Path=".claude/skills/tenant-isolation/SKILL.md" />
+  </Folder>
+  <Project Path="Staffora.Blazor/Staffora.Blazor.csproj" Id="625e8c4c-e1b5-4c90-9ad3-cba6016fda08" />
+  <Project Path="Staffora.Core/Staffora.Core.csproj" />
+  <Folder Name="/e2e/">
+    <File Path="package.json" />
+    <File Path="playwright.e2e.config.ts" />
+    <File Path="scripts/e2e-server.mjs" />
+  </Folder>
+  <Project Path="Staffora.Data/Staffora.Data.csproj" />
+  <Project Path="Staffora.E2ESetup/Staffora.E2ESetup.csproj" />
+  <Project Path="Staffora.Services/Staffora.Services.csproj" />
+  <Project Path="Staffora.Test/Staffora.Test.csproj" />
+</Solution>

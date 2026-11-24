@@ -1,0 +1,81 @@
+.dialog-side-tabs {
+    --side-tab-tone: var(--dialog-state-color, var(--color-accent));
+    --side-tab-line: color-mix(in srgb, var(--side-tab-tone) 38%, transparent);
+    display: flex;
+    flex: 0 0 auto;
+    align-items: flex-end;
+    gap: 0.6rem;
+    padding: 0.6rem 0.6rem 0 0.15rem;
+    border-bottom: 1px solid var(--side-tab-line);
+}
+
+.dialog-side-tabs__tab {
+    position: relative;
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    width: 3rem;
+    height: 2rem;
+    margin-bottom: -1px;
+    padding: 0;
+    border: 1px solid transparent;
+    border-bottom: none;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    background: color-mix(in srgb, var(--side-tab-tone) 14%, transparent);
+    color: color-mix(in srgb, var(--side-tab-tone) 55%, var(--color-text));
+    font: inherit;
+    cursor: pointer;
+    transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+    .dialog-side-tabs__tab:hover:not(.dialog-side-tabs__tab--selected) {
+        background: color-mix(in srgb, var(--side-tab-tone) 24%, transparent);
+        color: var(--color-text);
+    }
+
+    .dialog-side-tabs__tab:focus-visible {
+        outline: 2px solid var(--side-tab-tone);
+        outline-offset: 1px;
+    }
+
+.dialog-side-tabs__tab--selected {
+    border-color: var(--side-tab-line);
+    background: var(--state-entity-side-tint, var(--color-surface));
+    color: color-mix(in srgb, var(--side-tab-tone) 75%, black);
+    cursor: default;
+}
+
+.dialog-side-tabs__tab ::deep .dialog-side-tabs__icon {
+    font-size: 21px;
+    line-height: 1;
+}
+
+.dialog-side-tabs__tab--selected ::deep .dialog-side-tabs__icon {
+    font-variation-settings: 'FILL' 1;
+}
+
+.dialog-side-tabs__count {
+    position: absolute;
+    top: -0.5rem;
+    right: -0.55rem;
+    min-width: 1.15rem;
+    height: 1.15rem;
+    padding: 0 0.3rem;
+    border-radius: var(--radius-full);
+    background: color-mix(in srgb, var(--side-tab-tone) 70%, black);
+    box-shadow: 0 0 0 2px var(--state-entity-side-tint, var(--color-surface));
+    color: var(--color-on-accent);
+    font-size: 0.7rem;
+    font-weight: var(--font-weight-bold, 700);
+    line-height: 1.15rem;
+    text-align: center;
+}
+
+    .dialog-side-tabs__count[data-count="0"]:not(.dialog-side-tabs__count--attention) {
+        display: none;
+    }
+
+.dialog-side-tabs__count--attention {
+    background: var(--color-warning);
+}

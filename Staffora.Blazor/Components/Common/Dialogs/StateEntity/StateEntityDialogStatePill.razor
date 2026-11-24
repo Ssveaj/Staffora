@@ -1,0 +1,295 @@
+@implements IAsyncDisposable
+@inject DialogService DialogService
+@inject IJSRuntime JS
+@inject ILogger<StateEntityDialogStatePill> Log
+
+@if (Context.State is { } state)
+{
+    <div class="state-pill" data-open="@(this.open ? "true" : "false")" @ref="this.root" @onpointermove="PointerMoved" @onpointerleave="PointerLeft">
+        <button type="button"
+                class="state-pill__button"
+                style="--state-pill-color: @state.GetStateColor();"
+                aria-expanded="@(this.open ? "true" : "false")"
+                aria-controls="@CardId"
+                data-state="@state"
+                @ref="this.pill"
+                @onclick="ToggleAsync">
+            <MaterialSymbol Name="@state.GetIcon()" Class="state-pill__icon material-symbol--sm" />
+            <span class="visually-hidden">State: </span>
+            <span class="state-pill__name">@EnumDisplayHelper.GetDisplayName(state)</span>
+            <MaterialSymbol Name="@(this.open ? "expand_less" : "expand_more")" Class="state-pill__chevron material-symbol--sm" />
+        </button>
+        <div class="state-pill__card" id="@CardId" hidden="@(!this.open)">
+            <div class="state-pill__card-head">
+                <span class="state-pill__badge" aria-hidden="true"><MaterialSymbol Name="@state.GetIcon()" Class="state-pill__badge-icon" /></span>
+                <span class="state-pill__card-text">
+                    <span class="state-pill__card-title">@EnumDisplayHelper.GetDisplayName(state)</span>
+                    @if (DescriptionOf(state) is { } description)
+                    {
+                        <span class="state-pill__description">@description</span>
+                    }
+                </span>
+            </div>
+            @if (Context.MayReadHistory)
+            {
+                <h3 class="state-pill__heading">Last steps</h3>
+                <div class="state-pill__history" aria-busy="@(this.loading ? "true" : "false")">
+                    @if (this.error is not null)
+                    {
+                        <p class="state-pill__error" role="alert">@this.error</p>
+                    }
+                    else if (this.steps is null)
+                    {
+                        <p class="state-pill__quiet" role="status">Loading…</p>
+                    }
+                    else if (this.steps.Count == 0)
+                    {
+                        <p class="state-pill__quiet">No steps yet.</p>
+                    }
+                    else
+                    {
+                        <ol class="state-pill__steps">
+                            @for (var index = 0; index < this.steps.Count; index++)
+                            {
+                                <li class="state-pill__step"><StateHistoryStepView Step="@this.steps[index]" Today="@this.today" Compact="true" LinksToNext="@(index + 1 < this.steps.Count)" /></li>
+                            }
+                        </ol>
+                    }
+                </div>
+                <div class="state-pill__links">
+                    <button type="button" class="state-pill__link" data-open-history @onclick="OpenHistoryAsync">
+                        <MaterialSymbol Name="history" Class="material-symbol--sm" />
+                        <span>Full history</span>
+                    </button>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    public const int LastSteps = 3;
+
+    private static int pills;
+    private ElementReference root;
+    private ElementReference pill;
+    private IJSObjectReference? module;
+    private DotNetObjectReference<StateEntityDialogStatePill>? self;
+    private bool escapeHeld;
+    private bool open;
+    private bool pinned;
+    private bool loading;
+    private IReadOnlyList<StateHistoryStep>? steps;
+    private DateOnly? today;
+    private string? error;
+
+    private (Guid? EntityId, int Version)? readFor;
+    private int refreshToken;
+
+    private string CardId { get; } = $"state-pill-card-{Interlocked.Increment(ref pills)}";
+
+    [Parameter, EditorRequired] public StateEntityDialogContext Context { get; set; } = null!;
+
+    protected override void OnInitialized()
+    {
+        Context.Changed += OnContextChanged;
+        DialogService.OnOpen += OnDialogOpened;
+    }
+
+    private void OnContextChanged() => _ = InvokeAsync(async () =>
+    {
+        if (this.open && Context.IsBusy)
+        {
+            Close();
+            StateHasChanged();
+            return;
+        }
+
+        if (this.open)
+        {
+            await ReadLastStepsAsync();
+        }
+    });
+
+    private void OnDialogOpened(string? title, Type type, Dictionary<string, object?> parameters, DialogOptions options) => _ = InvokeAsync(() =>
+    {
+        if (this.open)
+        {
+            Close();
+            StateHasChanged();
+        }
+    });
+
+    private EventCallback<PointerEventArgs> PointerMoved =>
+        this.open ? default : EventCallback.Factory.Create<PointerEventArgs>(this, PointerMovedAsync);
+
+    private async Task PointerMovedAsync(PointerEventArgs pointer)
+    {
+        if (!this.open && IsHover(pointer))
+        {
+            this.open = true;
+            await ReadLastStepsAsync();
+        }
+    }
+
+    private void PointerLeft(PointerEventArgs pointer)
+    {
+        if (!this.pinned && IsHover(pointer))
+        {
+            this.open = false;
+        }
+    }
+
+    private static bool IsHover(PointerEventArgs pointer) => string.Equals(pointer.PointerType, "mouse", StringComparison.Ordinal);
+
+    private async Task ToggleAsync()
+    {
+        if (this.open)
+        {
+            Close();
+            return;
+        }
+
+        this.open = true;
+        this.pinned = true;
+        await ReadLastStepsAsync();
+    }
+
+    private void Close()
+    {
+        this.open = false;
+        this.pinned = false;
+    }
+
+    [JSInvokable]
+    public Task CloseCardByEscape() => InvokeAsync(() =>
+    {
+        Close();
+        StateHasChanged();
+    });
+
+    [JSInvokable]
+    public Task CloseCardFromOutside() => InvokeAsync(() =>
+    {
+        if (this.open)
+        {
+            Close();
+            StateHasChanged();
+        }
+    });
+
+    private async Task ReadLastStepsAsync()
+    {
+        var version = (Context.EntityId, Context.Version);
+        if (!Context.MayReadHistory || Context.LoadState != StateEntityDialogLoadState.Loaded || this.readFor == version)
+        {
+            return;
+        }
+
+        this.readFor = version;
+        var token = ++this.refreshToken;
+        this.loading = true;
+        this.error = null;
+        StateHasChanged();
+
+        Result<StateHistoryPage> page;
+        try
+        {
+            page = await Context.GetHistoryAsync(StateHistoryQuery.Newest(LastSteps));
+        }
+        catch (Exception) when (Context.Lifetime.IsCancellationRequested)
+        {
+            return;
+        }
+        catch (Exception exception)
+        {
+            Log.LogError(exception, "Reading the last steps of {EntityType} {EntityId} failed.", Context.EntityType.Name, Context.EntityId);
+            page = Result<StateHistoryPage>.Failure("The last steps could not be read. Try again in a moment.");
+        }
+
+        if (token != this.refreshToken)
+        {
+            return;
+        }
+
+        this.loading = false;
+        if (page.IsSuccess && page.Value is not null)
+        {
+            this.steps = page.Value.Steps;
+            this.today = page.Value.Today;
+        }
+        else
+        {
+            this.readFor = null;
+            this.steps = null;
+            this.error = string.IsNullOrWhiteSpace(page.Error) ? "The last steps could not be read. Try again in a moment." : page.Error;
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task OpenHistoryAsync()
+    {
+        Close();
+        await StateHistoryDialog.OpenAsync(DialogService, Context);
+        await ReturnFocusAsync();
+    }
+
+    private async Task ReturnFocusAsync()
+    {
+        if (this.module is null || Context.State is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await this.module.InvokeVoidAsync("returnFocus", this.pill);
+        }
+        catch (Exception exception) when (exception is JSException or JSDisconnectedException or TaskCanceledException or ObjectDisposedException)
+        {
+        }
+    }
+
+    private static string? DescriptionOf(Enum state) =>
+        state.GetType().GetField(state.ToString())?.GetCustomAttributes(typeof(System.ComponentModel.DescriptionAttribute), false)
+            .OfType<System.ComponentModel.DescriptionAttribute>().FirstOrDefault()?.Description;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (this.escapeHeld || Context.State is null)
+        {
+            return;
+        }
+
+        try
+        {
+            this.escapeHeld = true;
+            this.self = DotNetObjectReference.Create(this);
+            this.module = await JS.InvokeAsync<IJSObjectReference>("import", StateEntityDialogHeader.ModulePath);
+            await this.module.InvokeVoidAsync("holdEscape", this.root, this.pill, this.self);
+        }
+        catch (Exception exception) when (exception is JSException or JSDisconnectedException or TaskCanceledException or ObjectDisposedException or InvalidOperationException)
+        {
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        Context.Changed -= OnContextChanged;
+        DialogService.OnOpen -= OnDialogOpened;
+        try
+        {
+            if (this.module is not null)
+            {
+                await this.module.InvokeVoidAsync("releaseEscape", this.root);
+                await this.module.DisposeAsync();
+            }
+        }
+        catch (Exception exception) when (exception is JSException or JSDisconnectedException or TaskCanceledException or ObjectDisposedException)
+        {
+        }
+
+        this.self?.Dispose();
+    }
+}

@@ -1,0 +1,79 @@
+@inject PermissionService PermissionService
+@inject UserSessionService UserSessionService
+@implements IDisposable
+
+@if (this.hasPermission is null)
+{
+    @if (Loading is not null)
+    {
+        @Loading
+    }
+}
+else if (this.hasPermission.Value)
+{
+    @(Authorized ?? ChildContent)
+}
+else if (NotAuthorized is not null)
+{
+    @NotAuthorized
+}
+
+@code {
+    [Parameter] public RolePermission? Permission { get; set; }
+    [Parameter] public IReadOnlyCollection<RolePermission>? AnyOf { get; set; }
+    [Parameter] public PermissionArea? Area { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public RenderFragment? Authorized { get; set; }
+    [Parameter] public RenderFragment? NotAuthorized { get; set; }
+    [Parameter] public RenderFragment? Loading { get; set; }
+
+    private bool? hasPermission;
+
+    protected override void OnInitialized()
+    {
+        UserSessionService.OnChanged += OnSessionChanged;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+       this.hasPermission = IsSessionReady() ? await GetPermissionAsync() : null;
+    }
+
+    private void OnSessionChanged()
+    {
+        _ = InvokeAsync(RefreshAsync);
+    }
+
+    private async Task RefreshAsync()
+    {
+        this.hasPermission = IsSessionReady() ? await GetPermissionAsync() : null;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private bool IsSessionReady() => UserSessionService.UserId != Guid.Empty;
+
+    private async Task<bool> GetPermissionAsync()
+    {
+        if (Area.HasValue)
+        {
+            return await PermissionService.HasAnyPermissionInAreaAsync(Area.Value);
+        }
+
+        if (AnyOf is { Count: > 0 })
+        {
+            return await PermissionService.HasAnyPermissionAsync(AnyOf);
+        }
+
+        if (Permission.HasValue)
+        {
+            return await PermissionService.HasPermissionAsync(Permission.Value);
+        }
+
+        return false;
+    }
+
+    public void Dispose()
+    {
+        UserSessionService.OnChanged -= OnSessionChanged;
+    }
+}

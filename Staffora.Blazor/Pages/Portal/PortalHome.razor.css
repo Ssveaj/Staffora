@@ -1,0 +1,62 @@
+.portal-home ::deep .home-board .home-band__inner {
+    max-width: 54rem;
+}
+
+.portal-home__supplier {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+    min-width: 0;
+}
+
+.portal-home__supplier-text {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    min-width: 0;
+}
+
+.portal-home__supplier-name {
+    color: var(--color-text);
+    font-weight: var(--font-weight-semibold);
+    overflow-wrap: anywhere;
+}
+
+.portal-home__supplier-note {
+    color: var(--color-text-subtle);
+    font-size: var(--font-size-sm);
+}
+
+.portal-home__abilities {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+    gap: var(--space-3) var(--space-6);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.portal-home__ability {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+    min-width: 0;
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+}
+
+    .portal-home__ability > span {
+        min-width: 0;
+        padding-top: var(--space-1);
+        overflow-wrap: anywhere;
+    }
+
+    .portal-home__ability strong {
+        color: var(--color-text);
+    }
+
+@media (max-width: 47.99rem) {
+    .portal-home__abilities {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}

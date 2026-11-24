@@ -1,0 +1,59 @@
+@inject UserSessionService UserSessionService
+@inject PermissionService PermissionService
+@inject IRuntimeExecutionContext Runtime
+@inject NavigationManager Navigation
+@implements IDisposable
+
+@if (this.sections.Count > 0)
+{
+    var location = AppNavigation.Locate(this.sections, Navigation.ToBaseRelativePath(Navigation.Uri));
+    <nav class="app-nav" aria-label="Main navigation" data-app-nav>
+        @foreach (var section in this.sections)
+        {
+            var id = SectionId(section);
+            <div class="app-nav__group" data-nav-section>
+                <p id="@id" class="app-nav__heading">@section.Title</p>
+                <ul class="app-nav__list" aria-labelledby="@id">
+                    @foreach (var item in section.Items)
+                    {
+                        var current = ReferenceEquals(location?.Item, item);
+                        <li>
+                            <a class="@(current ? "app-nav__link active" : "app-nav__link")" href="@item.Path" title="@item.Text" aria-label="@item.Text"
+                               aria-current="@(current && location!.Exact ? "page" : null)" data-nav-link>
+                                <MaterialSymbol Name="@item.Icon" />
+                                <span class="app-nav__label">@item.Text</span>
+                            </a>
+                        </li>
+                    }
+                </ul>
+            </div>
+        }
+    </nav>
+}
+
+@code {
+    private IReadOnlyList<NavSection> sections = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        UserSessionService.OnChanged += OnSessionChanged;
+        Navigation.LocationChanged += OnLocationChanged;
+        this.sections = await AppNavigation.ForSessionAsync(Runtime.Current, PermissionService);
+    }
+
+    private static string SectionId(NavSection section) => $"nav-{section.Title.Replace(' ', '-').ToLowerInvariant()}";
+
+    private void OnSessionChanged() => _ = InvokeAsync(async () =>
+    {
+        this.sections = await AppNavigation.ForSessionAsync(Runtime.Current, PermissionService);
+        StateHasChanged();
+    });
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs args) => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        UserSessionService.OnChanged -= OnSessionChanged;
+        Navigation.LocationChanged -= OnLocationChanged;
+    }
+}

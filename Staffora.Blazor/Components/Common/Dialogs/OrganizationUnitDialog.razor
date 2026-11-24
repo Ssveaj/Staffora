@@ -1,0 +1,88 @@
+@using Staffora.Blazor.Components.Common.Dialogs.StateEntity
+@using Staffora.Blazor.Components.Common.List
+@using Staffora.Blazor.Components.Common.WorkflowFields
+@using Staffora.Core.Entities.EntityAttributes.OrganizationAttributes
+@using Staffora.Core.Lists
+@using Staffora.Core.Models
+@using Staffora.Services.Services
+@implements IStateEntityDialog<OrganizationUnitDialogContext>
+@inject DialogService DialogService
+@inject OrganizationService OrganizationService
+
+<StateEntityDialogViewPanel Key="@OrganizationUnitDialogContext.InfoView">
+    <div class="unit-dialog">
+        <StateFieldTextBox @bind-Value="Context.Entity!.Name" Label="Name" MaxLength="200" Name="unit-name" />
+        <StateFieldDropDown TValue="OrganizationUnitType" TItem="OrganizationUnitTypeOption" @bind-Value="Context.Entity!.UnitType"
+                            Data="@Context.Types" TextProperty="Name" ValueProperty="Value" Label="Type" Name="unit-type" />
+        <StateFieldDropDown TValue="Guid?" TItem="OrganizationUnit" @bind-Value="Context.Entity!.ParentId"
+                            Data="@Context.Parents" TextProperty="Name" Label="Parent unit" Name="unit-parent"
+                            AllowFiltering="true" Placeholder="None: the Company unit is the top of the tree" />
+        <StateFieldTextArea @bind-Value="Context.Entity!.Description" Label="Description" MaxLength="500" Rows="3" Name="unit-description" />
+        <StateCustomFields TValue="OrganizationUnitAttribute" Values="@Context.Entity!.Attributes" NamePrefix="unit-attribute" />
+    </div>
+</StateEntityDialogViewPanel>
+<StateEntityDialogViewPanel Key="@OrganizationUnitDialogContext.UnitsView">
+    <StateEntityDialogChildList TItem="OrganizationUnitListItem"
+                                View="@OrganizationUnitDialogContext.UnitsView"
+                                RowKey="@(row => row.Id)"
+                                RowLabel="@(row => row.Name)"
+                                RowStateOf="@(row => row.State)"
+                                Label="Units below"
+                                ItemName="unit"
+                                ItemsName="units"
+                                EmptyIcon="account_tree"
+                                EmptyTitle="No units below"
+                                EmptyText="Units below this one are added from the organization tree."
+                                OpenRow="@OpenUnitAsync">
+        <Columns>
+            <ListColumn TItem="OrganizationUnitListItem" Title="Name" Primary="true">@context.Name</ListColumn>
+            <ListColumn TItem="OrganizationUnitListItem" Title="Type">@context.TypeName</ListColumn>
+        </Columns>
+    </StateEntityDialogChildList>
+</StateEntityDialogViewPanel>
+<StateEntityDialogViewPanel Key="@OrganizationUnitDialogContext.HoldingsView">
+    <StateEntityDialogChildList TItem="UserRoleHoldingRow"
+                                View="@OrganizationUnitDialogContext.HoldingsView"
+                                RowKey="@(row => row.Id)"
+                                RowLabel="@(row => $"{row.Person}: {row.Role}")"
+                                Label="Role holdings"
+                                ItemName="role holding"
+                                ItemsName="role holdings"
+                                EmptyIcon="admin_panel_settings"
+                                EmptyTitle="No role holdings yet"
+                                EmptyText="A role held on a unit grants its permissions across the whole company. The unit records where the person works."
+                                OpenRow="@OpenHoldingAsync">
+        <Columns>
+            <ListColumn TItem="UserRoleHoldingRow" Title="Person" Primary="true">@context.Person</ListColumn>
+            <ListColumn TItem="UserRoleHoldingRow" Title="Role">@context.Role</ListColumn>
+        </Columns>
+    </StateEntityDialogChildList>
+</StateEntityDialogViewPanel>
+
+@code {
+    private int? shownVersion;
+
+    [Parameter, EditorRequired] public OrganizationUnitDialogContext Context { get; set; } = null!;
+
+    protected override void OnParametersSet()
+    {
+        if (this.shownVersion != Context.Version)
+        {
+            this.shownVersion = Context.Version;
+            Context.DisplayName = string.IsNullOrWhiteSpace(Context.Entity!.Name) ? null : Context.Entity.Name;
+        }
+    }
+
+    private Task<StateEntityDialogResult> OpenUnitAsync(OrganizationUnitListItem row) => OpenAsync(DialogService, OrganizationService, row.Id);
+
+    private Task<StateEntityDialogResult> OpenHoldingAsync(UserRoleHoldingRow row) => RoleHoldingDialog.OpenAsync(DialogService, row, Context.MayRemove(row));
+
+    internal static OrganizationUnitDialogContext ContextFor(OrganizationService service, Guid? unitId, Guid? parentId = null) =>
+        new(service, unitId) { ParentId = parentId, DefaultTitle = "Organization unit", CreateTitle = "New unit", EntityIcon = "account_tree" };
+
+    public static Task<StateEntityDialogResult> OpenAsync(DialogService dialogService, OrganizationService service, Guid unitId, StateEntityDialogOptions? options = null) =>
+        dialogService.OpenStateEntityDialogAsync<OrganizationUnitDialog, OrganizationUnitDialogContext>(ContextFor(service, unitId), options);
+
+    public static Task<StateEntityDialogResult> OpenCreateAsync(DialogService dialogService, OrganizationService service, Guid? parentId) =>
+        dialogService.OpenStateEntityDialogAsync<OrganizationUnitDialog, OrganizationUnitDialogContext>(ContextFor(service, null, parentId));
+}

@@ -1,0 +1,166 @@
+@page "/coordination"
+@attribute [Authorize]
+@attribute [DialogViewOnPage(DialogTokens.JobSlot, JobSlotDialogContext.StaffingView)]
+@attribute [DialogViewOnPage(DialogTokens.Absence, AbsenceDialogContext.ImpactView)]
+@implements IDisposable
+@using Staffora.Core.Scheduling
+@using Staffora.Core.Staffing
+@using Staffora.Services.Coordination
+@using Staffora.Services.Jobs
+@using Staffora.Services.Scheduling
+@using Staffora.Services.Settings
+@using Staffora.Blazor.Components.Coordination
+@inject CoordinationService Workspace
+@inject JobService JobService
+@inject ClosedDayService ClosedDays
+@inject TenantClock TenantClock
+@inject DialogService DialogService
+@inject UrlStateService UrlState
+@inject TenantChangeFeed ChangeFeed
+@inject TimeProvider Clock
+
+<PermissionView Permission="RolePermission.ViewCoordination">
+    <Loading>
+        <PageTitle>Coordination - Staffora</PageTitle>
+        <div class="workspace workspace--loading">
+            <div class="workspace__loading" role="status">
+                <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" Size="ProgressBarCircularSize.Small" />
+                <span>Loading the coordination...</span>
+            </div>
+        </div>
+    </Loading>
+    <Authorized>
+        <PageTitle>Coordination - Staffora</PageTitle>
+        <LiveRefresh Interest="ChangeInterest.Coordination" OnChange="RefreshAsync" Since="this.mark" />
+        <h1 class="visually-hidden">Coordination</h1>
+        <div class="workspace" data-workspace>
+            <CoordinationTimeline @ref="this.timeline"
+                                  Day="this.day.Value"
+                                  Snapshot="SnapshotAsync"
+                                  OnChanged="RefreshAsync"
+                                  OnShow="Show"
+                                  OnNewJob="NewJobAsync"
+                                  ClosedOn="ClosedOn"
+                                  Holidays="this.holidays"
+                                  OnOpenSlots="OpenSlotsAsync">
+                <Rail>
+                    @if (this.overviewError is { } overviewError)
+                    {
+                        <EmptyState Icon="error" Title="The calendar could not be shown" Text="@overviewError" Tone="UiTone.Warning" Role="alert" />
+                    }
+                    else if (this.today is { } today)
+                    {
+                        <CalendarRail Today="today" Shown="ShownDay" Marks="MarksOf" Closed="ClosedOf" Holidays="this.holidays" OnDay="Show" />
+                    }
+                </Rail>
+                <Dock>
+                    <PrioritiesDock @ref="this.priorities" Snapshot="SnapshotAsync" OnChanged="RefreshAsync" />
+                </Dock>
+            </CoordinationTimeline>
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <PageTitle>Coordination - Staffora</PageTitle>
+        <h1 class="visually-hidden">Coordination</h1>
+        <div class="workspace workspace--loading">
+            <EmptyState Icon="lock" Title="Access denied" Text="You do not have permission to view the coordination." Tone="UiTone.Warning" Role="alert" />
+        </div>
+    </NotAuthorized>
+</PermissionView>
+
+@code {
+    private static readonly UrlStateKey<DateOnly?> dayKey = UrlStateKey.Date(UrlStateKeys.Day, ScheduleRules.HasReadableWeek);
+
+    private UrlStateValue<DateOnly?> day = null!;
+    private Task<Result<CoordinationSnapshot>>? snapshot;
+
+    private readonly CancellationTokenSource leaving = new();
+    private CoordinationSnapshot? read;
+    private string? overviewError;
+    private DateOnly? today;
+    private IReadOnlyList<ClosedDayFact> closedDays = [];
+    private TenantHolidays holidays = TenantHolidays.None;
+
+    private long? mark;
+    private CoordinationTimeline? timeline;
+    private PrioritiesDock? priorities;
+
+    private DateOnly ShownDay => this.day.Value ?? this.today ?? DateOnly.FromDateTime(Clock.GetUtcNow().UtcDateTime);
+
+    protected override void OnInitialized()
+    {
+        this.mark = ChangeFeed.Mark();
+        this.day = UrlState.Bind(dayKey);
+        this.day.Changed += OnAddressChanged;
+    }
+
+    protected override async Task OnInitializedAsync() => await LoadOverviewAsync();
+
+    private Task<Result<CoordinationSnapshot>> SnapshotAsync() => this.snapshot ??= Workspace.ReadAsync(this.leaving.Token);
+
+    private async Task LoadOverviewAsync()
+    {
+        var reading = SnapshotAsync();
+        var snapshot = await reading;
+        if (!ReferenceEquals(reading, this.snapshot))
+        {
+            return;
+        }
+
+        if (snapshot.IsSuccess && snapshot.Value is { } read)
+        {
+            (this.read, this.overviewError, this.today) = (read, null, read.Today);
+        }
+        else
+        {
+            (this.read, this.overviewError) = (null, snapshot.Error ?? CoordinationService.ReadFailed);
+        }
+
+        var closed = await ClosedDays.GetCalendarAsync(this.leaving.Token);
+        this.closedDays = closed.IsSuccess && closed.Value is { } facts ? facts : [];
+        var holidays = await TenantClock.GetHolidaysAsync(this.leaving.Token);
+        this.holidays = holidays.IsSuccess && holidays.Value is { } calendar ? calendar : TenantHolidays.None;
+    }
+
+    private IReadOnlyDictionary<DateOnly, DayMark> MarksOf(DateOnly from, DateOnly to) =>
+        this.read?.DayMarks(from, to) ?? new Dictionary<DateOnly, DayMark>();
+
+    private IReadOnlyDictionary<DateOnly, IReadOnlyList<ClosedDayMark>> ClosedOf(DateOnly from, DateOnly to) => ClosedDayRules.MarkDays(this.closedDays, from, to);
+
+    private IReadOnlyList<ClosedDayMark> ClosedOn(DateOnly day) => ClosedOf(day, day).GetValueOrDefault(day) ?? [];
+
+    private async Task RefreshAsync()
+    {
+        this.snapshot = null;
+        await LoadOverviewAsync();
+        StateHasChanged();
+        if (this.priorities is not null)
+        {
+            await this.priorities.ReloadAsync();
+        }
+
+        if (this.timeline is not null)
+        {
+            await this.timeline.ReloadAsync();
+        }
+    }
+
+    private async Task NewJobAsync()
+    {
+        await JobDialog.OpenCreateAsync(DialogService, JobService);
+        await RefreshAsync();
+    }
+
+    private Task OpenSlotsAsync(DateOnly day) => this.priorities?.ShowDayAsync(day) ?? Task.CompletedTask;
+
+    private void Show(DateOnly shown) => this.day.Value = shown == this.today ? null : shown;
+
+    private void OnAddressChanged() => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        this.leaving.Cancel();
+        this.day.Changed -= OnAddressChanged;
+        this.day.Dispose();
+    }
+}

@@ -1,0 +1,131 @@
+@inject DialogService DialogService
+@inject ILogger<TransitionButton> Log
+
+<div class="transition-button @(Offer.CanRun ? null : "transition-button--blocked") @(this.busy ? "transition-button--busy" : null)" style="@AccentStyle">
+    <IconTextButton Text="@Label"
+                  Icon="@(this.busy ? BusyIcon : IconName)"
+                  ButtonStyle="ButtonStyle.Light"
+                  Variant="Variant.Flat"
+                  Size="ButtonSize.Medium"
+                  aria-disabled="@(Offer.CanRun && !Disabled ? null : "true")"
+                  aria-busy="@(this.busy ? "true" : null)"
+                  aria-describedby="@(HasCard ? CardId : null)"
+                  data-transition="@Offer.Transition.Key"
+                  class="transition-button__button"
+                  Click="@ClickAsync" />
+    @if (HasCard)
+    {
+        <div class="transition-button__card" id="@CardId" role="tooltip">
+            @if (!string.IsNullOrWhiteSpace(Offer.Transition.Description))
+            {
+                <span class="transition-button__description">@Offer.Transition.Description</span>
+            }
+            @if (!Offer.CanRun)
+            {
+                <span class="transition-button__reasons-title">Not possible yet:</span>
+                <ul class="transition-button__reasons">
+                    @foreach (var reason in Offer.BlockingReasons)
+                    {
+                        <li>@reason</li>
+                    }
+                </ul>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    internal const string Unexpected = "The step could not be completed because of an error. Try again in a moment.";
+
+    private const string BusyIcon = "progress_activity";
+
+    private static int buttons;
+    private bool busy;
+
+    [Parameter, EditorRequired] public StateEntityDialogContext Context { get; set; } = null!;
+
+    [Parameter, EditorRequired] public TransitionOffer Offer { get; set; } = null!;
+
+    [Parameter] public bool Disabled { get; set; }
+
+    [Parameter] public EventCallback<ITransition> OnStarted { get; set; }
+
+    [Parameter] public EventCallback<string> OnRefused { get; set; }
+
+    [Parameter] public EventCallback<ITransition> OnSucceeded { get; set; }
+
+    private string CardId { get; } = $"transition-card-{Interlocked.Increment(ref buttons)}";
+
+    private bool HasCard => !Offer.CanRun || !string.IsNullOrWhiteSpace(Offer.Transition.Description);
+
+    private string Label => Context.LabelOf(Offer.Transition);
+
+    private string IconName => Offer.Transition.Icon ?? Offer.Transition.To.GetIcon();
+
+    private string AccentStyle => $"--transition-accent: {Offer.Transition.To.GetStateColor()};";
+
+    private async Task ClickAsync()
+    {
+        if (!Offer.CanRun || Context.IsBusy || Context.FooterDisabled)
+        {
+            return;
+        }
+
+        var transition = Offer.Transition;
+        string? comment = null;
+        if (!string.IsNullOrWhiteSpace(transition.ConfirmationMessage))
+        {
+            if (!await DialogService.ConfirmAsync(transition.ConfirmationMessage, Label, okText: Label, destructive: transition.To.IsDeleteState(), icon: IconName))
+            {
+                return;
+            }
+        }
+        else if (transition.CommentPrompt is { } prompt)
+        {
+            comment = await DialogService.PromptAsync(prompt.Title, prompt.Message, prompt.Placeholder, okText: Label, required: prompt.Required, requiredMessage: prompt.RequiredMessage, maxLength: Staffora.Core.Entities.Comments.Comment.MaxTextLength);
+            if (comment is null)
+            {
+                return;
+            }
+        }
+
+        if (Context.IsBusy)
+        {
+            return;
+        }
+
+        this.busy = true;
+        Context.IsBusy = true;
+        await OnStarted.InvokeAsync(transition);
+        Context.NotifyChanged();
+        TransitionAttempt attempt;
+        try
+        {
+            attempt = await Context.RunTransitionAsync(transition, comment);
+        }
+        catch (Exception) when (Context.Lifetime.IsCancellationRequested)
+        {
+            return;
+        }
+        catch (Exception exception)
+        {
+            Log.LogError(exception, "The step {TransitionKey} failed in the {EntityType} dialog for {EntityId}.", transition.Key, Context.EntityType.Name, Context.EntityId);
+            attempt = TransitionAttempt.Refused(Unexpected);
+        }
+        finally
+        {
+            this.busy = false;
+            Context.IsBusy = false;
+            Context.NotifyChanged();
+        }
+
+        if (attempt.Error is { } error)
+        {
+            await OnRefused.InvokeAsync(error);
+        }
+        else if (attempt.Ran)
+        {
+            await OnSucceeded.InvokeAsync(transition);
+        }
+    }
+}

@@ -1,0 +1,23 @@
+@inject DialogService DialogService
+
+<div class="form-dialog-header">
+    @if (!string.IsNullOrWhiteSpace(Icon))
+    {
+        <MaterialSymbol Name="@Icon" Class="form-dialog-header__icon" />
+    }
+    <h2 class="form-dialog-header__title" tabindex="-1">@Title</h2>
+    <RadzenButton Icon="close"
+                  aria-label="Close"
+                  title="Close"
+                  ButtonStyle="ButtonStyle.Base"
+                  Variant="Variant.Text"
+                  Size="ButtonSize.Small"
+                  class="form-dialog-header__close"
+                  Click="@(() => DialogService.TryCloseAsync(null))" />
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+
+    [Parameter] public string? Icon { get; set; }
+}

@@ -1,0 +1,53 @@
+{
+  "id": "tenant-onboarding",
+  "title": "A company is onboarded",
+  "goal": "A company starts on the platform: the platform owner creates its tenant and gives it its first system owner, who signs in and appoints a coordinator, and the platform owner then puts the tenant in use.",
+  "actors": [
+    {
+      "id": "platform-owner",
+      "description": "Operates the platform, onboards new tenants and moves them between states."
+    },
+    {
+      "id": "system-owner",
+      "description": "Owns the new tenant's setup and appoints its people."
+    }
+  ],
+  "preconditions": [
+    "The end-to-end database was prepared in this run with the platform owner as its one persona; the company does not exist yet."
+  ],
+  "steps": [
+    {
+      "id": "create-tenant",
+      "actor": "platform-owner",
+      "intent": "Start a new tenant for the company from the platform console",
+      "outcome": "The new tenant's form holds the company's name and description."
+    },
+    {
+      "id": "give-first-owner",
+      "actor": "platform-owner",
+      "intent": "Give the tenant its first system owner and create it",
+      "outcome": "The tenant exists in setup with its first system owner, whose initial password is shown once."
+    },
+    {
+      "id": "owner-signs-in",
+      "actor": "system-owner",
+      "intent": "Sign in with the initial password while the tenant is in setup",
+      "outcome": "The system owner is signed in to their own tenant, which admits only its system owners while in setup."
+    },
+    {
+      "id": "appoint-coordinator",
+      "actor": "system-owner",
+      "intent": "Add a coordinator and give them the Coordinator role for the whole company",
+      "outcome": "The coordinator is a user of the tenant holding the Coordinator role on the company."
+    },
+    {
+      "id": "activate-tenant",
+      "actor": "platform-owner",
+      "intent": "See the tenant's people on its console and put the tenant in use",
+      "outcome": "The console lists the system owner and the coordinator with their roles, and the tenant is active."
+    }
+  ],
+  "completion": [
+    "The company's tenant is active, with its system owner and a coordinator holding the Coordinator role on the company, and the platform owner never acted inside it."
+  ]
+}

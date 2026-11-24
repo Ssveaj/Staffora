@@ -1,0 +1,65 @@
+@using Microsoft.AspNetCore.Components.Sections
+@inject UserSessionService UserSessionService
+@inject PermissionService PermissionService
+@inject IRuntimeExecutionContext Runtime
+@inject NavigationManager Navigation
+@implements IDisposable
+
+<nav class="app-crumbs" aria-label="Breadcrumb" data-app-breadcrumb>
+    <ol>
+        @if (Location is { } location)
+        {
+            var first = location.Section.Items[0];
+            <li class="app-crumbs__step">
+                @if (location.Exact && ReferenceEquals(first, location.Item))
+                {
+                    <span>@location.Section.Title</span>
+                }
+                else
+                {
+                    <a href="@first.Path">@location.Section.Title</a>
+                }
+            </li>
+            @if (!location.Exact)
+            {
+                <li class="app-crumbs__step"><a href="@location.Item.Path">@location.Item.Text</a></li>
+            }
+        }
+        <li class="app-crumbs__step app-crumbs__current" aria-current="page">
+            @if (Location is { Exact: true } exact)
+            {
+                <span class="app-crumbs__fallback">@exact.Item.Text</span>
+            }
+            <SectionOutlet SectionName="@PageSection" />
+        </li>
+    </ol>
+</nav>
+
+@code {
+    public const string PageSection = "app-breadcrumb-page";
+
+    private IReadOnlyList<NavSection> sections = [];
+
+    private NavLocation? Location => AppNavigation.Locate(this.sections, Navigation.ToBaseRelativePath(Navigation.Uri));
+
+    protected override async Task OnInitializedAsync()
+    {
+        UserSessionService.OnChanged += OnSessionChanged;
+        Navigation.LocationChanged += OnLocationChanged;
+        this.sections = await AppNavigation.ForSessionAsync(Runtime.Current, PermissionService);
+    }
+
+    private void OnSessionChanged() => _ = InvokeAsync(async () =>
+    {
+        this.sections = await AppNavigation.ForSessionAsync(Runtime.Current, PermissionService);
+        StateHasChanged();
+    });
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs args) => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        UserSessionService.OnChanged -= OnSessionChanged;
+        Navigation.LocationChanged -= OnLocationChanged;
+    }
+}

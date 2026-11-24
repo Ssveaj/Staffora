@@ -1,0 +1,112 @@
+.absence-impact {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    min-width: 0;
+}
+
+.absence-impact__rows {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.absence-impact__row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+        "what actions"
+        "facts actions";
+    gap: var(--space-1) var(--space-3);
+    align-items: center;
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--color-border);
+    border-left: 4px solid var(--sch-absence-edge);
+    border-radius: var(--radius-lg);
+    background: var(--color-surface);
+}
+
+.absence-impact__row--settled {
+    border-left-color: var(--color-border-strong);
+    background: var(--color-surface-sunken);
+}
+
+.absence-impact__what {
+    grid-area: what;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0 var(--space-2);
+    min-width: 0;
+}
+
+.absence-impact__job {
+    font-weight: var(--font-weight-semibold);
+}
+
+.absence-impact__slot {
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+}
+
+.absence-impact__facts {
+    grid-area: facts;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-1) var(--space-2);
+    min-width: 0;
+    font-size: var(--font-size-xs);
+}
+
+.absence-impact__state,
+.absence-impact__again {
+    padding: 1px 0.45rem;
+    border-radius: var(--radius-full);
+    font-weight: var(--font-weight-medium);
+    white-space: nowrap;
+}
+
+.absence-impact__state {
+    background: var(--color-warning-soft);
+    color: var(--color-warning-strong);
+}
+
+.absence-impact__state--settled {
+    background: var(--color-surface);
+    color: var(--color-text-muted);
+}
+
+.absence-impact__again {
+    background: var(--color-info-soft);
+    color: var(--color-info);
+}
+
+.absence-impact__when {
+    color: var(--color-text-muted);
+}
+
+.absence-impact__actions {
+    grid-area: actions;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1);
+    justify-content: flex-end;
+}
+
+@media (max-width: 600px) {
+    .absence-impact__row {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-areas:
+            "what"
+            "facts"
+            "actions";
+    }
+
+    .absence-impact__actions {
+        justify-content: flex-start;
+    }
+}

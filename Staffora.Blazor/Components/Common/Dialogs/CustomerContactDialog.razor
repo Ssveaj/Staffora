@@ -1,0 +1,48 @@
+@using Staffora.Blazor.Components.Common.Dialogs.StateEntity
+@using Staffora.Blazor.Components.Common.WorkflowFields
+@using Staffora.Core.Entities.Customers
+@using Staffora.Services.Customers
+@implements IStateEntityDialog<CustomerContactDialogContext>
+
+<div class="customer-contact-dialog">
+    <p class="customer-contact-dialog__customer" data-customer>
+        <span>Customer:</span>
+        <strong>@Context.Entity!.Customer?.Name</strong>
+    </p>
+    <div class="field-row">
+        <StateFieldTextBox @bind-Value="Context.Entity!.FirstName" Label="First name" MaxLength="@CustomerContact.NameMaxLength" Name="contact-first-name" />
+        <StateFieldTextBox @bind-Value="Context.Entity!.LastName" Label="Last name" MaxLength="@CustomerContact.NameMaxLength" Name="contact-last-name" />
+    </div>
+    <StateFieldTextBox @bind-Value="Context.Entity!.Title" Label="Title" MaxLength="@CustomerContact.TitleMaxLength" Name="contact-title" />
+    <div class="field-row">
+        <StateFieldTextBox @bind-Value="Context.Entity!.Email" Label="Email" MaxLength="@CustomerContact.EmailMaxLength" Name="contact-email" />
+        <StateFieldTextBox @bind-Value="Context.Entity!.Phone" Label="Phone" MaxLength="@CustomerContact.PhoneMaxLength" Name="contact-phone" />
+    </div>
+    <p class="customer-contact-dialog__help">
+        A contact is named by jobs once it is activated, which needs an active customer.
+    </p>
+</div>
+
+@code {
+    private int? shownVersion;
+
+    [Parameter, EditorRequired] public CustomerContactDialogContext Context { get; set; } = null!;
+
+    protected override void OnParametersSet()
+    {
+        if (this.shownVersion != Context.Version)
+        {
+            this.shownVersion = Context.Version;
+            Context.DisplayName = string.IsNullOrWhiteSpace(Context.Entity!.FullName) ? null : Context.Entity.FullName;
+        }
+    }
+
+    internal static CustomerContactDialogContext ContextFor(CustomerContactService service, Guid? contactId, Guid? customerId = null) =>
+        new(service, contactId) { CustomerId = customerId, DefaultTitle = "Contact", CreateTitle = "New contact", EntityIcon = "contact_mail" };
+
+    public static Task<StateEntityDialogResult> OpenAsync(DialogService dialogService, CustomerContactService service, Guid contactId, StateEntityDialogOptions? options = null) =>
+        dialogService.OpenStateEntityDialogAsync<CustomerContactDialog, CustomerContactDialogContext>(ContextFor(service, contactId), options);
+
+    public static Task<StateEntityDialogResult> OpenCreateAsync(DialogService dialogService, CustomerContactService service, Guid customerId) =>
+        dialogService.OpenStateEntityDialogAsync<CustomerContactDialog, CustomerContactDialogContext>(ContextFor(service, null, customerId));
+}

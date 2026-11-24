@@ -1,0 +1,45 @@
+@if (Compact)
+{
+    <div class="empty-state empty-state--compact" role="@Role">
+        @if (!string.IsNullOrWhiteSpace(Icon))
+        {
+            <MaterialSymbol Name="@Icon" />
+        }
+        <p class="empty-state__title">@Title</p>
+        @if (ChildContent is not null)
+        {
+            <div class="empty-state__actions">@ChildContent</div>
+        }
+    </div>
+}
+else
+{
+    <div class="empty-state" role="@Role">
+        <IconChip Icon="@Icon" Tone="@Tone" Large="true" />
+        <p class="empty-state__title">@Title</p>
+        @if (!string.IsNullOrWhiteSpace(Text))
+        {
+            <p class="empty-state__text">@Text</p>
+        }
+        @if (ChildContent is not null)
+        {
+            <div class="empty-state__actions">@ChildContent</div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public string Icon { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+
+    [Parameter] public string? Text { get; set; }
+
+    [Parameter] public UiTone Tone { get; set; } = UiTone.Accent;
+
+    [Parameter] public string? Role { get; set; }
+
+    [Parameter] public bool Compact { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

@@ -1,0 +1,119 @@
+@using Staffora.Core.Entities.Catalogue
+@using Staffora.Core.Workflow.FieldAccess
+@using Staffora.Services.Jobs
+@typeparam TRow where TRow : class, IQualificationRequirement
+
+@if (Access.HasFlag(FieldAccessFlags.Visible))
+{
+    <div class="state-slot-qualifications" data-area="@Area" data-access="@(Editable ? "editable" : "read-only")">
+        @if (Values.Count == 0)
+        {
+            <p class="state-slot-qualifications__none" data-none>No qualification is required.</p>
+        }
+        else
+        {
+            <ul class="state-slot-qualifications__list" aria-label="Required qualifications">
+                @foreach (var required in Values.OrderBy(NameOf, StringComparer.CurrentCulture))
+                {
+                    var name = NameOf(required);
+                    var preferred = required.Level == RequirementLevel.Preferred;
+                    <li class="state-slot-qualifications__item" @key="required.QualificationId" data-qualification="@name" data-level="@(preferred ? "preferred" : "required")">
+                        <span>@name@(IsArchived(required) ? " (archived)" : string.Empty)@(preferred && !Editable ? " (preferred)" : string.Empty)</span>
+                        @if (Editable)
+                        {
+                            <span class="state-slot-qualifications__actions">
+                                <RadzenButton Text="@(preferred ? "Preferred" : "Required")" ButtonStyle="ButtonStyle.Base" Size="ButtonSize.ExtraSmall" Variant="Variant.Outlined"
+                                              aria-label="@($"{name}: {(preferred ? "preferred" : "required")}; make it {(preferred ? "required" : "preferred")}")"
+                                              title="Switch between required and preferred" Click="@(() => Toggle(required))" />
+                                <RadzenButton Icon="close" ButtonStyle="ButtonStyle.Base" Size="ButtonSize.Small" Variant="Variant.Text"
+                                              aria-label="@($"Remove {name}")" title="Remove this qualification" Click="@(() => Remove(required))" />
+                            </span>
+                        }
+                    </li>
+                }
+            </ul>
+        }
+
+        @if (Editable)
+        {
+            @if (Addable.Count == 0)
+            {
+                <p class="state-slot-qualifications__note" data-no-choices>Every active qualification of the catalogue is required already, or the catalogue has none.</p>
+            }
+            else
+            {
+                <RadzenFormField Text="Add a required qualification" Component="@Name" Style="width: 100%;">
+                    <RadzenDropDown TValue="Guid?" Name="@Name" InputAttributes="@FieldLabel.Of("Add a required qualification")" aria-label="Add a required qualification"
+                                    Data="@Addable" TextProperty="Name" ValueProperty="Id" Value="@((Guid?)null)" ValueChanged="@((Guid? chosen) => Add(chosen))"
+                                    AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
+                                    Placeholder="Choose a qualification" Style="width: 100%;" />
+                </RadzenFormField>
+            }
+        }
+    </div>
+}
+
+@code {
+    [CascadingParameter] public StateEntityDialogContext? DialogContext { get; set; }
+
+    [Parameter, EditorRequired] public string Area { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired] public ICollection<TRow> Values { get; set; } = null!;
+
+    [Parameter, EditorRequired] public IReadOnlyList<SlotQualificationChoice> Options { get; set; } = [];
+
+    [Parameter, EditorRequired] public string Name { get; set; } = "qualification";
+
+    private FieldAccessFlags Access { get; set; }
+
+    private bool Editable => Access.HasFlag(FieldAccessFlags.Editable);
+
+    private IReadOnlyList<SlotQualificationChoice> Addable => [.. Options.Where(choice => !choice.Archived && Values.All(required => required.QualificationId != choice.Id))];
+
+    protected override void OnParametersSet() =>
+        Access = (DialogContext ?? throw new InvalidOperationException("StateSlotQualifications is part of a state-entity dialog's body; its layout cascades the dialog's context.")).AreaAccessOf(Area);
+
+    private string NameOf(TRow required) =>
+        Options.FirstOrDefault(choice => choice.Id == required.QualificationId)?.Name ?? "Unknown qualification";
+
+    private bool IsArchived(TRow required) =>
+        Options.FirstOrDefault(choice => choice.Id == required.QualificationId)?.Archived ?? false;
+
+    private void Add(Guid? chosen)
+    {
+        if (!Editable || chosen is not { } id || Values.Any(required => required.QualificationId == id) || Addable.All(choice => choice.Id != id))
+        {
+            return;
+        }
+
+        if (DialogContext!.EntityObject is not IQualificationRequirements<TRow> owner)
+        {
+            return;
+        }
+
+        Values.Add(owner.NewRequirement(id));
+        DialogContext!.NotifyEdited();
+    }
+
+    private void Toggle(TRow required)
+    {
+        if (!Editable)
+        {
+            return;
+        }
+
+        required.Level = required.Level == RequirementLevel.Preferred ? RequirementLevel.Required : RequirementLevel.Preferred;
+        DialogContext!.NotifyEdited();
+    }
+
+    private void Remove(TRow required)
+    {
+        if (!Editable)
+        {
+            return;
+        }
+
+        Values.Remove(required);
+        DialogContext!.NotifyEdited();
+    }
+}

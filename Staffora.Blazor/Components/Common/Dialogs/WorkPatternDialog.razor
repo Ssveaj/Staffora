@@ -1,0 +1,73 @@
+@using Staffora.Blazor.Components.Common.Dialogs.StateEntity
+@using Staffora.Blazor.Components.Common.List
+@using Staffora.Blazor.Components.Common.WorkflowFields
+@using Staffora.Core.Entities.Scheduling
+@using Staffora.Core.Lists
+@using Staffora.Core.Models
+@using Staffora.Core.Scheduling
+@using Staffora.Core.Workflow.WorkflowAttributes
+@using Staffora.Services.Scheduling
+@implements IStateEntityDialog<WorkPatternDialogContext>
+@inject DialogService DialogService
+
+<StateEntityDialogViewPanel Key="@WorkPatternDialogContext.InfoView">
+    <div class="work-pattern-dialog">
+        <StateFieldTextBox @bind-Value="Context.Entity!.Name" Label="Name" MaxLength="@WorkPattern.NameMaxLength" Name="pattern-name" />
+        <StateFieldTextArea @bind-Value="Context.Entity!.Description" Label="Description" MaxLength="@WorkPattern.DescriptionMaxLength" Rows="2" Name="pattern-description" />
+        <StateFieldNumeric TValue="int" @bind-Value="Context.Entity!.CycleWeeks" Label="Cycle length (weeks)" Min="1" Max="@WorkPatternRules.MaxCycleWeeks" Name="pattern-cycle-weeks" />
+        <StateAreaFieldset Area="@WorkPatternWorkflowAttribute.AreaSegments" Legend="Working hours">
+            <StateWorkPatternSegments Area="@WorkPatternWorkflowAttribute.AreaSegments" Values="@Context.Entity!.Segments" CycleWeeks="@Context.Entity!.CycleWeeks" NamePrefix="pattern-segment" />
+        </StateAreaFieldset>
+    </div>
+</StateEntityDialogViewPanel>
+
+<StateEntityDialogViewPanel Key="@WorkPatternDialogContext.StaffView">
+    <StateEntityDialogChildList TItem="PatternStaffRow"
+                                View="@WorkPatternDialogContext.StaffView"
+                                RowKey="@(row => row.Id)"
+                                RowLabel="@(row => $"{row.Staff} from {row.PeriodLabel}")"
+                                RowStateOf="@(row => row.State)"
+                                Label="Staff"
+                                ItemName="assignment"
+                                ItemsName="assignments"
+                                SearchLabel="Name or email"
+                                EmptyIcon="groups"
+                                EmptyTitle="Nobody works by this pattern"
+                                EmptyText="A staff member works by a pattern once it is given to them and activated. Assign it to several staff members at once here, or to one from their Schedule view."
+                                OpenRow="@OpenAssignmentAsync">
+        <Columns>
+            <ListColumn TItem="PatternStaffRow" Title="Staff member" Primary="true">@context.Staff</ListColumn>
+            <ListColumn TItem="PatternStaffRow" Title="Dates">@context.PeriodLabel</ListColumn>
+            <ListColumn TItem="PatternStaffRow" Title="When"><span data-pattern-when="@context.WhenLabel">@context.WhenLabel</span></ListColumn>
+        </Columns>
+    </StateEntityDialogChildList>
+</StateEntityDialogViewPanel>
+
+@code {
+    private int? shownVersion;
+
+    [Parameter, EditorRequired] public WorkPatternDialogContext Context { get; set; } = null!;
+
+    private Task<StateEntityDialogResult> OpenAssignmentAsync(PatternStaffRow row) => Context.OpenAssignmentAsync(DialogService, row);
+
+    protected override void OnParametersSet()
+    {
+        if (this.shownVersion != Context.Version)
+        {
+            this.shownVersion = Context.Version;
+            Context.DisplayName = string.IsNullOrWhiteSpace(Context.Entity!.Name) ? null : Context.Entity.Name;
+        }
+    }
+
+    internal static WorkPatternDialogContext ContextFor(DialogService dialogService, WorkPatternService service, Guid? patternId, Guid? copyOf = null) =>
+        new(service, patternId) { CopyOf = copyOf, Dialogs = dialogService, DefaultTitle = "Work pattern", CreateTitle = copyOf is null ? "New work pattern" : "New draft (copy)", EntityIcon = "calendar_month" };
+
+    public static Task<StateEntityDialogResult> OpenAsync(DialogService dialogService, WorkPatternService service, Guid patternId, StateEntityDialogOptions? options = null) =>
+        dialogService.OpenStateEntityDialogAsync<WorkPatternDialog, WorkPatternDialogContext>(ContextFor(dialogService, service, patternId), options);
+
+    public static Task<StateEntityDialogResult> OpenCreateAsync(DialogService dialogService, WorkPatternService service) =>
+        dialogService.OpenStateEntityDialogAsync<WorkPatternDialog, WorkPatternDialogContext>(ContextFor(dialogService, service, null));
+
+    public static Task<StateEntityDialogResult> OpenCopyAsync(DialogService dialogService, WorkPatternService service, Guid copyOf) =>
+        dialogService.OpenStateEntityDialogAsync<WorkPatternDialog, WorkPatternDialogContext>(ContextFor(dialogService, service, null, copyOf));
+}

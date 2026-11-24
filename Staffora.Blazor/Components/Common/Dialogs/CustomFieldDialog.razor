@@ -1,0 +1,59 @@
+@using Staffora.Blazor.Components.Common.Dialogs.StateEntity
+@using Staffora.Blazor.Components.Common.WorkflowFields
+@using Staffora.Core.Entities.EntityAttributes
+@using Staffora.Core.Entities.EntityAttributes.JobAttributes
+@using Staffora.Services.CustomFields
+@typeparam TDefinition where TDefinition : class, IEntityAttributeDefinition
+@typeparam TContext where TContext : CustomFieldDialogContext<TDefinition>
+
+<div class="custom-field-dialog">
+    @if (Context.Note is { } note)
+    {
+        <p class="custom-field-dialog__note">@note</p>
+    }
+
+    <StateFieldDropDown TValue="Guid?" TItem="CustomFieldTenant" @bind-Value="Context.Entity!.TenantId" Data="@Context.Tenants" TextProperty="Name" ValueProperty="Id"
+                        AllowClear="true" Placeholder="Global (every tenant)" Label="Tenant" Name="custom-field-tenant"
+                        Helper="With no tenant chosen the field is global: every tenant's records carry it. A tenant's field is that tenant's alone, and it keeps its tenant once saved." />
+    <StateFieldTextBox @bind-Value="Context.Entity!.Name" Label="Name" MaxLength="@AttributeDefinitionRules.NameMaxLength" Name="custom-field-name" />
+    <StateFieldDropDown TValue="AttributeValueType" TItem="CustomFieldTypeChoice" @bind-Value="Context.Entity!.ValueType" Data="@types" TextProperty="Text" ValueProperty="Value"
+                        Label="Type" Name="custom-field-type"
+                        Helper="A saved field keeps its type, so the values records hold keep their meaning." />
+
+    @if (Context.Entity!.ValueType == AttributeValueType.Choice)
+    {
+        <StateChoiceOptions @bind-Value="Context.Entity!.Options" Label="Options" Name="custom-field-option" />
+    }
+
+    @if (Context.Entity is JobAttributeDefinition job)
+    {
+        <StateFieldDropDown TValue="JobFieldAudience" TItem="CustomFieldAudienceChoice" @bind-Value="job.Audience" Data="@audiences" TextProperty="Text" ValueProperty="Value"
+                            Label="Read by" Name="custom-field-audience"
+                            Helper="Those who read a job read every job field. A field also read by the assigned staff member shows in that staff member's own assignment once they are assigned." />
+    }
+
+    <StateFieldSwitch @bind-Value="Context.Entity!.IsRequired" Label="Required field" Name="custom-field-required" />
+</div>
+
+@code {
+    private static readonly IReadOnlyList<CustomFieldTypeChoice> types = [.. AttributeDefinitionRules.Types.Select(type => new CustomFieldTypeChoice(AttributeValueRules.TypeLabel(type), type))];
+
+    private static readonly IReadOnlyList<CustomFieldAudienceChoice> audiences =
+    [
+        new("Coordinators only", JobFieldAudience.Coordinators),
+        new("Also the assigned staff member", JobFieldAudience.AssignedStaff),
+    ];
+
+    private int? shownVersion;
+
+    [Parameter, EditorRequired] public TContext Context { get; set; } = null!;
+
+    protected override void OnParametersSet()
+    {
+        if (this.shownVersion != Context.Version)
+        {
+            this.shownVersion = Context.Version;
+            Context.DisplayName = string.IsNullOrWhiteSpace(Context.Entity!.Name) ? null : Context.Entity.Name;
+        }
+    }
+}

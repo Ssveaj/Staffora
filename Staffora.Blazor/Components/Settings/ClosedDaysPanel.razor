@@ -1,0 +1,60 @@
+@using Staffora.Blazor.Components.Common.Dialogs
+@using Staffora.Services.Scheduling
+@inject ClosedDayService ClosedDays
+@inject DialogService DialogService
+
+<div class="closed-days-panel">
+    <div class="closed-days-panel__bar">
+        <PermissionView Permission="RolePermission.SettingsEdit">
+            <Authorized>
+                <IconTextButton Text="New closed day" Icon="event_busy" ButtonStyle="ButtonStyle.Primary" Click="CreateAsync" />
+            </Authorized>
+        </PermissionView>
+    </div>
+
+    <ListView @ref="this.list"
+              TItem="ClosedDayListItem"
+              Label="Closed days"
+              ItemName="closed day"
+              ItemsName="closed days"
+              AddressPrefix="@AddressPrefix"
+              Definition="ClosedDayList.Definition"
+              Load="LoadAsync"
+              RowKey="closedDay => closedDay.Id"
+              RowLabel="closedDay => closedDay.Name"
+              OnOpen="OpenAsync"
+              QuickFilter="@ClosedDayList.When"
+              SearchPlaceholder="Name"
+              EmptyIcon="event_available"
+              EmptyText="No closed day yet. Add the public holidays and other days nobody works.">
+        <Columns>
+            <ListColumn TItem="ClosedDayListItem" Title="Name" Primary="true" Subtitle="closedDay => closedDay.PeriodText">
+                @context.Name
+            </ListColumn>
+            <ListColumn TItem="ClosedDayListItem" Title="Days">
+                @context.DaysText
+            </ListColumn>
+            <ListColumn TItem="ClosedDayListItem" Title="Applies to">
+                @context.AppliesToText
+            </ListColumn>
+        </Columns>
+    </ListView>
+</div>
+
+@code {
+    private ListView<ClosedDayListItem>? list;
+
+    [Parameter] public string? AddressPrefix { get; set; }
+
+    private Task<Result<ListPage<ClosedDayListItem>>> LoadAsync(ListQuery query) => ClosedDays.QueryClosedDaysAsync(query);
+
+    private async Task CreateAsync()
+    {
+        if (await ClosedDayDialog.OpenCreateAsync(DialogService) && this.list is not null)
+        {
+            await this.list.ReloadAsync();
+        }
+    }
+
+    private Task OpenAsync(ClosedDayListItem closedDay) => ClosedDayDialog.OpenAsync(DialogService, closedDay);
+}

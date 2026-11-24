@@ -1,0 +1,154 @@
+@inject ImpersonationService ImpersonationService
+@inject DialogService DialogService
+
+<FormDialogFrame>
+    <ChildContent>
+        <div class="impersonate">
+            <div class="impersonate__filters">
+                <label class="impersonate__search">
+                    <MaterialSymbol Name="search" Class="impersonate__search-icon" />
+                    <span class="visually-hidden">Search people</span>
+                    <input type="search"
+                           name="impersonate-search"
+                           placeholder="Search name, email or role"
+                           autocomplete="off"
+                           @bind="this.searchText"
+                           @bind:event="oninput" />
+                </label>
+                <RadzenFormField Text="Organization" Component="impersonate-tenant" class="impersonate__tenant">
+                    <RadzenDropDown Name="impersonate-tenant" InputAttributes="@FieldLabel.Of("Organization")"
+                                    @bind-Value="this.tenantId"
+                                    Data="@this.tenants" TextProperty="Label" ValueProperty="Id" TValue="Guid?"
+                                    AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
+                                    AllowClear="true" Placeholder="All organizations" Style="width: 100%;" />
+                </RadzenFormField>
+            </div>
+
+            @if (!string.IsNullOrEmpty(this.errorMessage))
+            {
+                <RadzenAlert AlertStyle="AlertStyle.Danger" Variant="Variant.Flat" Shade="Shade.Lighter" ShowIcon="true" AllowClose="false">
+                    @this.errorMessage
+                </RadzenAlert>
+            }
+
+            <div class="impersonate__people" role="region" aria-label="People you may impersonate" tabindex="0">
+                @{
+                    var shown = ShownUsers();
+                }
+                @if (shown.Count == 0)
+                {
+                    <p class="impersonate__none">@(this.users.Count == 0 ? "There is nobody to impersonate." : "Nobody matches the search.")</p>
+                }
+                else
+                {
+                    <form method="post" action="Account/Impersonation/Start">
+                        <AntiforgeryToken />
+                        <ul class="impersonate__list">
+                            @foreach (var user in shown)
+                            {
+                                var roles = RolesOf(user);
+                                <li>
+                                    <button type="submit"
+                                            class="impersonate__person"
+                                            name="targetUserId"
+                                            value="@user.UserId"
+                                            data-impersonate="@user.Email"
+                                            title="Act as @user.FirstName @user.LastName">
+                                        <span class="impersonate__avatar impersonate__tone--@ToneOf(roles.FirstOrDefault())" aria-hidden="true">@Initials(user)</span>
+                                        <span class="impersonate__who">
+                                            <span class="impersonate__name">@user.FirstName @user.LastName</span>
+                                            <span class="impersonate__email">@user.Email · @user.TenantName</span>
+                                        </span>
+                                        <span class="impersonate__roles">
+                                            @if (roles.Count == 0)
+                                            {
+                                                <span class="impersonate__role impersonate__tone--none">No role</span>
+                                            }
+                                            @foreach (var role in roles)
+                                            {
+                                                <span class="impersonate__role impersonate__tone--@ToneOf(role)">@role</span>
+                                            }
+                                        </span>
+                                    </button>
+                                </li>
+                            }
+                        </ul>
+                    </form>
+                }
+            </div>
+        </div>
+    </ChildContent>
+    <Footer>
+        <MaterialSymbol Name="shield" Class="impersonate__footer-icon" />
+        <span class="impersonate__hint">Click a person to act as them. Every impersonation is audited.</span>
+        <RadzenButton Text="Cancel" ButtonStyle="ButtonStyle.Light" Variant="Variant.Flat" Click="@(() => DialogService.Close(false))" />
+    </Footer>
+</FormDialogFrame>
+
+@code {
+    private IReadOnlyList<ImpersonationCandidate> users = [];
+    private IReadOnlyList<TenantChoice> tenants = [];
+    private string searchText = string.Empty;
+    private Guid? tenantId;
+    private string? errorMessage;
+
+    private sealed record TenantChoice(Guid Id, string Label);
+
+    [Parameter] public string? InitialSearch { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        this.searchText = InitialSearch?.Trim() ?? string.Empty;
+
+        var listed = await ImpersonationService.ListEligibleTargetsAsync();
+        if (listed.IsSuccess)
+        {
+            this.users = listed.Value!;
+            this.tenants = [.. this.users
+                .GroupBy(user => (user.TenantId, user.TenantName))
+                .OrderBy(group => group.Key.TenantName, StringComparer.CurrentCultureIgnoreCase)
+                .Select(group => new TenantChoice(group.Key.TenantId, group.Key.TenantName))];
+        }
+        else
+        {
+            this.errorMessage = listed.Error;
+        }
+    }
+
+    private List<ImpersonationCandidate> ShownUsers()
+    {
+        IEnumerable<ImpersonationCandidate> shown = this.users;
+        if (this.tenantId is { } chosen)
+        {
+            shown = shown.Where(user => user.TenantId == chosen);
+        }
+
+        if (!string.IsNullOrWhiteSpace(this.searchText))
+        {
+            var query = this.searchText.Trim();
+            shown = shown.Where(user =>
+                $"{user.FirstName} {user.LastName}".Contains(query, StringComparison.OrdinalIgnoreCase)
+                || user.Email.Contains(query, StringComparison.OrdinalIgnoreCase)
+                || user.Roles.Contains(query, StringComparison.OrdinalIgnoreCase));
+        }
+
+        return [.. shown];
+    }
+
+    private static IReadOnlyList<string> RolesOf(ImpersonationCandidate user) =>
+        string.IsNullOrWhiteSpace(user.Roles) ? [] : user.Roles.Split(", ", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+    private static string Initials(ImpersonationCandidate user) =>
+        string.Concat(user.FirstName.Take(1).Concat(user.LastName.Take(1))).ToUpperInvariant();
+
+    private static string ToneOf(string? role) => role switch
+    {
+        null => "none",
+        _ when role.Contains("customer", StringComparison.OrdinalIgnoreCase) => "customer",
+        _ when role.Contains("owner", StringComparison.OrdinalIgnoreCase) || role.Contains("admin", StringComparison.OrdinalIgnoreCase) => "admin",
+        _ when role.Contains("senior", StringComparison.OrdinalIgnoreCase) => "senior",
+        _ when role.Contains("coordinator", StringComparison.OrdinalIgnoreCase) => "coordinator",
+        _ when role.Contains("order", StringComparison.OrdinalIgnoreCase) => "orderer",
+        _ => "staff",
+    };
+}

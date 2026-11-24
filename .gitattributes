@@ -1,0 +1,11 @@
+* text=auto
+
+*.cs text eol=lf
+*.razor text eol=lf
+*.sh text eol=lf
+
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff binary
+*.woff2 binary

@@ -1,0 +1,211 @@
+.org-people {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+
+.org-people__bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2) var(--space-3);
+}
+
+.org-people__filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    min-width: 0;
+}
+
+.org-people__bar ::deep .rz-button {
+    margin-inline-start: auto;
+}
+
+.org-filter {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    height: 1.75rem;
+    padding: 0 var(--space-1) 0 var(--space-3);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-full);
+    background: var(--color-surface);
+    color: var(--color-text-muted);
+    font: inherit;
+    font-size: var(--font-size-xs);
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+    .org-filter:hover {
+        border-color: var(--color-border-strong);
+        color: var(--color-text);
+    }
+
+    .org-filter:focus-visible {
+        outline: none;
+        box-shadow: var(--focus-ring);
+    }
+
+    .org-filter[aria-pressed="true"] {
+        border-color: var(--color-accent);
+        background: var(--color-accent-soft);
+        color: var(--color-accent-strong);
+        font-weight: var(--font-weight-semibold);
+    }
+
+.org-filter__count {
+    min-width: 1.25rem;
+    padding: 0 var(--space-1);
+    border-radius: var(--radius-full);
+    background: var(--color-surface-sunken);
+    color: var(--color-text-muted);
+    font-weight: var(--font-weight-semibold);
+    line-height: 1.25rem;
+    text-align: center;
+}
+
+.org-filter[aria-pressed="true"] .org-filter__count {
+    background: var(--color-surface);
+    color: var(--color-accent-strong);
+}
+
+.org-people__list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    border-top: 1px solid var(--color-divider-faint);
+}
+
+.org-person {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--space-3);
+    min-height: 3.25rem;
+    padding: var(--space-2) var(--space-1);
+    border-bottom: 1px solid var(--color-divider-faint);
+}
+
+.org-person__avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 50%;
+    background: var(--color-accent-soft);
+    color: var(--color-accent-strong);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-bold);
+}
+
+.org-person__who {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.org-person__name {
+    color: var(--color-text);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+    overflow-wrap: anywhere;
+}
+
+.org-person__email {
+    overflow: hidden;
+    color: var(--color-text-muted);
+    font-size: var(--font-size-xs);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.org-person__roles {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: var(--space-1);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.org-role-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    height: 1.5rem;
+    padding: 0 var(--space-2);
+    border-radius: var(--radius-full);
+    background: var(--color-surface-sunken);
+    color: var(--color-text);
+    font-size: var(--font-size-xs);
+    white-space: nowrap;
+}
+
+.org-role-chip:has(.org-role-chip__remove) {
+    padding-inline-end: 2px;
+}
+
+.org-role-chip--on {
+    background: var(--color-accent-soft);
+    color: var(--color-accent-strong);
+}
+
+.org-role-chip__remove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.25rem;
+    height: 1.25rem;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: none;
+    color: var(--color-text-muted);
+    cursor: pointer;
+}
+
+    .org-role-chip__remove ::deep .material-symbol {
+        font-size: 14px;
+    }
+
+    .org-role-chip__remove:hover {
+        background: var(--color-danger-soft);
+        color: var(--color-danger);
+    }
+
+    .org-role-chip__remove:focus-visible {
+        outline: none;
+        box-shadow: var(--focus-ring);
+    }
+
+.org-people__note {
+    margin: 0;
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+}
+
+@media (max-width: 639.98px) {
+    .org-people__filters {
+        flex: 1 1 100%;
+        flex-wrap: nowrap;
+        margin: calc(-1 * var(--space-1));
+        padding: var(--space-1);
+        overflow-x: auto;
+        scrollbar-width: none;
+    }
+
+    .org-person {
+        grid-template-columns: auto minmax(0, 1fr);
+        align-items: start;
+    }
+
+    .org-person__roles {
+        grid-column: 2;
+        justify-content: flex-start;
+    }
+}

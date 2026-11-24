@@ -1,0 +1,99 @@
+@page "/staffing/qualifications"
+@attribute [Authorize]
+@inject QualificationService QualificationService
+@inject DialogService DialogService
+
+<PermissionView AnyOf="readers">
+    <Loading>
+        <PageScaffold>
+            <Main>
+                <LoadingState Text="Loading qualifications…" />
+            </Main>
+        </PageScaffold>
+    </Loading>
+    <Authorized>
+        <PageScaffold>
+            <Header>
+                <PageHeader Title="Qualifications"
+                            Count="@(this.count)"
+                            Description="What staff members can be qualified for: given to staff members in their user dialog, and asked for by slots."
+                            Icon="workspace_premium"
+                            RootText="Staffing">
+                    <Actions>
+                        <PermissionView Permission="RolePermission.QualificationsManage">
+                            <Authorized>
+                                <IconTextButton Text="New qualification"
+                                                Icon="add_task"
+                                                ButtonStyle="ButtonStyle.Primary"
+                                                Click="CreateQualificationAsync" />
+                            </Authorized>
+                        </PermissionView>
+                    </Actions>
+                </PageHeader>
+            </Header>
+            <Main>
+                <PageSection>
+                    <ListView @ref="this.list"
+                              TItem="QualificationListItem"
+                              TotalChanged="@(total => this.count = total)"
+                              Id="qualifications"
+                              Label="Qualifications"
+                              ItemName="qualification"
+                              ItemsName="qualifications"
+                              Definition="QualificationList.Definition"
+                              Load="LoadAsync"
+                              RowKey="qualification => qualification.Id"
+                              RowLabel="qualification => qualification.Name"
+                              RowState="qualification => ListRowState.Of(qualification.State)"
+                              OnOpen="OpenQualificationAsync"
+                              QuickFilter="@QualificationList.Status"
+                              SearchPlaceholder="Name or description"
+                              EmptyIcon="workspace_premium"
+                              EmptyText="The catalogue is empty. Add the qualifications your staff members can hold.">
+                        <Columns>
+                            <ListColumn TItem="QualificationListItem" Title="Name" Primary="true" Subtitle="qualification => qualification.Description">
+                                @context.Name
+                            </ListColumn>
+                            <ListColumn TItem="QualificationListItem" Title="Staff">
+                                @context.Holders
+                            </ListColumn>
+                        </Columns>
+                    </ListView>
+                </PageSection>
+            </Main>
+        </PageScaffold>
+    </Authorized>
+    <NotAuthorized>
+        <PageScaffold>
+            <Header>
+                <PageHeader Title="Qualifications" Icon="workspace_premium" RootText="Staffing" />
+            </Header>
+            <Main>
+                <PageSection>
+                    <EmptyState Icon="lock" Title="Access denied" Text="You do not have permission to view qualifications." Tone="UiTone.Warning" Role="alert" />
+                </PageSection>
+            </Main>
+        </PageScaffold>
+    </NotAuthorized>
+</PermissionView>
+
+@code {
+    private static readonly RolePermission[] readers = [RolePermission.ResourcesView, RolePermission.QualificationsManage];
+
+    private ListView<QualificationListItem>? list;
+
+    private int? count;
+
+    private Task<Result<ListPage<QualificationListItem>>> LoadAsync(ListQuery query) => QualificationService.QueryQualificationsAsync(query);
+
+    private async Task CreateQualificationAsync()
+    {
+        var result = await QualificationDialog.OpenCreateAsync(DialogService, QualificationService);
+        if (result.EntityId is not null && this.list is not null)
+        {
+            await this.list.ReloadAsync();
+        }
+    }
+
+    private Task OpenQualificationAsync(QualificationListItem qualification) => QualificationDialog.OpenAsync(DialogService, QualificationService, qualification.Id);
+}

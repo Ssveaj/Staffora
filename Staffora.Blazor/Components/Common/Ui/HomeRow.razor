@@ -1,0 +1,55 @@
+<li>
+    @if (!string.IsNullOrWhiteSpace(Href))
+    {
+        <a class="@CssClass" href="@Href" @attributes="AdditionalAttributes">
+            @Body
+        </a>
+    }
+    else
+    {
+        <button type="button" class="@CssClass" @onclick="OnClick" @attributes="AdditionalAttributes">
+            @Body
+        </button>
+    }
+</li>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+
+    [Parameter] public string? Meta { get; set; }
+
+    [Parameter] public string? Aside { get; set; }
+
+    [Parameter] public DateOnly? Date { get; set; }
+
+    [Parameter] public UiTone? Edge { get; set; }
+
+    [Parameter] public string? Href { get; set; }
+
+    [Parameter] public EventCallback OnClick { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)] public IReadOnlyDictionary<string, object>? AdditionalAttributes { get; set; }
+
+    private string CssClass => Edge is { } tone ? $"home-row home-row--{tone.ToString().ToLowerInvariant()}" : "home-row";
+
+    private RenderFragment Body => @<text>
+        @if (Date is { } day)
+        {
+            <span class="home-row__date" aria-hidden="true">
+                <span class="home-row__day">@day.Day</span>
+                <span class="home-row__month">@day.ToString("MMM", System.Globalization.CultureInfo.InvariantCulture)</span>
+            </span>
+        }
+        <span class="home-row__main">
+            <span class="home-row__title">@Title</span>@(" ")
+            @if (!string.IsNullOrWhiteSpace(Meta))
+            {
+                <span class="home-row__meta">@Meta</span>
+            }
+        </span>
+        @if (!string.IsNullOrWhiteSpace(Aside))
+        {
+            @(" ")<span class="home-row__aside">@Aside</span>
+        }
+    </text>;
+}

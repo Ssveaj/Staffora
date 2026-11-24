@@ -1,0 +1,149 @@
+@page "/tenant/management/organization-units"
+@attribute [Authorize]
+@inject DialogService DialogService
+@inject IRuntimeExecutionContext Runtime
+@inject OrganizationService OrganizationService
+@inject UrlStateService UrlState
+@implements IDisposable
+
+<PermissionView Permission="RolePermission.OrganizationUnitsView">
+    <Authorized>
+        <PageScaffold>
+            <Header>
+                <PageHeader Title="Units"
+                            Count="@(this.view.Value == UnitView.List ? this.count : null)"
+                            Description="The company's organization tree: its units and the roles held on them."
+                            Icon="account_tree"
+                            RootText="Organization"
+                            RootPath="/tenant/management">
+                    <Actions>
+                        <div class="org-view-switch" role="group" aria-label="View">
+                            <button type="button" class="org-view-switch__option" aria-pressed="@(this.view.Value == UnitView.Tree ? "true" : "false")" @onclick="@(() => this.view.Value = UnitView.Tree)">
+                                <MaterialSymbol Name="account_tree" />
+                                <span>Tree</span>
+                            </button>
+                            <button type="button" class="org-view-switch__option" aria-pressed="@(this.view.Value == UnitView.List ? "true" : "false")" @onclick="@(() => this.view.Value = UnitView.List)">
+                                <MaterialSymbol Name="list" />
+                                <span>List</span>
+                            </button>
+                        </div>
+                    </Actions>
+                </PageHeader>
+            </Header>
+            <Main>
+                @if (Runtime.TenantId is not { } tenantId)
+                {
+                    <PageSection>
+                        <RadzenAlert AlertStyle="AlertStyle.Warning" Variant="Variant.Flat" Shade="Shade.Lighter">
+                            Tenant context is not available.
+                        </RadzenAlert>
+                    </PageSection>
+                }
+                else if (this.view.Value == UnitView.List)
+                {
+                    <PageSection>
+                        <ListView TItem="OrganizationUnitListItem"
+                                  TotalChanged="@(total => this.count = total)"
+                                  Id="units"
+                                  Label="Organization units"
+                                  ItemName="unit"
+                                  ItemsName="units"
+                                  Definition="OrganizationUnitList.Definition"
+                                  Load="OrganizationService.QueryUnitsAsync"
+                                  RowKey="unit => unit.Id"
+                                  RowLabel="unit => unit.Name"
+                                  RowState="unit => ListRowState.Of(unit.State)"
+                                  OnOpen="@(unit => OpenUnitAsync(unit))"
+                                  SearchPlaceholder="Name or description"
+                                  EmptyIcon="account_tree">
+                            <Columns>
+                                <ListColumn TItem="OrganizationUnitListItem" Title="Name" Primary="true" Subtitle="unit => unit.Description">
+                                    @context.Name
+                                </ListColumn>
+                                <ListColumn TItem="OrganizationUnitListItem" Title="Type">
+                                    @EnumDisplayHelper.GetDisplayName(context.UnitType)
+                                </ListColumn>
+                                <ListColumn TItem="OrganizationUnitListItem" Title="Below">
+                                    @(context.IsRoot ? "The whole company" : context.ParentPath)
+                                </ListColumn>
+                            </Columns>
+                        </ListView>
+                    </PageSection>
+                }
+                else
+                {
+                    <OrganizationTreeView @ref="this.treeView" TenantId="@tenantId">
+                        <UnitActions Context="unit">
+                            <IconTextButton Text="Open unit" Icon="open_in_new" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Click="@(() => OpenTreeUnitAsync(unit))" />
+                            @if (unit.InUse)
+                            {
+                                <PermissionView Permission="RolePermission.OrganizationUnitsCreate">
+                                    <IconTextButton Text="Add unit below" Icon="add" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.Small" Click="@(() => CreateChildUnitAsync(unit))" />
+                                </PermissionView>
+                            }
+                        </UnitActions>
+                    </OrganizationTreeView>
+                }
+            </Main>
+        </PageScaffold>
+    </Authorized>
+    <NotAuthorized>
+        <PageScaffold>
+            <Header>
+                <PageHeader Title="Units" Icon="account_tree" RootText="Organization" RootPath="/tenant/management" />
+            </Header>
+            <Main>
+                <PageSection>
+                    <EmptyState Icon="lock" Title="Access denied" Text="You do not have permission to view the organization units." Tone="UiTone.Warning" Role="alert" />
+                </PageSection>
+            </Main>
+        </PageScaffold>
+    </NotAuthorized>
+</PermissionView>
+
+@code {
+    private static readonly UrlStateKey<UnitView> viewKey = UrlStateKey.Enum(UrlStateKeys.View, UnitView.Tree);
+
+    private OrganizationTreeView? treeView;
+    private UrlStateValue<UnitView> view = null!;
+
+    private int? count;
+
+    protected override void OnInitialized()
+    {
+        this.view = UrlState.Bind(viewKey);
+        this.view.Changed += OnViewChanged;
+    }
+
+    private Task OpenUnitAsync(OrganizationUnitListItem unit) => OrganizationUnitDialog.OpenAsync(DialogService, OrganizationService, unit.Id);
+
+    private void OnViewChanged() => _ = InvokeAsync(StateHasChanged);
+
+    private async Task CreateChildUnitAsync(OrganizationUnitNode parent)
+    {
+        if ((await OrganizationUnitDialog.OpenCreateAsync(DialogService, OrganizationService, parent.Id)).Changed && this.treeView is not null)
+        {
+            await this.treeView.ReloadAsync();
+        }
+    }
+
+    private async Task OpenTreeUnitAsync(OrganizationUnitNode unit)
+    {
+        if ((await OrganizationUnitDialog.OpenAsync(DialogService, OrganizationService, unit.Id)).Changed && this.treeView is not null)
+        {
+            await this.treeView.ReloadAsync();
+        }
+    }
+
+    public void Dispose()
+    {
+        this.view.Changed -= OnViewChanged;
+        this.view.Dispose();
+    }
+
+    private enum UnitView
+    {
+        Tree,
+        List,
+    }
+}

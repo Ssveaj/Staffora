@@ -1,0 +1,64 @@
+{
+  "id": "job-staffed",
+  "title": "A job is staffed from registration to confirmation",
+  "goal": "The coordinator registers a job for a customer with a slot that asks for a qualification, asks both qualified staff members to work it, one of them says yes, the coordinator assigns that staff member and confirms the job; the assigned staff member finds it among their next assignments and the other staff member's request is closed.",
+  "actors": [
+    {
+      "id": "coordinator",
+      "description": "Casey Lind of Company A, who registers jobs and staffs their slots."
+    },
+    {
+      "id": "staff",
+      "description": "Kim Berg of Company A, a qualified staff member who answers her own requests."
+    },
+    {
+      "id": "second-staff",
+      "description": "Jamie Fors of Company A, a second qualified staff member who is asked too."
+    }
+  ],
+  "preconditions": [
+    "The end-to-end database was prepared in this run: Company A with the coordinator Casey Lind, the staff members Kim Berg and Jamie Fors, who both hold the qualification Mathematics, and the active customer Brightpath Learning, all set up through the services."
+  ],
+  "steps": [
+    {
+      "id": "register-job",
+      "actor": "coordinator",
+      "intent": "Register a job for the customer with a weekly time and a slot that requires the qualification, and start staffing it",
+      "outcome": "The job is being staffed and its slot waits for a staff member."
+    },
+    {
+      "id": "request-staff",
+      "actor": "coordinator",
+      "intent": "Ask both qualified staff members to work the slot",
+      "outcome": "Both staff members are ranked as holding the required qualification, and both are asked."
+    },
+    {
+      "id": "staff-accepts",
+      "actor": "staff",
+      "intent": "Sign in, find the request on her own work and accept it",
+      "outcome": "Her home lists the open request, and her answer says yes; the coordinator now picks who works."
+    },
+    {
+      "id": "assign-staff",
+      "actor": "coordinator",
+      "intent": "Assign the staff member who said yes",
+      "outcome": "The staff member is assigned, the slot is covered, and the other staff member's request is closed as not selected."
+    },
+    {
+      "id": "confirm-job",
+      "actor": "coordinator",
+      "intent": "Confirm the job",
+      "outcome": "The job is confirmed with its staff member."
+    },
+    {
+      "id": "staff-see-the-outcome",
+      "actor": "second-staff",
+      "intent": "Sign in and look at their own work",
+      "outcome": "The assigned staff member finds the job among her next assignments; the other staff member has no open request for it and is told another staff member works it."
+    }
+  ],
+  "completion": [
+    "A job registered for a customer was staffed with a qualified staff member who said yes, and confirmed.",
+    "Each staff member was asked and told through their own work and notices, and only one staff member works the job."
+  ]
+}

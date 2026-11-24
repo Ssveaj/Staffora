@@ -1,0 +1,93 @@
+@using System.Globalization
+<div class="home-ring-wrap" data-home-ring>
+    <div class="home-ring">
+        <span class="home-ring__halo home-ring__halo--outer" aria-hidden="true"></span>
+        <span class="home-ring__halo home-ring__halo--inner" aria-hidden="true"></span>
+        <span class="home-ring__glow" aria-hidden="true"></span>
+        <svg class="home-ring__svg" aria-hidden="true" width="212" height="212" viewBox="0 0 212 212">
+            <g transform="rotate(-90 106 106)" fill="none" stroke-width="14">
+                <circle class="home-ring__track" cx="106" cy="106" r="@Radius"></circle>
+                @foreach (var arc in Arcs())
+                {
+                    <circle class="@($"home-ring__segment home-ring__segment--{arc.Tone}")" cx="106" cy="106" r="@Radius"
+                            stroke-dasharray="@arc.DashArray" stroke-dashoffset="@arc.DashOffset" data-segment="@arc.Key"></circle>
+                }
+            </g>
+        </svg>
+        <div class="home-ring__centre" data-tone="@CentreTone">
+            <span class="home-ring__title">@Title</span>
+            @if (!string.IsNullOrWhiteSpace(Caption))
+            {
+                <span class="home-ring__caption">@Caption</span>
+            }
+        </div>
+    </div>
+
+    @if (Legend.Count > 0)
+    {
+        <ul class="home-legend" aria-label="@LegendLabel">
+            @foreach (var item in Legend)
+            {
+                <li class="home-legend__item" data-legend="@item.Key" data-tone="@item.Tone">
+                    <span class="home-legend__dot" aria-hidden="true"></span>
+                    <span class="home-legend__text">
+                        <span class="home-legend__name">@item.Name</span>
+                        @if (!string.IsNullOrWhiteSpace(item.Note))
+                        {
+                            <span class="home-legend__note">@item.Note</span>
+                        }
+                    </span>
+                    @if (!string.IsNullOrWhiteSpace(item.Value))
+                    {
+                        <span class="home-legend__value">@item.Value</span>
+                    }
+                </li>
+            }
+        </ul>
+    }
+</div>
+
+@code {
+    private const double Radius = 84;
+
+    [Parameter] public IReadOnlyList<HomeRingSegment> Segments { get; set; } = [];
+
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+
+    [Parameter] public string? Caption { get; set; }
+
+    [Parameter] public string CentreTone { get; set; } = "calm";
+
+    [Parameter] public IReadOnlyList<HomeLegendItem> Legend { get; set; } = [];
+
+    [Parameter] public string LegendLabel { get; set; } = "Legend";
+
+    private sealed record Arc(string Key, string Tone, string DashArray, string DashOffset);
+
+    private List<Arc> Arcs()
+    {
+        var shown = Segments.Where(segment => segment.Value > 0).ToList();
+        var total = shown.Sum(segment => segment.Value);
+        if (total <= 0)
+        {
+            return [];
+        }
+
+        var circumference = 2 * Math.PI * Radius;
+        var gap = shown.Count == 1 ? 0 : 6;
+        var arcs = new List<Arc>();
+        var start = 0d;
+        foreach (var segment in shown)
+        {
+            var length = circumference * segment.Value / total;
+            arcs.Add(new Arc(
+                segment.Key,
+                segment.Tone,
+                string.Create(CultureInfo.InvariantCulture, $"{Math.Max(length - gap, 1):0.##} {circumference:0.##}"),
+                string.Create(CultureInfo.InvariantCulture, $"{-start:0.##}")));
+            start += length;
+        }
+
+        return arcs;
+    }
+}

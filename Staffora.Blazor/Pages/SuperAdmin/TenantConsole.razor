@@ -1,0 +1,148 @@
+@page "/superadmin/tenants/{TenantId:guid}"
+@page "/superadmin/tenants/{TenantId:guid}/{Tab}"
+@layout SuperAdminLayout
+@using Staffora.Blazor.Components.TenantComponents
+@inject PlatformConsoleService PlatformConsole
+@inject TenantService TenantService
+@inject DialogService DialogService
+
+<PageScaffold>
+    <Header>
+        <PageHeader Title="@(this.summary?.Name ?? "Tenant")"
+                    Description="@HeaderDescription"
+                    Icon="apartment"
+                    RootText="Tenants"
+                    RootPath="/superadmin/tenants">
+            <Actions>
+                @if (this.summary is not null)
+                {
+                    <IconTextButton Text="Tenant details" Icon="tune" ButtonStyle="ButtonStyle.Light" Click="OpenTenantAsync" />
+                }
+            </Actions>
+            <Meta>
+                @if (this.summary is { IsPlatformTenant: true })
+                {
+                    <MetaItem Icon="admin_panel_settings">The platform's own tenant</MetaItem>
+                }
+            </Meta>
+        </PageHeader>
+    </Header>
+    <Main>
+        @if (this.loading)
+        {
+            <PageSection>
+                <div class="rz-p-4" role="status">
+                    <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" />
+                    <RadzenText class="rz-mt-2">Loading the tenant...</RadzenText>
+                </div>
+            </PageSection>
+        }
+        else if (this.summary is null)
+        {
+            <PageSection>
+                <EmptyState Icon="domain_disabled" Title="Tenant not found" Text="@this.error" Tone="UiTone.Warning" Role="alert">
+                    <a href="/superadmin/tenants">Back to the tenants</a>
+                </EmptyState>
+            </PageSection>
+        }
+        else
+        {
+            <nav class="console-tabs" aria-label="Tenant console">
+                <ul class="console-tabs__list">
+                    @foreach (var tab in tabs)
+                    {
+                        <li>
+                            <a class="@(tab == Current ? "console-tabs__tab console-tabs__tab--current" : "console-tabs__tab")"
+                               href="@PathOf(tab)"
+                               aria-current="@(tab == Current ? "page" : null)">
+                                <MaterialSymbol Name="@tab.Icon" />
+                                <span>@tab.Title</span>
+                            </a>
+                        </li>
+                    }
+                </ul>
+            </nav>
+
+            @if (Current == Overview)
+            {
+                <TenantConsoleOverview Summary="this.summary" />
+            }
+            else if (Current == UsersTab)
+            {
+                <PageSection Title="Users" Description="The tenant's people, read-only. Open one to see their details, roles and history.">
+                    <TenantConsoleUsers TenantId="TenantId" />
+                </PageSection>
+            }
+            else if (Current == RolesTab)
+            {
+                <PageSection Title="Roles" Description="The tenant's roles and what they grant, read-only. The tenant edits its own roles.">
+                    <TenantConsoleRoles TenantId="TenantId" />
+                </PageSection>
+            }
+            else if (Current == DeadLettersTab)
+            {
+                <PageSection Title="Dead letters" Description="Messages between this tenant and a linked tenant that were given up after their last attempt. Why each failed is in the error log.">
+                    <TenantConsoleDeadLetters TenantId="TenantId" />
+                </PageSection>
+            }
+            else
+            {
+                <TenantConsoleCustomFields TenantId="TenantId" />
+            }
+        }
+    </Main>
+</PageScaffold>
+
+@code {
+    [Parameter] public Guid TenantId { get; set; }
+
+    [Parameter] public string? Tab { get; set; }
+
+    private static readonly ConsoleTab Overview = new(null, "Overview", "dashboard");
+    private static readonly ConsoleTab UsersTab = new("users", "Users", "people");
+    private static readonly ConsoleTab RolesTab = new("roles", "Roles", "admin_panel_settings");
+    private static readonly ConsoleTab CustomFieldsTab = new("custom-fields", "Custom fields", "tune");
+    private static readonly ConsoleTab DeadLettersTab = new("dead-letters", "Dead letters", "unsubscribe");
+    private static readonly ConsoleTab[] tabs = [Overview, UsersTab, RolesTab, CustomFieldsTab, DeadLettersTab];
+
+    private TenantConsoleSummary? summary;
+    private Guid loadedId;
+    private string? error;
+    private bool loading = true;
+
+    private ConsoleTab Current => tabs.FirstOrDefault(tab => tab.Key is not null && string.Equals(tab.Key, Tab, StringComparison.OrdinalIgnoreCase)) ?? Overview;
+
+    private string HeaderDescription => this.summary is null ? "The tenant's console."
+        : string.IsNullOrWhiteSpace(this.summary.Description) ? "The tenant's console: its people, roles, organization and custom fields."
+        : this.summary.Description;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (TenantId != this.loadedId)
+        {
+            this.loadedId = TenantId;
+            this.loading = true;
+            await LoadAsync();
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        var result = await PlatformConsole.GetTenantSummaryAsync(TenantId);
+        this.summary = result.IsSuccess ? result.Value : null;
+        this.error = result.IsSuccess ? null : result.Error;
+        this.loading = false;
+    }
+
+    private async Task OpenTenantAsync()
+    {
+        if ((await TenantDialog.OpenAsync(DialogService, TenantService, TenantId)).Changed)
+        {
+            await LoadAsync();
+        }
+    }
+
+    private string PathOf(ConsoleTab tab) => tab.Key is null ? $"/superadmin/tenants/{TenantId}" : $"/superadmin/tenants/{TenantId}/{tab.Key}";
+
+    private sealed record ConsoleTab(string? Key, string Title, string Icon);
+}

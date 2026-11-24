@@ -1,0 +1,245 @@
+:root {
+    --color-accent: #0f766e;
+    --color-accent-strong: color-mix(in srgb, #0f766e 85%, black);
+    --color-accent-soft: #e8f5f2;
+    --color-accent-tint: color-mix(in srgb, #0f766e 8%, white);
+    --color-on-accent: #ffffff;
+
+    --color-text: #0f172a;
+    --color-text-muted: #475569;
+    --color-text-subtle: #64748b;
+    --color-text-faint: #94a3b8;
+    --color-text-placeholder: #b1bac6;
+    --color-text-inverse: #ffffff;
+
+    --color-canvas: #faf9f6;
+    --color-surface: #ffffff;
+    --color-surface-muted: #f8fafb;
+    --color-surface-sunken: #f1f5f9;
+    --color-surface-hover: #f8fafc;
+
+    --color-chrome: #ffffff;
+    --color-scrim: rgb(15 23 42 / 0.45);
+
+    --color-ink: #0b2e2b;
+    --color-ink-strong: #082522;
+    --color-on-ink: #ffffff;
+    --color-on-ink-muted: #a9cbc5;
+    --color-ink-accent: #5eead4;
+    --color-ink-glow: #2dd4bf;
+    --color-ink-line: rgb(169 203 197 / 0.22);
+    --color-ink-warning: #fbbf24;
+    --color-ink-danger: #fca5a5;
+
+    --color-border: #e2e8f0;
+    --color-border-strong: #cbd5e1;
+    --color-divider-faint: #eef2f6;
+
+    --color-success: #15803d;
+    --color-success-soft: #f0fdf4;
+    --color-success-border: #bbf7d0;
+    --color-success-dot: #16a34a;
+    --color-warning: #b45309;
+    --color-warning-soft: #fffbeb;
+    --color-warning-border: #fde68a;
+    --color-warning-dot: #f59e0b;
+    --color-warning-strong: color-mix(in srgb, #b45309 80%, black);
+    --color-danger: #b91c1c;
+    --color-danger-soft: #fef2f2;
+    --color-danger-border: #fecaca;
+    --color-danger-dot: #dc2626;
+    --color-info: #1d4ed8;
+    --color-info-soft: #eff6ff;
+    --color-info-border: #bfdbfe;
+    --color-info-dot: #2563eb;
+    --color-neutral: #6b7280;
+    --color-neutral-soft: #f8fafc;
+    --color-neutral-dot: #d1d5db;
+
+    --focus-ring: 0 0 0 3px color-mix(in srgb, #0f766e 35%, transparent);
+
+    --sch-track: #f1f5f9;
+    --sch-hatch: rgb(148 163 184 / 0.13);
+    --sch-work: #ffffff;
+    --sch-work-edge: #cbd5e1;
+    --sch-leave: #a1887f;
+    --sch-leave-text: #4e342e;
+    --sch-leave-plate: rgb(255 255 255 / 0.85);
+    --sch-now: #e91e63;
+    --sch-now-soft: rgb(233 30 99 / 0.12);
+    --sch-unassigned: #2f3743;
+    --sch-unassigned-bar: #37414f;
+    --sch-unassigned-meta: #b8c4d4;
+    --sch-band-staff: #0f766e;
+    --sch-band-muted: #a7b1bd;
+    --sch-waiting: #8e24aa;
+
+    --sch-day-work: #dcf1ec;
+    --sch-day-work-edge: #7cc4b7;
+    --sch-absence: #e4dafc;
+    --sch-absence-light: #f6f2ff;
+    --sch-absence-edge: #6d28d9;
+    --sch-absence-text: #4c1d95;
+
+    --color-holiday: #be123c;
+    --color-holiday-soft: #fff1f2;
+
+    --space-0: 0;
+    --space-1: 0.25rem;
+    --space-2: 0.5rem;
+    --space-3: 0.75rem;
+    --space-4: 1rem;
+    --space-5: 1.25rem;
+    --space-6: 1.5rem;
+    --space-8: 2rem;
+    --space-10: 2.5rem;
+    --space-12: 3rem;
+
+    --radius-sm: 4px;
+    --radius-md: 6px;
+    --radius-lg: 8px;
+    --radius-xl: 12px;
+    --radius-2xl: 16px;
+    --radius-full: 999px;
+
+    --shadow-1: 0 1px 2px rgb(15 23 42 / 0.06);
+    --shadow-2: 0 1px 3px rgb(0 0 0 / 0.1), 0 1px 2px rgb(0 0 0 / 0.06);
+    --shadow-3: 0 12px 32px rgb(15 23 42 / 0.14);
+    --shadow-pop: 0 12px 32px rgb(15 23 42 / 0.16);
+    --shadow-drawer: -4px 0 24px rgb(0 0 0 / 0.18);
+    --shadow-lift: 0 1px 2px rgb(15 23 42 / 0.05), 0 18px 40px -18px rgb(8 37 34 / 0.38);
+    --shadow-ink-glow: 0 0 0 1px rgb(169 203 197 / 0.22), 0 0 24px rgb(45 212 191 / 0.35);
+
+    --control-height-sm: 30px;
+    --control-height-md: 34px;
+    --control-height-lg: 40px;
+    --app-header-height: 56px;
+    --app-sidebar-width: 248px;
+    --app-sidebar-rail: 64px;
+
+    --font-family-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-family-mono: ui-monospace, "Cascadia Mono", Consolas, "Liberation Mono", monospace;
+
+    --font-size-2xs: 0.6875rem;
+    --font-size-xs: 0.75rem;
+    --font-size-dense: 0.8125rem;
+    --font-size-sm: 0.875rem;
+    --font-size-md: 1rem;
+    --font-size-lg: 1.125rem;
+    --font-size-xl: 1.25rem;
+    --font-size-2xl: 1.5rem;
+    --font-size-3xl: 2rem;
+    --font-size-4xl: 2.5rem;
+
+    --line-height-tight: 1.2;
+    --line-height-snug: 1.3;
+    --line-height-normal: 1.5;
+    --line-height-relaxed: 1.6;
+
+    --font-weight-regular: 400;
+    --font-weight-medium: 500;
+    --font-weight-semibold: 600;
+    --font-weight-bold: 700;
+
+    --icon-size-sm: 1rem;
+    --icon-size-md: 1.25rem;
+    --icon-size-lg: 1.5rem;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root[data-color-scheme="auto"] {
+        --color-canvas: #0f172a;
+        --color-surface: #0f172a;
+        --color-surface-muted: #131c2f;
+        --color-surface-sunken: #1e293b;
+        --color-surface-hover: #1a2438;
+        --color-chrome: #0f172a;
+        --color-border: #334155;
+        --color-border-strong: #475569;
+        --color-divider-faint: #1e293b;
+        --color-text: #e2e8f0;
+        --color-text-muted: #cbd5e1;
+        --color-text-subtle: #94a3b8;
+        --color-accent-soft: #134e4a;
+        --color-success: #4ade80;
+        --color-warning: #fbbf24;
+        --color-danger: #f87171;
+        --color-info: #60a5fa;
+        --color-success-soft: color-mix(in srgb, #4ade80 18%, #0f172a);
+        --color-warning-soft: color-mix(in srgb, #fbbf24 18%, #0f172a);
+        --color-warning-strong: #fbbf24;
+        --color-danger-soft: color-mix(in srgb, #f87171 18%, #0f172a);
+        --color-info-soft: color-mix(in srgb, #60a5fa 18%, #0f172a);
+        --color-holiday: #fda4af;
+        --color-holiday-soft: #4c0519;
+    }
+}
+
+:root {
+    --rz-primary: var(--color-accent);
+    --rz-primary-dark: var(--color-accent-strong);
+    --rz-primary-darker: color-mix(in srgb, var(--color-accent-strong) 85%, black);
+    --rz-primary-light: color-mix(in srgb, var(--color-accent) 75%, white);
+    --rz-primary-lighter: color-mix(in srgb, var(--color-accent) 12%, transparent);
+    --rz-on-primary: var(--color-on-accent);
+
+    --rz-warning: var(--color-warning);
+    --rz-warning-dark: color-mix(in srgb, var(--color-warning) 85%, black);
+    --rz-warning-darker: color-mix(in srgb, var(--color-warning) 70%, black);
+    --rz-warning-light: var(--color-warning);
+    --rz-warning-lighter: var(--color-warning-soft);
+    --rz-on-warning-lighter: var(--color-warning);
+    --rz-success: var(--color-success);
+    --rz-success-dark: color-mix(in srgb, var(--color-success) 85%, black);
+    --rz-success-darker: color-mix(in srgb, var(--color-success) 70%, black);
+    --rz-success-light: var(--color-success);
+    --rz-success-lighter: var(--color-success-soft);
+    --rz-on-success-lighter: var(--color-success);
+    --rz-info: var(--color-info);
+    --rz-info-dark: color-mix(in srgb, var(--color-info) 85%, black);
+    --rz-info-darker: color-mix(in srgb, var(--color-info) 70%, black);
+    --rz-info-light: var(--color-info);
+    --rz-info-lighter: var(--color-info-soft);
+    --rz-on-info-lighter: var(--color-info);
+    --rz-danger: var(--color-danger);
+    --rz-danger-dark: color-mix(in srgb, var(--color-danger) 85%, black);
+    --rz-danger-darker: color-mix(in srgb, var(--color-danger) 70%, black);
+    --rz-danger-light: var(--color-danger);
+    --rz-danger-lighter: var(--color-danger-soft);
+    --rz-on-danger-lighter: var(--color-danger);
+
+    --rz-text-font-family: var(--font-family-sans);
+    --rz-text-color: var(--color-text);
+    --rz-text-title-color: var(--color-text);
+    --rz-text-secondary-color: var(--color-text-muted);
+    --rz-text-tertiary-color: var(--color-text-subtle);
+    --rz-body-background-color: var(--color-canvas);
+
+    --rz-border-color: var(--color-border);
+    --rz-border-normal: var(--rz-border-width) solid var(--color-border-strong);
+
+    --rz-input-placeholder-color: var(--color-text-subtle);
+    --rz-input-disabled-color: var(--color-text-subtle);
+
+    --rz-header-background-color: var(--color-chrome);
+    --rz-header-color: var(--color-text);
+    --rz-header-shadow: none;
+}
+
+.rz-button,
+.rz-button-xs,
+.rz-button-sm,
+.rz-button-md,
+.rz-button-lg {
+    text-transform: none;
+    letter-spacing: normal;
+}
+
+.rz-form-field-label {
+    color: var(--color-text-subtle);
+}
+
+input::placeholder,
+textarea::placeholder {
+    color: var(--color-text-placeholder);
+}

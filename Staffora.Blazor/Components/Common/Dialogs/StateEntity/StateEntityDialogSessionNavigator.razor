@@ -1,0 +1,27 @@
+<nav class="state-entity-dialog-session" aria-label="Records in this dialog" aria-busy="@(Session.IsSwapping ? "true" : "false")">
+    <button type="button"
+            class="state-entity-dialog-session__step"
+            data-session-step="previous"
+            aria-disabled="@(Session.CurrentIndex == 0 || Session.IsSwapping ? "true" : null)"
+            @onclick="PreviousAsync">
+        <MaterialSymbol Name="chevron_left" />
+        <span>Previous</span>
+    </button>
+    <span class="state-entity-dialog-session__position" role="status" aria-live="polite">@($"{Session.CurrentIndex + 1} of {Session.Targets.Count}")</span>
+    <button type="button"
+            class="state-entity-dialog-session__step"
+            data-session-step="next"
+            aria-disabled="@(Session.CurrentIndex == Session.Targets.Count - 1 || Session.IsSwapping ? "true" : null)"
+            @onclick="NextAsync">
+        <span>Next</span>
+        <MaterialSymbol Name="chevron_right" />
+    </button>
+</nav>
+
+@code {
+    [Parameter, EditorRequired] public StateEntityDialogSession Session { get; set; } = null!;
+
+    private Task PreviousAsync() => Session.PreviousAsync();
+
+    private Task NextAsync() => Session.NextAsync();
+}

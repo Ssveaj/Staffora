@@ -1,0 +1,62 @@
+@page "/me/schedule"
+@attribute [Authorize]
+@implements IDisposable
+@using Staffora.Blazor.Components.Common.Schedule
+@inject UrlStateService UrlState
+
+<PermissionView Permission="RolePermission.ViewOwnSchedule">
+    <Loading>
+        <PageScaffold>
+            <Main>
+                <LoadingState Text="Loading your schedule…" />
+            </Main>
+        </PageScaffold>
+    </Loading>
+    <Authorized>
+        <PageScaffold>
+            <Header>
+                <PageHeader Title="My schedule"
+                            Description="Your working time, assignments and absence, a month at a time."
+                            Icon="calendar_today"
+                            RootText="My work" />
+            </Header>
+            <Main>
+                <PersonSchedule Month="this.month.Value" MonthChanged="ShowMonth" />
+            </Main>
+        </PageScaffold>
+    </Authorized>
+    <NotAuthorized>
+        <PageScaffold>
+            <Header>
+                <PageHeader Title="My schedule" Icon="calendar_today" RootText="My work" />
+            </Header>
+            <Main>
+                <PageSection>
+                    <EmptyState Icon="lock" Title="Access denied" Text="You do not have permission to view your own schedule." Tone="UiTone.Warning" Role="alert" />
+                </PageSection>
+            </Main>
+        </PageScaffold>
+    </NotAuthorized>
+</PermissionView>
+
+@code {
+    private static readonly UrlStateKey<DateOnly?> monthKey = UrlStateKey.Month(UrlStateKeys.Month, OwnScheduleMonth.IsReadable);
+
+    private UrlStateValue<DateOnly?> month = null!;
+
+    protected override void OnInitialized()
+    {
+        this.month = UrlState.Bind(monthKey);
+        this.month.Changed += OnMonthChangedByAddress;
+    }
+
+    private void ShowMonth(DateOnly? month) => this.month.Value = month;
+
+    private void OnMonthChangedByAddress() => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        this.month.Changed -= OnMonthChangedByAddress;
+        this.month.Dispose();
+    }
+}

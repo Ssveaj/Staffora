@@ -1,0 +1,36 @@
+@using Staffora.Blazor.Components.Common.List
+@using Staffora.Core.Lists
+@using Staffora.Core.Models
+
+<ListView TItem="ListTestRow"
+          Label="First rows"
+          Definition="FakeRowSource.Definition"
+          Load="First.LoadAsync"
+          RowKey="row => row.Id"
+          RowLabel="row => row.Name"
+          AddressPrefix="@FirstPrefix">
+    <Columns>
+        <ListColumn TItem="ListTestRow" Title="Name" Primary="true">@context.Name</ListColumn>
+    </Columns>
+</ListView>
+<ListView TItem="ListTestRow"
+          Label="Second rows"
+          Definition="FakeRowSource.Definition"
+          Load="Second.LoadAsync"
+          RowKey="row => row.Id"
+          RowLabel="row => row.Name"
+          AddressPrefix="@SecondPrefix">
+    <Columns>
+        <ListColumn TItem="ListTestRow" Title="Name" Primary="true">@context.Name</ListColumn>
+    </Columns>
+</ListView>
+
+@code {
+    [Parameter, EditorRequired] public FakeRowSource First { get; set; } = null!;
+
+    [Parameter, EditorRequired] public FakeRowSource Second { get; set; } = null!;
+
+    [Parameter] public string? FirstPrefix { get; set; }
+
+    [Parameter] public string? SecondPrefix { get; set; }
+}

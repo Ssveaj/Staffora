@@ -1,0 +1,228 @@
+@page "/me/assignments"
+@attribute [Authorize]
+@using Staffora.Core.Entities.Jobs
+@using Staffora.Services.Jobs
+@inject SlotAssignmentService AssignmentService
+@inject DialogService DialogService
+@inject Staffora.Services.Coordination.TenantChangeFeed ChangeFeed
+
+<PermissionView Permission="RolePermission.ViewOwnAssignments">
+    <Loading>
+        <PageScaffold>
+            <Main>
+                <LoadingState Text="Loading your assignments…" />
+            </Main>
+        </PageScaffold>
+    </Loading>
+    <Authorized>
+        <PageScaffold>
+            <Header>
+                <PageHeader Title="My assignments"
+                            Count="@(this.count)"
+                            Description="The jobs you are asked to work or work. Open a request to accept or decline it."
+                            Icon="assignment"
+                            RootText="My work" />
+            </Header>
+            <Main>
+                <LiveRefresh Interest="Staffora.Services.Coordination.ChangeInterest.OwnWork" OnChange="ReloadAsync" Since="this.mark" />
+                <div class="my-assignments" data-my-assignments="@(this.section?.Key ?? "other")">
+                    <nav class="my-assignments__nav" aria-label="Sections of my assignments">
+                        @foreach (var group in Groups)
+                        {
+                            <div class="my-assignments__group">
+                                <h2 class="my-assignments__group-title" id="@($"my-assignments-{group.Key}")">@group.Title</h2>
+                                <ul class="my-assignments__links" aria-labelledby="@($"my-assignments-{group.Key}")">
+                                    @foreach (var section in group.Sections)
+                                    {
+                                        var current = this.section == section;
+                                        var count = this.counts?.GetValueOrDefault(section.Key);
+                                        <li>
+                                            <a href="@section.Href"
+                                               class="@(current ? "my-assignments__link my-assignments__link--current" : "my-assignments__link")"
+                                               aria-current="@(current ? "page" : null)"
+                                               data-section="@section.Key">
+                                                <MaterialSymbol Name="@section.Icon" Class="my-assignments__icon" />
+                                                <span class="my-assignments__label">@section.Label</span>
+                                                @if (count is { } shown)
+                                                {
+                                                    <span class="@(section.Urgent && shown > 0 ? "my-assignments__count my-assignments__count--urgent" : "my-assignments__count")" data-count>
+                                                        @shown<span class="visually-hidden"> @(shown == 1 ? section.One : section.Many)</span>
+                                                    </span>
+                                                }
+                                            </a>
+                                        </li>
+                                    }
+                                </ul>
+                            </div>
+                        }
+                    </nav>
+
+                    <section class="my-assignments__panel" aria-labelledby="my-assignments-title">
+                        <div class="my-assignments__head">
+                            <h2 class="my-assignments__title" id="my-assignments-title">@(this.section?.Title ?? "Requests and assignments")</h2>
+                            <p class="my-assignments__lead">@(this.section?.Lead ?? "Your requests and assignments as the filters choose them.")</p>
+                        </div>
+                        <ListView @ref="this.list"
+                                  TItem="OwnAssignmentRow"
+                                  TotalChanged="OnTotalChanged"
+                                  Id="my-assignments"
+                                  Label="My assignments"
+                                  ItemName="request or assignment"
+                                  ItemsName="requests and assignments"
+                                  Definition="OwnAssignmentList.Definition"
+                                  Load="LoadAsync"
+                                  RowKey="assignment => assignment.Id"
+                                  RowLabel="assignment => assignment.Label"
+                                  RowState="assignment => ListRowState.Of(assignment.State)"
+                                  OnOpen="OpenAssignmentAsync"
+                                  SearchPlaceholder="Job or customer"
+                                  EmptyIcon="assignment"
+                                  EmptyTitle="@(this.section?.EmptyTitle ?? "No open requests or assignments")"
+                                  EmptyText="@(this.section?.EmptyText ?? "A request shows here, and in your notifications, when a coordinator asks you to work a job.")"
+                                  Cards="CardOf">
+                        </ListView>
+                    </section>
+                </div>
+            </Main>
+        </PageScaffold>
+    </Authorized>
+    <NotAuthorized>
+        <PageScaffold>
+            <Header>
+                <PageHeader Title="My assignments" Icon="assignment" RootText="My work" />
+            </Header>
+            <Main>
+                <PageSection>
+                    <EmptyState Icon="lock" Title="Access denied" Text="You do not have permission to view your own assignments." Tone="UiTone.Warning" Role="alert" />
+                </PageSection>
+            </Main>
+        </PageScaffold>
+    </NotAuthorized>
+</PermissionView>
+
+@code {
+    private const string Path = "/me/assignments";
+
+    private sealed record Section(string Key, SlotAssignmentState? State, string Label, string Icon, string Title, string Lead, string EmptyTitle, string EmptyText, string One, string Many, bool Urgent = false)
+    {
+        public string? FilterValue => State?.ToString().ToLowerInvariant();
+
+        public string Href => FilterValue is { } value ? $"{Path}?{OwnAssignmentList.Status}={value}" : Path;
+    }
+
+    private sealed record SectionGroup(string Key, string Title, IReadOnlyList<Section> Sections);
+
+    private static readonly Section Requests = new(
+        "requests", SlotAssignmentState.Requested, "Requests", "contact_mail",
+        "Requests", "Say yes or no. The coordinator picks among the staff members who say yes.",
+        "No requests to answer", "A request shows here, and in your notifications, when a coordinator asks you to work a job.",
+        "request to answer", "requests to answer", Urgent: true);
+
+    private static readonly Section Questions = new(
+        "questions", SlotAssignmentState.StaffQuestion, "Questions sent", "contact_support",
+        "Questions sent", "You asked the coordinator before answering. You can still accept or decline.",
+        "No questions waiting", "A request shows here when you write a question to the coordinator about it.",
+        "question waiting", "questions waiting");
+
+    private static readonly Section Assigned = new(
+        "assigned", SlotAssignmentState.Assigned, "Assigned", "event_available",
+        "Assigned", "The jobs you work, the earliest period first.",
+        "No jobs assigned to you", "A job shows here once a coordinator picks you to work it.",
+        "job assigned", "jobs assigned");
+
+    private static readonly Section Answered = new(
+        "answered", SlotAssignmentState.Accepted, "Answer sent", "hourglass_top",
+        "Answer sent", "You said yes, and the coordinator picks who works.",
+        "No answers waiting", "A request you said yes to waits here until the coordinator picks who works.",
+        "answer waiting", "answers waiting");
+
+    private static readonly Section Open = new(
+        "all", null, "All open", "history",
+        "All open", "Everything still open: requests, answers and jobs you work. Show closed adds the ones that ended.",
+        "No open requests or assignments", "A request shows here, and in your notifications, when a coordinator asks you to work a job.",
+        "open request or assignment", "open requests and assignments");
+
+    private static readonly IReadOnlyList<SectionGroup> Groups =
+    [
+        new("answer", "To answer", [Requests, Questions]),
+        new("own", "My assignments", [Assigned, Answered, Open]),
+    ];
+
+    private ListView<OwnAssignmentRow>? list;
+
+    private int? count;
+
+    private Section? section = Open;
+
+    private Dictionary<string, int>? counts;
+
+    private long? mark;
+
+    protected override void OnInitialized() => this.mark = ChangeFeed.Mark();
+
+    protected override Task OnInitializedAsync() => CountAsync();
+
+    private async Task ReloadAsync()
+    {
+        await CountAsync();
+        if (this.list is not null)
+        {
+            await this.list.ReloadAsync();
+        }
+    }
+
+    private Task<Result<ListPage<OwnAssignmentRow>>> LoadAsync(ListQuery query)
+    {
+        var shown = OwnAssignmentList.Definition.Normalize(query);
+        var status = shown.Filter(OwnAssignmentList.Status);
+        var section = Groups.SelectMany(group => group.Sections).FirstOrDefault(candidate => candidate.FilterValue == status && (candidate.State is not null || !shown.IsOn(OwnAssignmentList.ShowClosed)));
+        if (section != this.section)
+        {
+            this.section = section;
+            StateHasChanged();
+        }
+
+        return AssignmentService.QueryOwnAssignmentsAsync(query);
+    }
+
+    private void OnTotalChanged(int total) => this.count = total;
+
+    private async Task CountAsync()
+    {
+        var counts = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var section in new[] { Requests, Questions, Assigned, Answered })
+        {
+            var read = await AssignmentService.QueryOwnAssignmentsAsync(OwnAssignmentList.Definition.Default.WithFilter(OwnAssignmentList.Status, section.FilterValue));
+            if (!read.IsSuccess || read.Value is not { } page)
+            {
+                this.counts = null;
+                return;
+            }
+
+            counts[section.Key] = page.TotalCount;
+        }
+
+        counts[Open.Key] = counts.Values.Sum();
+        this.counts = counts;
+    }
+
+    private static ListCard CardOf(OwnAssignmentRow assignment) => new(assignment.Job)
+    {
+        Date = assignment.PeriodStart,
+        Badge = assignment.HasUnseenReply ? "New reply" : null,
+        BadgeIcon = "mark_chat_unread",
+        BadgeKey = "new-reply",
+        Facts = [new("person", assignment.Slot), new("storefront", assignment.Customer), .. PlaceFacts(assignment), new("date_range", assignment.PeriodLabel)],
+        Hint = assignment.NextLabelWithDeadline,
+        EdgeColor = Staffora.Core.CoreExtensions.GetStateColor(assignment.State),
+    };
+
+    private static IEnumerable<ListCardFact> PlaceFacts(OwnAssignmentRow assignment) =>
+        assignment.Place is { } place ? [new("location_on", place)] : [];
+
+    private async Task OpenAssignmentAsync(OwnAssignmentRow assignment)
+    {
+        await SlotAssignmentDialog.OpenAsync(DialogService, AssignmentService, assignment.Id);
+        await CountAsync();
+    }
+}

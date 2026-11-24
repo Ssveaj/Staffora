@@ -1,0 +1,31 @@
+@using System.Globalization
+@using Staffora.Blazor.Pages.SuperAdmin
+@using Staffora.Core.Models
+
+<FormDialogFrame ReadOnly="true">
+    <div class="error-event" data-level="@Entry.Level.ToString().ToLowerInvariant()">
+        <p class="error-event__message">@Entry.Message</p>
+
+        <dl class="error-event__facts">
+            <div><dt>Level</dt><dd><span class="error-event__level">@Entry.Level</span></dd></div>
+            <div><dt>Logged</dt><dd>@Entry.Occurred.ToString("ddd d MMM, HH:mm:ss", CultureInfo.InvariantCulture) UTC</dd></div>
+            <div><dt>Tenant</dt><dd>@ErrorLogText.TenantText(Entry)</dd></div>
+            <div><dt>User</dt><dd>@ErrorLogText.WhoText(Entry)</dd></div>
+            <div class="error-event__wide"><dt>Source</dt><dd><code>@Entry.Category</code>@(Entry.EventName is null ? null : $" ({Entry.EventName}, {Entry.EventId})")</dd></div>
+            <div class="error-event__wide"><dt>Request</dt><dd>@(Entry.RequestPath ?? "None")</dd></div>
+            <div class="error-event__wide"><dt>Correlation id</dt><dd><code class="error-event__correlation">@(Entry.CorrelationId ?? "None")</code></dd></div>
+        </dl>
+
+        @if (Entry.ExceptionType is { } exceptionType)
+        {
+            <h3 class="error-event__heading">Exception · <code>@exceptionType</code></h3>
+            <pre class="error-log-exception" tabindex="0" aria-label="Exception detail">@(Exception ?? "No exception text was stored.")</pre>
+        }
+    </div>
+</FormDialogFrame>
+
+@code {
+    [Parameter, EditorRequired] public ErrorLogEntryDto Entry { get; set; } = null!;
+
+    [Parameter] public string? Exception { get; set; }
+}

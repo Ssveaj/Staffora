@@ -1,0 +1,198 @@
+@page "/tenant/management/settings"
+@page "/tenant/management/settings/custom-fields"
+@page "/tenant/management/settings/services"
+@page "/tenant/management/settings/closed-days"
+@attribute [Authorize]
+@using Staffora.Blazor.Components.EntityAttributes
+@using Staffora.Blazor.Components.Settings
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<PermissionView Permission="RolePermission.SettingsView">
+    <Loading>
+        <PageScaffold>
+            <Main>
+                <LoadingState Text="Loading settings…" />
+            </Main>
+        </PageScaffold>
+    </Loading>
+    <Authorized>
+        <PageScaffold>
+            <Header>
+                <PageHeader Title="Settings"
+                            Description="How the company works in the system: its time zone, its custom fields, the services it sells and the days it is closed."
+                            Icon="settings"
+                            RootText="Organization"
+                            RootPath="/tenant/management" />
+            </Header>
+            <Main>
+                <div class="settings-shell">
+                    <nav class="settings-shell__nav" aria-label="Settings" @ref="this.navElement" @onkeydown="this.OnNavKeyDownAsync">
+                        <button type="button"
+                                class="settings-shell__picker"
+                                aria-expanded="@(this.pickerOpen ? "true" : "false")"
+                                aria-controls="settings-panels"
+                                @ref="this.pickerElement"
+                                @onclick="@(() => this.pickerOpen = !this.pickerOpen)">
+                            <MaterialSymbol Name="@Current.Icon" />
+                            <span class="settings-shell__picker-text"><span class="visually-hidden">Settings section: </span>@Current.Title</span>
+                            <MaterialSymbol Name="@(this.pickerOpen ? "expand_less" : "expand_more")" Class="settings-shell__picker-chevron" />
+                        </button>
+                        <div id="settings-panels" class="@(this.pickerOpen ? "settings-shell__groups settings-shell__groups--open" : "settings-shell__groups")" data-settings-panels>
+                            @foreach (var group in groups)
+                            {
+                                var headingId = $"settings-group-{group.Key}";
+                                <p class="settings-shell__group" id="@headingId">@group.Title</p>
+                                <ul class="settings-shell__panels" aria-labelledby="@headingId">
+                                    @foreach (var panel in group.Panels)
+                                    {
+                                        <li>
+                                            <a class="@(panel == Current ? "settings-shell__panel settings-shell__panel--current" : "settings-shell__panel")"
+                                               href="@panel.Path"
+                                               aria-current="@(panel == Current ? "page" : null)">
+                                                <MaterialSymbol Name="@panel.Icon" />
+                                                <span>@panel.Title</span>
+                                            </a>
+                                        </li>
+                                    }
+                                </ul>
+                            }
+                        </div>
+                    </nav>
+
+                    <PageSection Class="settings-shell__content" Title="@Current.Title" Description="@Current.Description">
+                        @if (Current == General)
+                        {
+                            <GeneralSettingsPanel />
+                        }
+                        else if (Current == Services)
+                        {
+                            <ServicesPanel AddressPrefix="services" />
+                        }
+                        else if (Current == ClosedDays)
+                        {
+                            <ClosedDaysPanel AddressPrefix="closed" />
+                        }
+                        else
+                        {
+                            <CustomFieldsPanel AddressPrefix="fields" />
+                        }
+                    </PageSection>
+                </div>
+            </Main>
+        </PageScaffold>
+    </Authorized>
+    <NotAuthorized>
+        <PageScaffold>
+            <Header>
+                <PageHeader Title="Settings" Icon="settings" RootText="Organization" RootPath="/tenant/management" />
+            </Header>
+            <Main>
+                <PageSection>
+                    <EmptyState Icon="lock" Title="Access denied" Text="You do not have permission to view settings." Tone="UiTone.Warning" Role="alert" />
+                </PageSection>
+            </Main>
+        </PageScaffold>
+    </NotAuthorized>
+</PermissionView>
+
+@code {
+    private static readonly SettingsPanel General = new("General", "settings", "/tenant/management/settings", string.Empty);
+
+    private static readonly SettingsPanel CustomFields = new("Custom fields", "tune", "/tenant/management/settings/custom-fields", string.Empty);
+
+    private static readonly SettingsPanel Services = new("Services", "design_services", "/tenant/management/settings/services", "What the company sells: the qualifications each service needs, how many people it takes and whether the portal offers it.");
+
+    private static readonly SettingsPanel ClosedDays = new("Closed days", "event_busy", "/tenant/management/settings/closed-days", "Public holidays and other days the organization, or one of its units, does not work. Nobody they apply to is staffed on them.");
+
+    private static readonly SettingsPanel[] panels = [General, CustomFields, Services, ClosedDays];
+
+    private static readonly SettingsGroup[] groups =
+    [
+        new("company", "Company", [General]),
+        new("data", "Data", [CustomFields]),
+        new("staffing", "Staffing", [Services, ClosedDays]),
+    ];
+
+    public const string NavModulePath = "./scripts/settings-nav.js";
+
+    private ElementReference navElement;
+    private ElementReference pickerElement;
+    private IJSObjectReference? navModule;
+    private bool navAttached;
+
+    private bool pickerOpen;
+
+    private bool focusPicker;
+
+    protected override void OnInitialized() => Navigation.LocationChanged += OnLocationChanged;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (this.focusPicker)
+        {
+            this.focusPicker = false;
+            await this.pickerElement.FocusAsync();
+        }
+
+        if (this.navAttached || string.IsNullOrEmpty(this.navElement.Id))
+        {
+            return;
+        }
+
+        this.navAttached = true;
+        try
+        {
+            this.navModule ??= await JS.InvokeAsync<IJSObjectReference>("import", NavModulePath);
+            await this.navModule.InvokeVoidAsync("attach", this.navElement);
+        }
+        catch (Exception exception) when (exception is JSDisconnectedException or TaskCanceledException or ObjectDisposedException)
+        {
+        }
+    }
+
+    private async Task OnNavKeyDownAsync(KeyboardEventArgs args)
+    {
+        if (args.Key == "Escape" && this.pickerOpen)
+        {
+            this.pickerOpen = false;
+            await this.pickerElement.FocusAsync();
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        Navigation.LocationChanged -= OnLocationChanged;
+        try
+        {
+            if (this.navModule is not null)
+            {
+                await this.navModule.DisposeAsync();
+            }
+        }
+        catch (Exception exception) when (exception is JSDisconnectedException or ObjectDisposedException or TaskCanceledException)
+        {
+        }
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e) => _ = InvokeAsync(() =>
+    {
+        this.focusPicker = this.pickerOpen;
+        this.pickerOpen = false;
+        StateHasChanged();
+    });
+
+    private SettingsPanel Current
+    {
+        get
+        {
+            var path = "/" + Navigation.ToBaseRelativePath(Navigation.Uri).Split('?', '#')[0].TrimEnd('/');
+            return panels.FirstOrDefault(panel => string.Equals(panel.Path, path, StringComparison.OrdinalIgnoreCase)) ?? General;
+        }
+    }
+
+    private sealed record SettingsPanel(string Title, string Icon, string Path, string Description);
+
+    private sealed record SettingsGroup(string Key, string Title, SettingsPanel[] Panels);
+}

@@ -1,0 +1,17 @@
+{
+  "name": "staffora-e2e",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Browser journeys for Staffora.Blazor (ADR 0018).",
+  "scripts": {
+    "test:e2e": "node scripts/e2e-run.mjs full",
+    "test:e2e:smoke": "node scripts/e2e-run.mjs smoke",
+    "test:e2e:area": "node scripts/e2e-run.mjs area",
+    "test:e2e:affected": "node scripts/affected-specs.mjs --run",
+    "test:e2e:slowest": "node scripts/e2e-slowest.mjs"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.14.0",
+    "@playwright/test": "1.64.1"
+  }
+}

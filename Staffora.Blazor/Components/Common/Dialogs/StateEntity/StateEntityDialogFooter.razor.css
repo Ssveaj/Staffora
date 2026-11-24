@@ -1,0 +1,118 @@
+.state-entity-dialog-footer {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    padding: 10px var(--space-6);
+    border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+    background: color-mix(in srgb, var(--dialog-state-color, var(--color-accent)) 7%, var(--color-surface));
+}
+
+.state-entity-dialog-footer__error {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--color-danger-border);
+    border-radius: var(--radius-md);
+    background: var(--color-danger-soft);
+    color: var(--color-text);
+    font-size: var(--font-size-sm);
+}
+
+.state-entity-dialog-footer__notice {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+    color: var(--color-text);
+    font-size: var(--font-size-sm);
+    overflow-wrap: anywhere;
+}
+
+.state-entity-dialog-footer__bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--space-2);
+}
+
+.state-entity-dialog-footer__leading,
+.state-entity-dialog-footer__trailing,
+.state-entity-dialog-footer__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+}
+
+.state-entity-dialog-footer__trailing {
+    justify-content: flex-end;
+}
+
+.state-entity-dialog-footer__bar {
+    position: relative;
+}
+
+.state-entity-dialog-footer__leading ::deep .transition-button,
+.state-entity-dialog-footer__trailing ::deep .transition-button {
+    position: static;
+}
+
+.state-entity-dialog-footer__leading ::deep .transition-button__card,
+.state-entity-dialog-footer__trailing ::deep .transition-button__card {
+    max-width: min(20rem, 100%);
+}
+
+.state-entity-dialog-footer__leading ::deep .transition-button__card,
+.state-entity-dialog-footer__trailing ::deep .transition-button__card {
+    left: auto;
+    right: 0;
+}
+
+@media (max-width: 640px) {
+    .state-entity-dialog-footer {
+        padding: 10px var(--space-4);
+    }
+}
+
+.transition-button--own {
+    position: relative;
+    display: inline-flex;
+}
+
+.transition-button--own ::deep .transition-button__button.rz-button {
+    min-height: var(--control-height-md);
+    padding: 0 var(--space-3) 0 10px;
+    border: 1px solid var(--color-border-strong);
+    border-left: 3px solid var(--color-accent);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-1);
+    color: var(--color-text);
+    font-size: var(--font-size-dense);
+    font-weight: var(--font-weight-semibold);
+    white-space: nowrap;
+}
+
+.transition-button--own ::deep .transition-button__button.rz-button .rz-button-icon-left {
+    color: var(--color-accent);
+    font-size: 1.15rem;
+}
+
+.transition-button--own ::deep .transition-button__button.rz-button:not([aria-disabled="true"]):hover {
+    background: color-mix(in srgb, var(--color-accent) 8%, var(--color-surface));
+    color: var(--color-text);
+}
+
+.transition-button--own ::deep .transition-button__button.rz-button:focus-visible {
+    outline: none;
+    box-shadow: var(--focus-ring);
+}
+
+.transition-button--own ::deep .transition-button__button[aria-disabled="true"] {
+    opacity: 0.6;
+    cursor: not-allowed;
+}

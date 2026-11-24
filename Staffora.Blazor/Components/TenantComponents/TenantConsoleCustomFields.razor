@@ -1,0 +1,9 @@
+@using Staffora.Blazor.Components.EntityAttributes
+
+<PageSection>
+    <CustomFieldsPanel TenantId="TenantId" AddressPrefix="fields" />
+</PageSection>
+
+@code {
+    [Parameter, EditorRequired] public Guid TenantId { get; set; }
+}

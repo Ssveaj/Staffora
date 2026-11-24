@@ -1,0 +1,21 @@
+<div class="@ResolvedClass">
+    @Header
+    <div class="page-scaffold__main">
+        @Main
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public RenderFragment? Header { get; set; }
+
+    [Parameter]
+    public RenderFragment? Main { get; set; }
+
+    [Parameter]
+    public string? Class { get; set; }
+
+    private string ResolvedClass => string.IsNullOrWhiteSpace(Class)
+        ? "page-scaffold"
+        : $"page-scaffold {Class}";
+}

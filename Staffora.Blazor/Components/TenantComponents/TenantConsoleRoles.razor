@@ -1,0 +1,38 @@
+@inject PlatformConsoleService PlatformConsole
+@inject TenantRoleService TenantRoleService
+@inject DialogService DialogService
+
+<ListView TItem="TenantConsoleRole"
+          Id="tenant-roles"
+          Label="Roles"
+          ItemName="role"
+          ItemsName="roles"
+          Definition="PlatformTenantRoleList.Definition"
+          Load="Load"
+          RowKey="role => role.Id"
+          RowLabel="role => role.Name"
+          RowState="role => ListRowState.Of(role.State)"
+          OnOpen="OpenRoleAsync"
+          SearchPlaceholder="Role name or description"
+          EmptyIcon="badge"
+          EmptyText="The tenant has no roles.">
+    <Columns>
+        <ListColumn TItem="TenantConsoleRole" Title="Name" Primary="true">
+            @context.Name
+        </ListColumn>
+        <ListColumn TItem="TenantConsoleRole" Title="Permissions">
+            @context.PermissionCount
+        </ListColumn>
+        <ListColumn TItem="TenantConsoleRole" Title="Held by">
+            @(context.HolderCount == 1 ? "1 person" : $"{context.HolderCount} people")
+        </ListColumn>
+    </Columns>
+</ListView>
+
+@code {
+    [Parameter, EditorRequired] public Guid TenantId { get; set; }
+
+    private Task<Result<ListPage<TenantConsoleRole>>> Load(ListQuery query) => PlatformConsole.QueryTenantRolesAsync(TenantId, query);
+
+    private Task OpenRoleAsync(TenantConsoleRole role) => TenantRoleDialog.OpenAsync(DialogService, TenantRoleService, role.Id);
+}

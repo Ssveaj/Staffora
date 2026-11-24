@@ -1,0 +1,119 @@
+@using Staffora.Core.Entities.Portal
+@using Staffora.Core.Models
+@using Staffora.Core.Workflow.FieldAccess
+
+@if (Access.HasFlag(FieldAccessFlags.Visible))
+{
+    <div class="state-order-lines" data-area="@Area" data-access="@(Editable ? "editable" : "read-only")">
+        @if (Values.Count == 0)
+        {
+            <p class="state-order-lines__none" data-none>No service is named: the staffing company decides the people.</p>
+        }
+        else
+        {
+            <ul class="state-order-lines__list" aria-label="People asked for">
+                @foreach (var (line, index) in Values.OrderBy(NameOf, StringComparer.CurrentCulture).Select((line, index) => (line, index)))
+                {
+                    var name = NameOf(line);
+                    var input = $"{Name}-count-{index}";
+                    <li class="state-order-lines__item" @key="line.OfferedServiceId" data-line="@name" data-count="@line.Count">
+                        @if (Editable)
+                        {
+                            <span class="state-order-lines__name">@LabelOf(line)</span>
+                            <span class="state-order-lines__actions">
+                                <RadzenFormField Text="People" Component="@input" class="state-order-lines__count">
+                                    <RadzenNumeric TValue="int" Name="@input" Min="@OrderLine.MinCount" Max="@OrderLine.MaxCount" Value="@line.Count"
+                                                   ValueChanged="@((int count) => SetCount(line, count))" aria-label="@($"People for {name}")" />
+                                </RadzenFormField>
+                                <RadzenButton Icon="close" ButtonStyle="ButtonStyle.Base" Size="ButtonSize.Small" Variant="Variant.Text"
+                                              aria-label="@($"Remove {name}")" title="Remove this service" Click="@(() => Remove(line))" />
+                            </span>
+                        }
+                        else
+                        {
+                            <span class="state-order-lines__name">@line.Count × @LabelOf(line)</span>
+                        }
+                    </li>
+                }
+            </ul>
+        }
+
+        @if (Editable)
+        {
+            @if (Addable.Count == 0)
+            {
+                <p class="state-order-lines__note" data-no-choices>Every service the staffing company offers is named already, or it offers none in the portal.</p>
+            }
+            else
+            {
+                <RadzenFormField Text="Add a service" Component="@($"{Name}-service")" Style="width: 100%;">
+                    <RadzenDropDown TValue="Guid?" Name="@($"{Name}-service")" InputAttributes="@FieldLabel.Of("Add a service")" aria-label="Add a service"
+                                    Data="@Addable" TextProperty="Name" ValueProperty="Id" Value="@((Guid?)null)" ValueChanged="@((Guid? chosen) => Add(chosen))"
+                                    Placeholder="Choose a service" Style="width: 100%;" />
+                </RadzenFormField>
+            }
+        }
+    </div>
+}
+
+@code {
+    [CascadingParameter] public StateEntityDialogContext? DialogContext { get; set; }
+
+    [Parameter, EditorRequired] public string Area { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired] public ICollection<OrderLine> Values { get; set; } = null!;
+
+    [Parameter, EditorRequired] public IReadOnlyList<OfferedServiceChoice> Options { get; set; } = [];
+
+    [Parameter, EditorRequired] public string Name { get; set; } = "order-line";
+
+    private FieldAccessFlags Access { get; set; }
+
+    private bool Editable => Access.HasFlag(FieldAccessFlags.Editable);
+
+    private IReadOnlyList<OfferedServiceChoice> Addable => [.. Options.Where(choice => choice.Offered && Values.All(line => line.OfferedServiceId != choice.Id))];
+
+    protected override void OnParametersSet() =>
+        Access = (DialogContext ?? throw new InvalidOperationException("StateOrderLines is part of a state-entity dialog's body; its layout cascades the dialog's context.")).AreaAccessOf(Area);
+
+    private string NameOf(OrderLine line) =>
+        Options.FirstOrDefault(choice => choice.Id == line.OfferedServiceId)?.Name ?? line.OfferedService?.Name ?? "Unknown service";
+
+    private string LabelOf(OrderLine line) =>
+        Options.FirstOrDefault(choice => choice.Id == line.OfferedServiceId)?.Label
+            ?? (line.OfferedService is { } copy ? new OfferedServiceChoice(copy.Id, copy.Name, copy.Description, copy.DefaultSlotCount, copy.Offered).Label : "Unknown service");
+
+    private void Add(Guid? chosen)
+    {
+        if (!Editable || chosen is not { } id || Values.Any(line => line.OfferedServiceId == id) || Addable.FirstOrDefault(choice => choice.Id == id) is not { } service)
+        {
+            return;
+        }
+
+        var order = DialogContext!.EntityObject as Order;
+        Values.Add(new OrderLine { TenantId = order?.TenantId ?? Guid.Empty, OrderId = order?.Id ?? Guid.Empty, OfferedServiceId = id, Count = Math.Clamp(service.DefaultSlotCount, OrderLine.MinCount, OrderLine.MaxCount) });
+        DialogContext.NotifyEdited();
+    }
+
+    private void SetCount(OrderLine line, int count)
+    {
+        if (!Editable || count == line.Count)
+        {
+            return;
+        }
+
+        line.Count = Math.Clamp(count, OrderLine.MinCount, OrderLine.MaxCount);
+        DialogContext!.NotifyEdited();
+    }
+
+    private void Remove(OrderLine line)
+    {
+        if (!Editable)
+        {
+            return;
+        }
+
+        Values.Remove(line);
+        DialogContext!.NotifyEdited();
+    }
+}

@@ -1,0 +1,108 @@
+@page "/superadmin/errorlog"
+@layout SuperAdminLayout
+@using System.Globalization
+@using Staffora.Core.Entities.Platform
+@using Microsoft.Extensions.Options
+@using Staffora.Services.Diagnostics
+@inject PlatformConsoleService Console
+@inject IOptions<RetentionOptions> RetentionSettings
+@inject DialogService DialogService
+
+<PageScaffold>
+    <Header>
+        <PageHeader Title="Platform health"
+                    Description="Every error, warning and critical failure the platform logged, with the request, tenant and user each came from, and what the retention pass last removed. Click a row for its details. Times are in UTC."
+                    Icon="monitor_heart"
+                    RootText="Platform"
+                    RootPath="/superadmin/overview" />
+    </Header>
+    <Main>
+        @if (this.dropped > 0)
+        {
+            <div class="error-log-dropped">
+                <RadzenAlert AlertStyle="AlertStyle.Warning" Variant="Variant.Flat" Shade="Shade.Lighter" AllowClose="false">
+                    @DroppedText
+                </RadzenAlert>
+            </div>
+        }
+
+        <RetentionSummary Pass="this.retentionPass" Options="RetentionSettings.Value" />
+
+        <PageSection>
+            <ListView TItem="ErrorLogEntryDto"
+                      Id="error-log"
+                      Label="Platform health"
+                      ItemName="entry"
+                      ItemsName="entries"
+                      Definition="ErrorLogList.Definition"
+                      Load="Load"
+                      RowKey="entry => entry.Id"
+                      RowLabel="entry => entry.Message"
+                      RowState="StateOf"
+                      StateTitle="Level"
+                      OnOpen="OpenAsync"
+                      SearchPlaceholder="Message, tenant, path or correlation id"
+                      EmptyIcon="check_circle"
+                      EmptyText="Nothing was logged in this period.">
+                <Columns>
+                    <ListColumn TItem="ErrorLogEntryDto" Title="Time (UTC)">
+                        <span class="error-log-time">@context.Occurred.ToString("HH:mm", CultureInfo.InvariantCulture)</span>
+                    </ListColumn>
+                    <ListColumn TItem="ErrorLogEntryDto" Title="Message" Primary="true" Subtitle="@(entry => entry.RequestPath ?? ErrorLogText.ShortName(entry.Category))">
+                        <span class="error-log-message__text">@context.Message</span>
+                    </ListColumn>
+                    <ListColumn TItem="ErrorLogEntryDto" Title="Tenant">
+                        @ErrorLogText.TenantText(context)
+                    </ListColumn>
+                    <ListColumn TItem="ErrorLogEntryDto" Title="User">
+                        @ErrorLogText.WhoText(context)
+                    </ListColumn>
+                    <ListColumn TItem="ErrorLogEntryDto" Title="Correlation id">
+                        <code class="error-log-code">@(context.CorrelationId ?? "None")</code>
+                    </ListColumn>
+                </Columns>
+            </ListView>
+        </PageSection>
+    </Main>
+</PageScaffold>
+
+@code {
+    private long dropped;
+    private RetentionPass? retentionPass;
+
+    private string DroppedText => this.dropped == 1
+        ? "1 error was dropped since the app started because the error log's queue was full. The log holds a Warning row for it."
+        : $"{this.dropped} errors were dropped since the app started because the error log's queue was full. The log holds a Warning row for each burst.";
+
+    protected override void OnInitialized()
+    {
+        var droppedResult = Console.DroppedSinceStart();
+        this.dropped = droppedResult.IsSuccess ? droppedResult.Value : 0;
+        var retentionResult = Console.LastRetentionPass();
+        this.retentionPass = retentionResult.IsSuccess ? retentionResult.Value : null;
+    }
+
+    private Task<Result<ListPage<ErrorLogEntryDto>>> Load(ListQuery query) => Console.QueryErrorLogAsync(query);
+
+    private static ListRowState StateOf(ErrorLogEntryDto entry) => entry.Level switch
+    {
+        ErrorLogLevel.Critical => new ListRowState("Critical", UiTone.Danger),
+        ErrorLogLevel.Error => new ListRowState("Error", UiTone.Warning),
+        _ => new ListRowState("Warning", UiTone.Info),
+    };
+
+    private async Task OpenAsync(ErrorLogEntryDto entry)
+    {
+        string? exception = null;
+        if (entry.ExceptionType is not null)
+        {
+            var read = await Console.GetExceptionDetailAsync(entry.Id);
+            exception = read.IsSuccess ? read.Value : read.Error;
+        }
+
+        await DialogService.OpenFormDialogAsync<ErrorEventDialog>(
+            $"{entry.Level}: {ErrorLogText.ShortName(entry.ExceptionType ?? entry.Category)}",
+            parameters => parameters.Set(dialog => dialog.Entry, entry).Set(dialog => dialog.Exception, exception),
+            new FormDialogOptions { Width = "760px", Icon = "monitor_heart" });
+    }
+}

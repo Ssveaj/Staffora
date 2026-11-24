@@ -1,0 +1,231 @@
+@page "/portal/orders/{RequestId:guid}"
+@inject OrderService OrderService
+@inject DialogService DialogService
+
+<PermissionView Permission="RolePermission.OrdersView">
+    <Loading>
+        <PageScaffold Class="page-scaffold--column">
+            <Main>
+                <LoadingState Text="Loading the order…" />
+            </Main>
+        </PageScaffold>
+    </Loading>
+    <Authorized>
+        <PageScaffold Class="page-scaffold--column">
+            <Header>
+                <PageHeader Title="@(this.request?.Name ?? "Order")"
+                            Description="A job you asked your staffing company to staff."
+                            Icon="assignment"
+                            RootText="My orders"
+                            RootPath="/portal/orders">
+                    <Actions>
+                        @if (this.request is not null)
+                        {
+                            <IconTextButton Text="Open order" Icon="open_in_new" ButtonStyle="ButtonStyle.Primary" Click="OpenAsync" />
+                        }
+                    </Actions>
+                    <Meta>
+                        @if (this.request is { } shown)
+                        {
+                            var colors = ColorContrast.OnFill(Staffora.Core.CoreExtensions.GetStateColor(shown.State));
+                            <span class="order-details__badge" style="@($"--badge: {colors.Fill}; --badge-text: {colors.Foreground};")" data-order-state="@shown.State">
+                                <span class="visually-hidden">State: </span>@StateLabel(shown.State)
+                            </span>
+                            <MetaItem Icon="handshake">To @shown.Supplier</MetaItem>
+                            <MetaItem Icon="person">Written by @(shown.IsOwn ? "you" : shown.Orderer)</MetaItem>
+                            <MetaItem Icon="edit_calendar">Written @shown.Written.ToString("yyyy-MM-dd")</MetaItem>
+                        }
+                    </Meta>
+                </PageHeader>
+            </Header>
+            <Main>
+                <div class="order-details" data-order-details="@(this.loading ? "loading" : "ready")" aria-busy="@(this.loading ? "true" : "false")">
+                    @if (this.loading)
+                    {
+                        <LoadingState Text="Loading the order…" />
+                    }
+                    else if (this.request is not { } request)
+                    {
+                        <PageSection>
+                            <EmptyState Icon="search_off" Title="Order not found" Text="@this.error" Tone="UiTone.Warning" Role="alert">
+                                <a href="/portal/orders">Back to your orders</a>
+                            </EmptyState>
+                        </PageSection>
+                    }
+                    else
+                    {
+                        <div class="@($"order-details__notice order-details__notice--{ToneOf(request.State)}")" role="note">
+                            <MaterialSymbol Name="@IconOf(request.State)" Class="order-details__notice-icon" />
+                            <p class="order-details__note">@NoteOf(request.State)</p>
+                        </div>
+
+                        <section class="order-details__section" aria-labelledby="order-job">
+                            <h2 class="order-details__heading" id="order-job">The job</h2>
+                            <ul class="order-details__cards">
+                                <li class="order-details__card">
+                                    <MaterialSymbol Name="work" Class="order-details__card-icon" />
+                                    <span class="order-details__card-text">
+                                        <span class="order-details__label">Job</span>
+                                        <span class="order-details__value" data-order-name>@request.Name</span>
+                                    </span>
+                                </li>
+                                <li class="order-details__card">
+                                    <MaterialSymbol Name="date_range" Class="order-details__card-icon" />
+                                    <span class="order-details__card-text">
+                                        <span class="order-details__label">Period</span>
+                                        <span class="order-details__value" data-order-period>@request.PeriodLabel</span>
+                                    </span>
+                                </li>
+                                <li class="order-details__card">
+                                    <MaterialSymbol Name="location_on" Class="order-details__card-icon" />
+                                    <span class="order-details__card-text">
+                                        <span class="order-details__label">Place</span>
+                                        <span class="@(request.Place.IsEmpty ? "order-details__value order-details__value--none" : "order-details__value")" data-order-place>@request.Place.TextOrNone</span>
+                                    </span>
+                                </li>
+                                <li class="order-details__card">
+                                    <MaterialSymbol Name="notes" Class="order-details__card-icon" />
+                                    <span class="order-details__card-text">
+                                        <span class="order-details__label">Description</span>
+                                        <span class="@(string.IsNullOrWhiteSpace(request.Description) ? "order-details__value order-details__value--none" : "order-details__value order-details__value--long")">@(string.IsNullOrWhiteSpace(request.Description) ? "None" : request.Description)</span>
+                                    </span>
+                                </li>
+                                @if (request.StaffMembers is { } staffMembers)
+                                {
+                                    <li class="order-details__card">
+                                        <MaterialSymbol Name="badge" Class="order-details__card-icon" />
+                                        <span class="order-details__card-text">
+                                            <span class="order-details__label">Staff</span>
+                                            <span class="order-details__value" data-order-staff>@(staffMembers.Count == 0 ? "No staff member is named right now." : string.Join(", ", staffMembers))</span>
+                                        </span>
+                                    </li>
+                                }
+                            </ul>
+                        </section>
+
+                        <section class="order-details__section" aria-labelledby="order-progress">
+                            <h2 class="order-details__heading" id="order-progress">Where it stands</h2>
+                            <ul class="order-details__cards order-details__cards--pairs">
+                                <li class="order-details__card">
+                                    <MaterialSymbol Name="flag" Class="order-details__card-icon" />
+                                    <span class="order-details__card-text">
+                                        <span class="order-details__label">State</span>
+                                        <span class="order-details__value">@StateLabel(request.State)</span>
+                                    </span>
+                                </li>
+                                <li class="order-details__card">
+                                    <MaterialSymbol Name="handshake" Class="order-details__card-icon" />
+                                    <span class="order-details__card-text">
+                                        <span class="order-details__label">Staffing company</span>
+                                        <span class="order-details__value">@request.Supplier</span>
+                                    </span>
+                                </li>
+                                <li class="order-details__card">
+                                    <MaterialSymbol Name="person" Class="order-details__card-icon" />
+                                    <span class="order-details__card-text">
+                                        <span class="order-details__label">Written by</span>
+                                        <span class="order-details__value">@(request.IsOwn ? $"You ({request.Orderer})" : request.Orderer)</span>
+                                    </span>
+                                </li>
+                                <li class="order-details__card">
+                                    <MaterialSymbol Name="edit_calendar" Class="order-details__card-icon" />
+                                    <span class="order-details__card-text">
+                                        <span class="order-details__label">Written</span>
+                                        <span class="order-details__value">@request.Written.ToString("yyyy-MM-dd")</span>
+                                    </span>
+                                </li>
+                                <li class="order-details__card">
+                                    <MaterialSymbol Name="send" Class="order-details__card-icon" />
+                                    <span class="order-details__card-text">
+                                        <span class="order-details__label">Sent</span>
+                                        <span class="order-details__value" data-order-sent>@(request.Sent is { } sent ? sent.ToString("yyyy-MM-dd") : "Not sent yet")</span>
+                                    </span>
+                                </li>
+                            </ul>
+                            <p class="order-details__hint">
+                                <MaterialSymbol Name="forum" />
+                                <span>Your messages with the staffing company are beside the order: open it to read and write them.</span>
+                            </p>
+                        </section>
+                    }
+                </div>
+            </Main>
+        </PageScaffold>
+    </Authorized>
+    <NotAuthorized>
+        <PageScaffold Class="page-scaffold--column">
+            <Header>
+                <PageHeader Title="Order" Icon="assignment" RootText="My orders" RootPath="/portal/orders" />
+            </Header>
+            <Main>
+                <PageSection>
+                    <EmptyState Icon="lock" Title="Access denied" Text="You do not have permission to view your organization's orders." Tone="UiTone.Warning" Role="alert" />
+                </PageSection>
+            </Main>
+        </PageScaffold>
+    </NotAuthorized>
+</PermissionView>
+
+@code {
+    [Parameter] public Guid RequestId { get; set; }
+
+    private OrderDetails? request;
+    private Guid loadedId;
+    private string? error;
+    private bool loading = true;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (this.loadedId != RequestId)
+        {
+            this.loadedId = RequestId;
+            await LoadAsync();
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        this.loading = true;
+        var read = await OrderService.ReadRequestAsync(RequestId);
+        this.request = read.IsSuccess ? read.Value : null;
+        this.error = read.IsSuccess ? null : read.Error;
+        this.loading = false;
+    }
+
+    private async Task OpenAsync()
+    {
+        await OrderDialog.OpenAsync(DialogService, OrderService, RequestId);
+        await LoadAsync();
+    }
+
+    private static string StateLabel(OrderState state) => ListOption.ForEnum<OrderState>().First(option => option.Value == state.ToString().ToLowerInvariant()).Label;
+
+    private static string ToneOf(OrderState state) => state switch
+    {
+        OrderState.Confirmed or OrderState.InProgress or OrderState.Completed => "success",
+        OrderState.CanceledByUs or OrderState.CanceledBySupplier or OrderState.DeclinedBySupplier => "warning",
+        _ => "info",
+    };
+
+    private static string IconOf(OrderState state) => ToneOf(state) switch
+    {
+        "success" => "check_circle",
+        "warning" => "warning",
+        _ => "info",
+    };
+
+    private static string NoteOf(OrderState state) => state switch
+    {
+        OrderState.Registration => "A draft: open the order to complete it, and send it to your staffing company once it is complete, or cancel it.",
+        OrderState.Sent => "Sent: your staffing company has the job and staffs it. A sent order is no longer changed, but you can cancel it until it is confirmed.",
+        OrderState.Coordinating => "Being staffed: your staffing company's coordinator is finding its staff members. You can cancel the order until it is confirmed.",
+        OrderState.Confirmed => "Confirmed: the job is staffed, and its staff members are named here.",
+        OrderState.InProgress => "In progress: the job's period has started.",
+        OrderState.Completed => "Completed: the job's period is over. The order is kept for the record.",
+        OrderState.CanceledByUs => "Canceled by your organization. The order is kept for the record.",
+        OrderState.CanceledBySupplier => "Canceled by your staffing company after it was confirmed. The order is kept for the record.",
+        OrderState.DeclinedBySupplier => "Declined by your staffing company. The order is kept for the record.",
+        OrderState.CancellationSent => "Cancellation sent: your staffing company cancels the job and tells its staff members. The order reads canceled once it has, or completed if the job was completed already.",
+        _ => "Being written.",
+    };
+}

@@ -1,0 +1,61 @@
+@using Staffora.Blazor.Components.Common.Dialogs.StateEntity
+@using Staffora.Blazor.Components.Common.List
+@using Staffora.Blazor.Components.Common.WorkflowFields
+@using Staffora.Core.Entities.Resources
+@using Staffora.Core.Models
+@using Staffora.Services.Resources
+@implements IStateEntityDialog<QualificationDialogContext>
+@inject DialogService DialogService
+
+<StateEntityDialogViewPanel Key="@QualificationDialogContext.InfoView">
+    <div class="qualification-dialog">
+        <StateFieldTextBox @bind-Value="Context.Entity!.Name" Label="Name" MaxLength="@Qualification.NameMaxLength" Name="qualification-name" />
+        <StateFieldTextArea @bind-Value="Context.Entity!.Description" Label="Description" MaxLength="@Qualification.DescriptionMaxLength" Rows="3" Name="qualification-description" />
+    </div>
+</StateEntityDialogViewPanel>
+
+<StateEntityDialogViewPanel Key="@QualificationDialogContext.StaffView">
+    <StateEntityDialogChildList TItem="QualificationHolderRow"
+                                View="@QualificationDialogContext.StaffView"
+                                RowKey="@(row => row.ResourceId)"
+                                RowLabel="@(row => row.Name)"
+                                RowStateOf="@(row => row.State)"
+                                Label="Staff"
+                                ItemName="staff member"
+                                ItemsName="staff members"
+                                SearchLabel="Name or email"
+                                EmptyIcon="groups"
+                                EmptyTitle="Nobody holds this qualification"
+                                EmptyText="Give it to a staff member in their user dialog."
+                                OpenRow="@OpenHolderAsync">
+        <Columns>
+            <ListColumn TItem="QualificationHolderRow" Title="Staff member" Primary="true" Avatar="true" Subtitle="row => row.Email">@context.Name</ListColumn>
+        </Columns>
+    </StateEntityDialogChildList>
+</StateEntityDialogViewPanel>
+
+@code {
+    private int? shownVersion;
+
+    [Parameter, EditorRequired] public QualificationDialogContext Context { get; set; } = null!;
+
+    private Task<StateEntityDialogResult> OpenHolderAsync(QualificationHolderRow row) => Context.OpenHolderAsync(DialogService, row);
+
+    protected override void OnParametersSet()
+    {
+        if (this.shownVersion != Context.Version)
+        {
+            this.shownVersion = Context.Version;
+            Context.DisplayName = string.IsNullOrWhiteSpace(Context.Entity!.Name) ? null : Context.Entity.Name;
+        }
+    }
+
+    internal static QualificationDialogContext ContextFor(QualificationService service, Guid? qualificationId) =>
+        new(service, qualificationId) { DefaultTitle = "Qualification", CreateTitle = "New qualification", EntityIcon = "workspace_premium" };
+
+    public static Task<StateEntityDialogResult> OpenAsync(DialogService dialogService, QualificationService service, Guid qualificationId, StateEntityDialogOptions? options = null) =>
+        dialogService.OpenStateEntityDialogAsync<QualificationDialog, QualificationDialogContext>(ContextFor(service, qualificationId), options);
+
+    public static Task<StateEntityDialogResult> OpenCreateAsync(DialogService dialogService, QualificationService service) =>
+        dialogService.OpenStateEntityDialogAsync<QualificationDialog, QualificationDialogContext>(ContextFor(service, null));
+}

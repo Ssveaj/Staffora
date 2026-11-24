@@ -1,0 +1,17 @@
+<div class="stat-tile">
+    <IconChip Icon="@Icon" Tone="@Tone" />
+    <div class="stat-tile__text">
+        <span class="stat-tile__label">@Label</span>
+        <span class="stat-tile__value">@Value</span>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Icon { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired] public string Value { get; set; } = string.Empty;
+
+    [Parameter] public UiTone Tone { get; set; } = UiTone.Accent;
+}

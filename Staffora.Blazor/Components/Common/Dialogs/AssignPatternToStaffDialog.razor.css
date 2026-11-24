@@ -1,0 +1,26 @@
+.assign-pattern__intro {
+    margin: 0 0 var(--space-3);
+    color: var(--color-text-muted);
+}
+
+.assign-pattern__dates {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+    gap: var(--space-3);
+    margin-top: var(--space-3);
+}
+
+.assign-pattern__count {
+    margin: var(--space-2) 0 0;
+    color: var(--color-text-muted);
+}
+
+.assign-pattern__refused-title {
+    margin: 0 0 var(--space-1);
+    font-weight: 600;
+}
+
+.assign-pattern__refused {
+    margin: 0;
+    padding-left: 1.25rem;
+}

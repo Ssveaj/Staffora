@@ -1,0 +1,88 @@
+@using Staffora.Services.Coordination
+@implements IDisposable
+@inject TenantChangeFeed Feed
+@inject TimeProvider Clock
+@inject ILogger<LiveRefresh> Log
+
+@code {
+    private IDisposable? subscription;
+    private RefreshThrottle? throttle;
+    private bool disposed;
+
+    [Parameter, EditorRequired] public ChangeInterest Interest { get; set; }
+
+    [Parameter, EditorRequired] public Func<Task> OnChange { get; set; } = null!;
+
+    [Parameter] public long? Since { get; set; }
+
+    internal bool IsListening => this.subscription is not null;
+
+    internal RefreshThrottle? Throttle => this.throttle;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        this.throttle = new RefreshThrottle(Clock, ReloadAsync);
+        var throttle = this.throttle;
+        IDisposable? subscription;
+        try
+        {
+            subscription = await Feed.SubscribeAsync(Interest, () => throttle.SignalAsync());
+        }
+        catch (Exception exception)
+        {
+            Log.LogWarning(exception, "The page could not listen for changes of its organization; it reads again when it next loads.");
+            return;
+        }
+
+        if (this.disposed)
+        {
+            subscription?.Dispose();
+            return;
+        }
+
+        this.subscription = subscription;
+
+        if (subscription is not null && Since is { } since && Feed.Mark() is { } now && now != since)
+        {
+            await throttle.SignalAsync();
+        }
+    }
+
+    private async Task ReloadAsync()
+    {
+        if (this.disposed)
+        {
+            return;
+        }
+
+        try
+        {
+            await InvokeAsync(async () =>
+            {
+                if (!this.disposed)
+                {
+                    await OnChange();
+                }
+            });
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            Log.LogWarning(exception, "A page failed to read again after a change of its organization.");
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    public void Dispose()
+    {
+        this.disposed = true;
+        this.subscription?.Dispose();
+        this.throttle?.Dispose();
+    }
+}

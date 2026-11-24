@@ -1,0 +1,57 @@
+<div class="@ShellClass" data-app-shell>
+    <a class="app-skip-link" href="#main-content" data-skip-link>Skip to content</a>
+
+    <div id="app-sidebar" class="app-sidebar" data-app-sidebar>
+        <div class="app-sidebar__head">
+            <a class="app-sidebar__brand" href="/">
+                <span class="app-sidebar__mark"><MaterialSymbol Name="@Icon" /></span>
+                <span class="app-sidebar__brand-name">@Title</span>
+            </a>
+            <button type="button" class="app-sidebar__toggle app-sidebar__toggle--collapse" aria-label="Collapse menu" title="Collapse menu" data-sidebar-collapse>
+                <MaterialSymbol Name="keyboard_double_arrow_left" />
+            </button>
+            <button type="button" class="app-sidebar__toggle app-sidebar__toggle--expand" aria-label="Expand menu" title="Expand menu" data-sidebar-expand>
+                <MaterialSymbol Name="keyboard_double_arrow_right" />
+            </button>
+            <button type="button" class="app-sidebar__toggle app-sidebar__toggle--close" aria-label="Close menu" data-sidebar-close>
+                <MaterialSymbol Name="close" />
+            </button>
+        </div>
+        <NavMenu />
+    </div>
+
+    <div class="app-sidebar__scrim" data-sidebar-scrim aria-hidden="true"></div>
+
+    <div class="app-shell__content" data-app-content>
+        <header class="app-topbar" data-app-topbar>
+            <div class="app-topbar__lead">
+                <button type="button" class="app-topbar__menu" aria-label="Open menu" aria-expanded="false" aria-controls="app-sidebar" data-sidebar-open>
+                    <MaterialSymbol Name="menu" />
+                </button>
+                <AppBreadcrumb />
+            </div>
+            <div class="app-topbar__end">
+                <GlobalSearchButton />
+                <Staffora.Blazor.Components.Account.AccountMenu />
+            </div>
+        </header>
+
+        <div class="app-shell__body">
+            <main id="main-content" class="app-main" tabindex="-1">
+                @ChildContent
+            </main>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired] public string Icon { get; set; } = string.Empty;
+
+    [Parameter] public bool Platform { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private string ShellClass => this.Platform ? "app-shell app-shell--platform" : "app-shell";
+}

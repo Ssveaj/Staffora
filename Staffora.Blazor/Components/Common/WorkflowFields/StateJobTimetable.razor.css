@@ -1,0 +1,75 @@
+.state-job-timetable {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    min-width: 0;
+}
+
+.state-job-timetable__note {
+    margin: 0;
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+}
+
+.state-job-timetable__days {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+}
+
+.state-job-timetable__day {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--space-1) var(--space-3);
+    align-items: center;
+    padding: var(--space-2) var(--space-3);
+}
+
+.state-job-timetable__day + .state-job-timetable__day {
+    border-top: 1px solid var(--color-border);
+}
+
+@media (min-width: 640px) {
+    .state-job-timetable__day {
+        grid-template-columns: 7.5rem 1fr auto;
+    }
+}
+
+.state-job-timetable__day-name {
+    font-weight: var(--font-weight-semibold);
+}
+
+.state-job-timetable__occurrences {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    min-width: 0;
+}
+
+.state-job-timetable__none {
+    color: var(--color-text-muted);
+}
+
+.state-job-timetable__occurrence {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+}
+
+.state-job-timetable__time {
+    width: 7.25rem;
+    min-height: 2.25rem;
+}
+
+.state-job-timetable__problems {
+    margin: 0;
+    padding: var(--space-2) var(--space-3) var(--space-2) var(--space-6);
+    border: 1px solid var(--color-danger-border);
+    border-radius: var(--radius-md);
+    background: var(--color-danger-soft);
+    color: var(--color-danger);
+}

@@ -1,0 +1,572 @@
+@using Staffora.Core.Models
+@using Staffora.Core.Staffing
+@using Staffora.Services.Jobs
+@inject JobSlotService SlotService
+@inject SlotAssignmentService AssignmentService
+@inject RequestRoundService RoundService
+@inject DialogService DialogService
+
+<section class="slot-staffing" data-slot-staffing="@ShownSlot" aria-label="@Label">
+    @if (this.readError is { } failed)
+    {
+        <EmptyState Icon="error" Title="The staffing could not be shown" Text="@failed" Tone="UiTone.Warning" Role="alert" Compact="true" />
+    }
+    else if (this.read is not { } staffing || this.reading)
+    {
+        <LoadingState Text="Reading candidates…" Inline="true" />
+    }
+    else
+    {
+        var summary = staffing.Summary;
+        <dl class="slot-staffing__facts" data-staffing-summary>
+            @if (ShowJob)
+            {
+                <div class="slot-staffing__fact">
+                    <dt>Job</dt>
+                    <dd>@summary.Job</dd>
+                </div>
+                <div class="slot-staffing__fact">
+                    <dt>Period</dt>
+                    <dd>@summary.Period <span class="slot-staffing__quiet">(@summary.RemainingLabel)</span></dd>
+                </div>
+            }
+            <div class="slot-staffing__fact">
+                <dt>Times</dt>
+                <dd>@summary.Timetable</dd>
+            </div>
+            <div class="slot-staffing__fact">
+                <dt>Requires</dt>
+                <dd>
+                    @if (summary.Qualifications.Count == 0)
+                    {
+                        <span class="slot-staffing__quiet">None</span>
+                    }
+                    else
+                    {
+                        <span class="slot-staffing__chips">
+                            @foreach (var required in summary.Qualifications)
+                            {
+                                <span class="@(required.Preferred ? "slot-staffing__chip slot-staffing__chip--preferred" : "slot-staffing__chip")">
+                                    @required.Name
+                                    @if (required.Preferred)
+                                    {
+                                        <span class="slot-staffing__chip-note">preferred</span>
+                                    }
+                                    @if (required.Archived)
+                                    {
+                                        <span class="slot-staffing__chip-note">archived</span>
+                                    }
+                                </span>
+                            }
+                        </span>
+                    }
+                </dd>
+            </div>
+            <div class="slot-staffing__fact">
+                <dt>Staffed</dt>
+                <dd data-open-slots>@summary.StaffedLabel</dd>
+            </div>
+        </dl>
+
+        @if (summary.Holders.Count > 0)
+        {
+            <div class="@(summary.Full ? "slot-staffing__holders slot-staffing__holders--full" : "slot-staffing__holders")" data-staffing-filled="@(summary.Full ? "true" : null)">
+                <MaterialSymbol Name="@(summary.Full ? "check_circle" : "how_to_reg")" Class="slot-staffing__holders-icon" />
+                <span class="slot-staffing__holders-lead">@(summary.Full ? "Filled by" : "Held by")</span>@(" ")
+                @foreach (var holder in summary.Holders)
+                {
+                    <span class="slot-staffing__holder" @key="holder.AssignmentId" data-holder="@holder.Name">
+                        <b>@holder.Name</b>
+                        @if (!holder.Assigned)
+                        {
+                            @(" ")<span class="slot-staffing__quiet">said yes</span>
+                        }
+                        @(" ")<button type="button" class="slot-staffing__link" aria-label="@($"Change {holder.Name}")" title="Open the assignment to cancel or change it"
+                                disabled="@(this.acting is not null)" data-change-holder @onclick="() => OpenHolderAsync(holder)">Change</button>
+                    </span>
+                }
+            </div>
+        }
+        @if (summary.Asked.Count > 0)
+        {
+            <div class="slot-staffing__holders slot-staffing__asked" data-staffing-asked>
+                <MaterialSymbol Name="schedule_send" Class="slot-staffing__holders-icon" />
+                <span class="slot-staffing__holders-lead">Asked</span>@(" ")
+                @foreach (var asked in summary.Asked)
+                {
+                    <span class="slot-staffing__holder" @key="asked.AssignmentId" data-asked="@asked.Name">
+                        <b>@asked.Name</b>
+                        @(" ")<span class="slot-staffing__quiet" data-answer-by>@(asked.AnswerBy ?? "No deadline to answer")</span>
+                        @(" ")<button type="button" class="slot-staffing__link" aria-label="@($"Open the request to {asked.Name}")" title="Open the request to withdraw it or answer a question"
+                                disabled="@(this.acting is not null)" data-open-asked @onclick="() => OpenAssignmentAsync(asked.AssignmentId)">Open</button>
+                    </span>
+                }
+            </div>
+        }
+        @if (summary.OpenAgain > 0 && !summary.Full)
+        {
+            <p class="slot-staffing__note slot-staffing__note--again" data-open-again>
+                <MaterialSymbol Name="event_busy" Class="slot-staffing__note-icon" />
+                <span>@(summary.OpenAgain == 1 ? "Open again: its staff member was taken off for absence. Request or assign someone else." : $"{summary.OpenAgain} slots are open again: their staff members were taken off for absence. Request or assign someone else.")</span>
+            </p>
+        }
+        @if (summary.Reason is { } reason && !summary.Full)
+        {
+            <p class="slot-staffing__note" data-staffing-reason>
+                <MaterialSymbol Name="info" Class="slot-staffing__note-icon" />
+                <span>@reason</span>
+            </p>
+        }
+
+        @if (staffing.Candidates.Count == 0)
+        {
+            <EmptyState Icon="person_search" Title="No candidate" Text="Every staff member in service is asked for or assigned to this slot already, or none is in service." Compact="true" />
+        }
+        else if (summary.Full && !this.showCandidates)
+        {
+            <button type="button" class="slot-staffing__reveal" aria-expanded="false" data-show-candidates @onclick="() => this.showCandidates = true">
+                <MaterialSymbol Name="expand_more" />
+                Show candidates (@staffing.Candidates.Count)
+            </button>
+        }
+        else
+        {
+            <div class="slot-staffing__tools">
+                @if (summary.Full)
+                {
+                    <button type="button" class="slot-staffing__reveal" aria-expanded="true" data-show-candidates @onclick="() => this.showCandidates = false">
+                        <MaterialSymbol Name="expand_less" />
+                        Hide candidates
+                    </button>
+                }
+                else
+                {
+                    <span class="slot-staffing__count">@CountText(staffing.Candidates.Count)</span>
+                }
+                @if (staffing.Candidates.Count > SearchFrom)
+                {
+                    <span class="slot-staffing__search">
+                        <MaterialSymbol Name="search" Class="slot-staffing__search-icon" />
+                        <input type="search" name="@($"staffing-search-{ShownSlot:N}")" aria-label="Search candidates" placeholder="Search candidates"
+                               value="@this.search" maxlength="100" data-staffing-search @oninput="args => this.search = args.Value?.ToString() ?? string.Empty" />
+                    </span>
+                }
+                @if (MayAct && FreeCandidates.Any())
+                {
+                    <span class="slot-staffing__within" data-respond-within>
+                        <RadzenLabel Text="Answer within" Component="@WithinName" class="slot-staffing__within-label" />
+                        <RadzenDropDown TValue="ResponseWindow" Name="@WithinName" InputAttributes="@FieldLabel.Of("Answer within")" Data="@WithinChoices"
+                                        TextProperty="@nameof(ResponseWindow.Label)" Value="@Within" ValueChanged="@((ResponseWindow chosen) => this.within = chosen)"
+                                        Disabled="@(this.acting is not null)" class="slot-staffing__within-select" />
+                    </span>
+                    <button type="button" class="slot-staffing__several" aria-pressed="@(this.several ? "true" : "false")" disabled="@(this.acting is not null)"
+                            data-request-several @onclick="ToggleSeveral">
+                        <MaterialSymbol Name="@(this.several ? "check_box" : "checklist")" />
+                        Request several
+                    </button>
+                }
+            </div>
+
+            <ul class="@(this.several || !MayAct ? "slot-staffing__candidates slot-staffing__candidates--several" : "slot-staffing__candidates")" aria-label="@($"Candidates for {Label}")">
+                @foreach (var candidate in Shown(staffing.Candidates))
+                {
+                    var blocked = candidate.Verdict.IsBlocked;
+                    var warned = !blocked && candidate.Verdict.Warnings.Count > 0;
+                    var box = $"round-candidate-{candidate.ResourceId:N}";
+                    var details = $"staffing-details-{ShownSlot:N}-{candidate.ResourceId:N}";
+                    var lines = candidate.BlockLines.Count + candidate.WarningLines.Count;
+                    var open = this.opened.Contains(candidate.ResourceId);
+                    var held = candidate.Marks.Where(mark => mark.Held).ToList();
+                    <li @key="candidate.ResourceId" class="@(blocked ? "slot-staffing__candidate slot-staffing__candidate--blocked" : "slot-staffing__candidate")" data-candidate="@candidate.Name">
+                        <span class="slot-staffing__lead">
+                            @if (this.several && !blocked)
+                            {
+                                <RadzenCheckBox TValue="bool" Name="@box" InputAttributes="@FieldLabel.CheckBoxInput" aria-label="@candidate.Name"
+                                                Value="@this.chosen.Contains(candidate.ResourceId)" ValueChanged="@((bool on) => Choose(candidate.ResourceId, on))" />
+                            }
+                            else
+                            {
+                                <span class="slot-staffing__rank" aria-label="@($"Rank {candidate.Rank}")">@candidate.Rank</span>
+                            }
+                        </span>
+                        <span class="slot-staffing__who">
+                            @if (this.several && !blocked)
+                            {
+                                <RadzenLabel Text="@candidate.Name" Component="@box" class="slot-staffing__name" />
+                            }
+                            else
+                            {
+                                <b class="slot-staffing__name">@candidate.Name</b>
+                            }
+                            @if (held.Count > 0 || candidate.Missing.Count > 0 || candidate.EarlierLabel is not null)
+                            {
+                                <span class="slot-staffing__marks">
+                                    @if (held.Count > MarksShown)
+                                    {
+                                        <span class="slot-staffing__mark slot-staffing__mark--held" data-held title="@string.Join(", ", held.Select(mark => mark.Name))">
+                                            <MaterialSymbol Name="check" Class="slot-staffing__mark-icon" />
+                                            <span class="visually-hidden">Holds </span>@held.Count qualifications
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        @foreach (var mark in held)
+                                        {
+                                            <span class="slot-staffing__mark slot-staffing__mark--held" data-held>
+                                                <MaterialSymbol Name="check" Class="slot-staffing__mark-icon" />
+                                                <span class="visually-hidden">Holds </span>@mark.Name
+                                            </span>
+                                        }
+                                    }
+                                    @foreach (var missing in candidate.Missing)
+                                    {
+                                        <span class="slot-staffing__mark slot-staffing__mark--missing" data-missing>Missing: @missing</span>
+                                    }
+                                    @if (candidate.EarlierLabel is { } earlier)
+                                    {
+                                        <span class="slot-staffing__mark slot-staffing__mark--earlier">@earlier</span>
+                                    }
+                                </span>
+                            }
+                        </span>
+                        <span class="slot-staffing__jobs" title="Jobs in the period">
+                            <b>@candidate.HeldJobs</b> @(candidate.HeldJobs == 1 ? "job" : "jobs")<span class="visually-hidden"> in the period</span>
+                        </span>
+                        @if (lines > 0)
+                        {
+                            <button type="button" class="@VerdictClass(candidate)" title="@candidate.AvailabilityLabel" aria-expanded="@(open ? "true" : "false")" aria-controls="@details"
+                                    data-blocked="@(blocked ? "true" : null)" data-warned="@(warned ? "true" : null)" data-verdict @onclick="() => Toggle(candidate.ResourceId)">
+                                <MaterialSymbol Name="@VerdictIcon(candidate)" Class="slot-staffing__verdict-icon" />
+                                <span>@VerdictWord(candidate)</span>
+                                <span class="slot-staffing__verdict-count">@FindingsText(candidate)</span>
+                                <MaterialSymbol Name="@(open ? "expand_less" : "expand_more")" Class="slot-staffing__verdict-chevron" />
+                            </button>
+                        }
+                        else
+                        {
+                            <span class="@VerdictClass(candidate)" title="@candidate.AvailabilityLabel" data-verdict>
+                                <MaterialSymbol Name="@VerdictIcon(candidate)" Class="slot-staffing__verdict-icon" />
+                                <span>@VerdictWord(candidate)</span>
+                            </span>
+                        }
+                        @if (MayAct && !this.several)
+                        {
+                            <span class="slot-staffing__actions" title="@(blocked ? $"Not free. {candidate.AvailabilityLabel}" : null)">
+                                <IconTextButton Text="Request" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small"
+                                                Disabled="@(blocked || this.acting is not null)" IsBusy="@(this.acting == RequestKey(candidate))"
+                                                aria-label="@($"Request {candidate.Name}")" data-staff-action="request" Click="@(() => StaffAsync(candidate, assign: false))" />
+                                <IconTextButton Text="Assign" ButtonStyle="ButtonStyle.Primary" Variant="Variant.Outlined" Size="ButtonSize.Small"
+                                                Disabled="@(blocked || this.acting is not null)" IsBusy="@(this.acting == AssignKey(candidate))"
+                                                aria-label="@($"Assign {candidate.Name}")" data-staff-action="assign" Click="@(() => StaffAsync(candidate, assign: true))" />
+                            </span>
+                        }
+                        @if (lines > 0)
+                        {
+                            <div class="slot-staffing__details" id="@details" hidden="@(!open)">
+                                <p class="slot-staffing__details-head">@candidate.AvailabilityLabel</p>
+                                <ul class="slot-staffing__findings">
+                                    @foreach (var line in candidate.BlockLines)
+                                    {
+                                        <li class="slot-staffing__finding slot-staffing__finding--blocked" data-block>
+                                            <span class="slot-staffing__finding-reason">@line.Reason</span>
+                                            @if (line.About is { } about)
+                                            {
+                                                @(" ")<span class="slot-staffing__finding-about">@about</span>
+                                            }
+                                            @(" ")<span class="slot-staffing__finding-when">@line.When</span>
+                                        </li>
+                                    }
+                                    @foreach (var line in candidate.WarningLines)
+                                    {
+                                        <li class="slot-staffing__finding" data-warning>
+                                            <span class="slot-staffing__finding-reason">@line.Reason</span>
+                                            @if (line.About is { } about)
+                                            {
+                                                @(" ")<span class="slot-staffing__finding-about">@about</span>
+                                            }
+                                            @(" ")<span class="slot-staffing__finding-when">@line.When</span>
+                                        </li>
+                                    }
+                                </ul>
+                            </div>
+                        }
+                    </li>
+                }
+            </ul>
+            @if (Hidden(staffing.Candidates) is > 0 and var more)
+            {
+                <button type="button" class="slot-staffing__more" data-staffing-more @onclick="() => this.showAll = true">Show @more more</button>
+            }
+
+            @if (this.several)
+            {
+                <div class="slot-staffing__round" data-round-form>
+                    <span class="slot-staffing__round-count" data-round-chosen>@ChosenText</span>
+                    <span class="slot-staffing__round-rule">
+                        <RadzenSwitch Name="@($"round-first-to-accept-{ShownSlot:N}")" @bind-Value="this.firstToAccept" />
+                        <RadzenLabel Text="First to accept gets a slot" Component="@($"round-first-to-accept-{ShownSlot:N}")" />
+                    </span>
+                    <span class="slot-staffing__round-actions">
+                        <IconTextButton Text="Cancel" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Disabled="@(this.acting is not null)" data-cancel-round Click="StopSeveral" />
+                        <IconTextButton Text="Send requests" Icon="send" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.Small"
+                                        Disabled="@(this.chosen.Count == 0 || this.acting is not null)" IsBusy="@(this.acting == RoundAction)" data-send-round Click="SendRoundAsync" />
+                    </span>
+                </div>
+            }
+        }
+    }
+
+    @if (this.actionError is { } refused)
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Danger" Variant="Variant.Flat" Shade="Shade.Lighter" ShowIcon="true" AllowClose="false" data-staffing-error>@refused</RadzenAlert>
+    }
+    <p class="visually-hidden" role="status">@this.live</p>
+</section>
+
+@code {
+    private const int FirstShown = 12;
+
+    private const int SearchFrom = 8;
+
+    private const int MarksShown = 2;
+
+    private const string RoundAction = "round";
+
+    private readonly HashSet<Guid> chosen = [];
+    private readonly HashSet<Guid> opened = [];
+    private SlotStaffingRead? read;
+    private string? readError;
+    private string? actionError;
+    private string? acting;
+    private ResponseWindow? within;
+    private string live = string.Empty;
+    private string search = string.Empty;
+    private bool several;
+    private bool firstToAccept = true;
+    private bool showAll;
+    private bool showCandidates;
+    private bool reading;
+    private Guid? readSlot;
+    private int? readVersion;
+    private int readCount;
+
+    [CascadingParameter] public StateEntityDialogContext? Dialog { get; set; }
+
+    [Parameter] public Guid? SlotId { get; set; }
+
+    [Parameter] public int Version { get; set; }
+
+    [Parameter] public bool ShowJob { get; set; } = true;
+
+    [Parameter] public string Label { get; set; } = "the slot";
+
+    private Guid? ShownSlot => SlotId ?? Dialog?.EntityId;
+
+    private bool MayAct => this.read?.Summary.MayStaff == true;
+
+    private string WithinName => $"staffing-within-{ShownSlot:N}";
+
+    private ResponseWindow Within => this.within ?? this.read?.RespondWithin ?? ResponseWindow.Default;
+
+    private IReadOnlyList<ResponseWindow> WithinChoices => ResponseWindow.Choices(this.read?.RespondWithin ?? ResponseWindow.Default);
+
+    private IEnumerable<StaffingCandidateRow> FreeCandidates => this.read?.Candidates.Where(candidate => !candidate.Verdict.IsBlocked) ?? [];
+
+    private string ChosenText => this.chosen.Count switch
+    {
+        0 => "Choose the staff to ask",
+        1 => "1 chosen",
+        _ => $"{this.chosen.Count} chosen",
+    };
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (ShownSlot != this.readSlot || Version != this.readVersion)
+        {
+            await ReadAsync();
+        }
+    }
+
+    private async Task ReadAsync()
+    {
+        var mine = ++this.readCount;
+        var slot = ShownSlot;
+        var another = slot != this.readSlot;
+        (this.readSlot, this.readVersion) = (slot, Version);
+        if (slot is not { } id)
+        {
+            (this.read, this.readError) = (null, "No slot is chosen.");
+            return;
+        }
+
+        if (another)
+        {
+            (this.several, this.showAll, this.showCandidates, this.search, this.actionError, this.read, this.within) = (false, false, false, string.Empty, null, null, null);
+            this.chosen.Clear();
+            this.opened.Clear();
+        }
+
+        this.reading = this.read is null;
+        var answer = await SlotService.ReadSlotStaffingAsync(id);
+        if (mine != this.readCount)
+        {
+            return;
+        }
+
+        this.reading = false;
+        (this.read, this.readError) = answer.IsSuccess && answer.Value is { } found ? (found, (string?)null) : (null, answer.Error ?? "The candidates could not be read. Try again.");
+        this.chosen.IntersectWith(FreeCandidates.Select(candidate => candidate.ResourceId));
+        if (this.read is { } shown && !shown.Summary.MayStaff)
+        {
+            this.several = false;
+        }
+    }
+
+    private IEnumerable<StaffingCandidateRow> Shown(IReadOnlyList<StaffingCandidateRow> candidates)
+    {
+        var found = Searched(candidates);
+        return this.showAll || this.several ? found : found.Take(FirstShown);
+    }
+
+    private int Hidden(IReadOnlyList<StaffingCandidateRow> candidates) =>
+        this.showAll || this.several ? 0 : Math.Max(0, Searched(candidates).Count() - FirstShown);
+
+    private IEnumerable<StaffingCandidateRow> Searched(IReadOnlyList<StaffingCandidateRow> candidates) =>
+        this.search.Trim() is { Length: > 0 } text ? candidates.Where(candidate => candidate.Name.Contains(text, StringComparison.CurrentCultureIgnoreCase)) : candidates;
+
+    private static string CountText(int count) => count == 1 ? "1 candidate" : $"{count} candidates";
+
+    private static string VerdictWord(StaffingCandidateRow candidate) =>
+        candidate.Verdict.Occurrences == 0 ? "No times left"
+        : candidate.Verdict.IsBlocked ? "Blocked"
+        : candidate.Verdict.Warnings.Count > 0 ? "Warning"
+        : "Free";
+
+    private static string VerdictIcon(StaffingCandidateRow candidate) =>
+        candidate.Verdict.Occurrences == 0 ? "event_busy"
+        : candidate.Verdict.IsBlocked ? "block"
+        : candidate.Verdict.Warnings.Count > 0 ? "error"
+        : "check_circle";
+
+    private static string VerdictClass(StaffingCandidateRow candidate) =>
+        "slot-staffing__verdict " + (candidate.Verdict.Occurrences == 0 ? UiToneClass.Of(UiTone.Neutral)
+            : candidate.Verdict.IsBlocked ? UiToneClass.Of(UiTone.Danger)
+            : candidate.Verdict.Warnings.Count > 0 ? UiToneClass.Of(UiTone.Warning)
+            : UiToneClass.Of(UiTone.Success));
+
+    private static string FindingsText(StaffingCandidateRow candidate) => candidate.BlockLines.Count switch
+    {
+        1 => "1 clash",
+        > 1 => $"{candidate.BlockLines.Count} clashes",
+        _ => candidate.WarningLines.Count == 1 ? "1 note" : $"{candidate.WarningLines.Count} notes",
+    };
+
+    private static string RequestKey(StaffingCandidateRow candidate) => $"request-{candidate.ResourceId}";
+
+    private static string AssignKey(StaffingCandidateRow candidate) => $"assign-{candidate.ResourceId}";
+
+    private void Toggle(Guid resourceId)
+    {
+        if (!this.opened.Remove(resourceId))
+        {
+            this.opened.Add(resourceId);
+        }
+    }
+
+    private void ToggleSeveral()
+    {
+        if (this.several)
+        {
+            StopSeveral();
+            return;
+        }
+
+        (this.several, this.actionError) = (true, null);
+        this.chosen.Clear();
+    }
+
+    private void StopSeveral()
+    {
+        this.several = false;
+        this.chosen.Clear();
+    }
+
+    private void Choose(Guid resourceId, bool on)
+    {
+        if (on)
+        {
+            this.chosen.Add(resourceId);
+        }
+        else
+        {
+            this.chosen.Remove(resourceId);
+        }
+    }
+
+    private Task OpenHolderAsync(SlotHolder holder) => OpenAssignmentAsync(holder.AssignmentId);
+
+    private async Task OpenAssignmentAsync(Guid assignmentId)
+    {
+        if (this.acting is not null)
+        {
+            return;
+        }
+
+        await SlotAssignmentDialog.OpenAsync(DialogService, AssignmentService, assignmentId);
+        await AfterStepAsync();
+    }
+
+    private async Task StaffAsync(StaffingCandidateRow candidate, bool assign)
+    {
+        if (this.acting is not null || candidate.Verdict.IsBlocked || ShownSlot is not { } slot)
+        {
+            return;
+        }
+
+        (this.acting, this.actionError) = (assign ? AssignKey(candidate) : RequestKey(candidate), null);
+        var made = assign
+            ? await AssignmentService.AssignStaffAsync(slot, candidate.ResourceId)
+            : await AssignmentService.RequestStaffAsync(slot, candidate.ResourceId, Within);
+        this.acting = null;
+        if (!made.IsSuccess)
+        {
+            this.actionError = made.Error ?? "The staff member could not be requested or assigned.";
+            return;
+        }
+
+        this.live = assign ? $"{candidate.Name} is assigned." : $"{candidate.Name} is asked.";
+        await AfterStepAsync();
+    }
+
+    private async Task SendRoundAsync()
+    {
+        if (this.acting is not null || this.chosen.Count == 0 || ShownSlot is not { } slot)
+        {
+            return;
+        }
+
+        (this.acting, this.actionError) = (RoundAction, null);
+        var count = this.chosen.Count;
+        var sent = await RoundService.SendRoundAsync(slot, [.. this.chosen], this.firstToAccept, Within);
+        this.acting = null;
+        if (!sent.IsSuccess)
+        {
+            this.actionError = sent.Error ?? "The request round could not be sent.";
+            return;
+        }
+
+        this.live = count == 1 ? "1 staff member is asked." : $"{count} staff members are asked.";
+        StopSeveral();
+        await AfterStepAsync();
+    }
+
+    private async Task AfterStepAsync()
+    {
+        if (Dialog is { } dialog && !dialog.Lifetime.IsCancellationRequested && await dialog.ReloadAsync())
+        {
+            return;
+        }
+
+        await ReadAsync();
+    }
+}

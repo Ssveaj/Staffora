@@ -1,0 +1,9 @@
+<dl class="home-hero-figures" aria-label="@Label">
+    @ChildContent
+</dl>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

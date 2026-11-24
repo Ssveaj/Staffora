@@ -1,0 +1,33 @@
+@if (Click.HasDelegate)
+{
+    <button type="button" class="overview-card" @onclick="Click">
+        @Content
+    </button>
+}
+else
+{
+    <a class="overview-card" href="@Path">
+        @Content
+    </a>
+}
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired] public string Description { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired] public string Icon { get; set; } = string.Empty;
+
+    [Parameter] public UiTone Tone { get; set; } = UiTone.Accent;
+
+    [Parameter] public string? Path { get; set; }
+
+    [Parameter] public EventCallback Click { get; set; }
+
+    private RenderFragment Content => __builder =>
+    {
+        <IconChip Icon="@Icon" Tone="@Tone" />
+        <span class="overview-card__title">@Title</span>
+        <span class="overview-card__description">@Description</span>
+    };
+}

@@ -1,0 +1,44 @@
+@inject PlatformConsoleService PlatformConsole
+@inject UserService UserService
+@inject DialogService DialogService
+
+<ListView TItem="UserListItemDto"
+          Id="tenant-users"
+          Label="Users"
+          ItemName="user"
+          ItemsName="users"
+          Definition="UserList.Definition"
+          Load="Load"
+          RowKey="user => user.Id"
+          RowLabel="user => user.DisplayName"
+          RowState="user => ListRowState.Of(user.State)"
+          OnOpen="OpenUserAsync"
+          SearchPlaceholder="Name, email or user name"
+          EmptyIcon="person_off"
+          EmptyText="The tenant has no users.">
+    <Columns>
+        <ListColumn TItem="UserListItemDto" Title="Name" Primary="true" Avatar="true" Subtitle="user => user.Email">
+            @context.DisplayName
+        </ListColumn>
+        <ListColumn TItem="UserListItemDto" Title="Roles">
+            @RolesText(context)
+        </ListColumn>
+        <ListColumn TItem="UserListItemDto" Title="Last signed in">
+            @(context.LastSignedIn is { } signedIn ? $"{signedIn:yyyy-MM-dd HH:mm} UTC" : "Never")
+        </ListColumn>
+        <ListColumn TItem="UserListItemDto" Title="Member since">
+            @context.Created.ToString("yyyy-MM-dd")
+        </ListColumn>
+    </Columns>
+</ListView>
+
+@code {
+    [Parameter, EditorRequired] public Guid TenantId { get; set; }
+
+    private Task<Result<ListPage<UserListItemDto>>> Load(ListQuery query) => PlatformConsole.QueryTenantUsersAsync(TenantId, query);
+
+    private static string RolesText(UserListItemDto user) =>
+        user.RoleNames is not { Count: > 0 } held ? "No role" : string.Join(", ", held);
+
+    private Task OpenUserAsync(UserListItemDto user) => UserDialog.OpenAsync(DialogService, UserService, user.Id);
+}

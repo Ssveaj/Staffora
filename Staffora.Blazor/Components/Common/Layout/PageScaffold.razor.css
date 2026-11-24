@@ -1,0 +1,24 @@
+.page-scaffold {
+    min-width: 0;
+}
+
+.page-scaffold__main {
+    min-width: 0;
+    padding: var(--space-6);
+}
+
+@media (max-width: 767.98px) {
+    .page-scaffold__main {
+        padding: var(--space-4);
+    }
+}
+
+.page-scaffold--column .page-scaffold__main {
+    width: 100%;
+    max-width: calc(54rem + 2 * var(--space-6));
+    margin-inline: auto;
+}
+
+.page-scaffold--column ::deep .page-header {
+    padding-inline: max(0px, calc((100% - 54rem) / 2 - var(--space-5)));
+}

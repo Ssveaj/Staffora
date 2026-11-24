@@ -1,0 +1,15 @@
+@typeparam TValue
+@inherits StateFieldBase<TValue>
+
+@if (IsVisible)
+{
+    <StateFieldFrame Label="@Label" Component="@InputName" Helper="@Helper" Field="@FieldName" IsRequired="@IsRequired" IsReadOnly="@(!IsEditable)">
+        <RadzenDatePicker TValue="TValue" Name="@InputName" Value="@Value" ValueChanged="@((TValue day) => SetAsync(day))" ValueExpression="@(ValueExpression!)"
+                          ReadOnly="@(!IsEditable)" AllowClear="@(IsEditable && !IsRequired)" DateFormat="@DateFormat" Placeholder="@Placeholder" InputAttributes="@InputAttributes"
+                          PopupRenderMode="PopupRenderMode.OnDemand" />
+    </StateFieldFrame>
+}
+
+@code {
+    [Parameter] public string DateFormat { get; set; } = "yyyy-MM-dd";
+}

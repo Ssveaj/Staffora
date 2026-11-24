@@ -1,0 +1,69 @@
+@inject DialogService DialogService
+
+<FormDialogFrame OnSave="Submit" SaveText="@OkText">
+    <ChildContent>
+        @if (!string.IsNullOrWhiteSpace(Message))
+        {
+            <p class="prompt-dialog__message">@Message</p>
+        }
+        <RadzenTextArea @bind-Value="this.text"
+                        @oninput="@(args => this.text = args.Value?.ToString() ?? string.Empty)"
+                        Placeholder="@Placeholder"
+                        Rows="4"
+                        MaxLength="@MaxLength"
+                        aria-label="@(Placeholder ?? Message ?? "Answer")"
+                        aria-describedby="@(MaxLength is null ? null : this.countId)"
+                        Style="width: 100%;" />
+        @if (MaxLength is { } limit)
+        {
+            <p class="prompt-dialog__count" id="@this.countId" data-prompt-count="@this.text.Length">@this.text.Length of @limit characters</p>
+        }
+        @if (this.showRequired)
+        {
+            <p class="prompt-dialog__required" role="alert">@RequiredMessage</p>
+        }
+        else if (this.showTooLong)
+        {
+            <p class="prompt-dialog__required" role="alert">@($"Write at most {MaxLength} characters.")</p>
+        }
+    </ChildContent>
+    <Footer>
+        <RadzenButton Text="@CancelText" ButtonStyle="ButtonStyle.Light" Variant="Variant.Flat" Click="@(() => DialogService.Close(null))" />
+        <RadzenButton Text="@OkText" ButtonStyle="ButtonStyle.Primary" class="dialog-confirm" Click="Submit" />
+    </Footer>
+</FormDialogFrame>
+
+@code {
+    [Parameter] public string? Message { get; set; }
+
+    [Parameter] public string? Placeholder { get; set; }
+
+    [Parameter] public string OkText { get; set; } = "OK";
+
+    [Parameter] public string CancelText { get; set; } = "Cancel";
+
+    [Parameter] public bool Required { get; set; }
+
+    [Parameter] public string RequiredMessage { get; set; } = "Write something first.";
+
+    [Parameter] public string? InitialText { get; set; }
+
+    [Parameter] public int? MaxLength { get; set; }
+
+    private readonly string countId = $"prompt-count-{Guid.NewGuid():N}";
+    private string text = string.Empty;
+    private bool showRequired;
+    private bool showTooLong;
+
+    protected override void OnInitialized() => this.text = InitialText ?? string.Empty;
+
+    private void Submit()
+    {
+        this.showRequired = Required && string.IsNullOrWhiteSpace(this.text);
+        this.showTooLong = !this.showRequired && MaxLength is { } limit && this.text.Trim().Length > limit;
+        if (!this.showRequired && !this.showTooLong)
+        {
+            DialogService.Close(this.text);
+        }
+    }
+}

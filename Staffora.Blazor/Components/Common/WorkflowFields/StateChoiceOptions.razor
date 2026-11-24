@@ -1,0 +1,104 @@
+@using Staffora.Core.Entities.EntityAttributes
+@inherits StateFieldBase<List<AttributeChoiceOption>>
+
+@if (IsVisible)
+{
+    <fieldset class="state-choice-options" data-field="@FieldName" data-access="@(IsEditable ? "editable" : "read-only")">
+        <legend class="form-eyebrow">@Label</legend>
+        @if (IsEditable)
+        {
+            <p class="state-choice-options__note">A saved option is never removed, so the values that chose it keep it. Retire one nobody should choose any more.</p>
+        }
+
+        @if (Options.Count == 0)
+        {
+            <p class="state-choice-options__none" data-none>@(IsEditable ? "Add the options to choose from." : "No options.")</p>
+        }
+        else
+        {
+            <ol class="state-choice-options__list">
+                @for (var index = 0; index < Options.Count; index++)
+                {
+                    var position = index;
+                    var option = Options[position];
+                    var number = position + 1;
+                    var inputName = $"{InputName}-{number}";
+                    <li class="state-choice-options__row" data-retired="@(option.IsRetired ? "true" : null)">
+                        @if (IsEditable)
+                        {
+                            <RadzenFormField Text="@($"Option {number}")" Component="@inputName" class="state-choice-options__label">
+                                <RadzenTextBox Name="@inputName" Value="@option.Label" ValueChanged="@((string? text) => RelabelAsync(position, text))"
+                                               MaxLength="AttributeChoiceOption.LabelMaxLength" @attributes="TypingOf(position)" />
+                            </RadzenFormField>
+                        }
+                        else
+                        {
+                            <span class="state-choice-options__text">@option.Label</span>
+                        }
+
+                        @if (option.IsRetired)
+                        {
+                            <span class="state-choice-options__retired">Retired</span>
+                        }
+
+                        @if (IsEditable && IsSaved(option))
+                        {
+                            <RadzenButton Icon="@(option.IsRetired ? "unarchive" : "archive")" Variant="Variant.Text" ButtonStyle="ButtonStyle.Base" Size="ButtonSize.Small"
+                                          aria-label="@($"{(option.IsRetired ? "Restore" : "Retire")} option {number}")"
+                                          title="@(option.IsRetired ? "Restore the option" : "Retire the option")"
+                                          Click="@(() => ToggleRetiredAsync(position))" />
+                        }
+                        else if (IsEditable)
+                        {
+                            <RadzenButton Icon="close" Variant="Variant.Text" ButtonStyle="ButtonStyle.Base" Size="ButtonSize.Small"
+                                          aria-label="@($"Remove option {number}")" title="Remove the option"
+                                          Click="@(() => RemoveAsync(position))" />
+                        }
+                    </li>
+                }
+            </ol>
+        }
+
+        @if (IsEditable)
+        {
+            <IconTextButton Text="Add option" Icon="add" Variant="Variant.Outlined" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.Small"
+                            Disabled="@(Options.Count >= AttributeChoiceOption.MaxOptions)" Click="AddAsync" />
+        }
+    </fieldset>
+}
+
+@code {
+    private IReadOnlyList<AttributeChoiceOption> Options => Value ?? [];
+
+    private static bool IsSaved(AttributeChoiceOption option) => !string.IsNullOrEmpty(option.Key);
+
+    private IReadOnlyDictionary<string, object> TypingOf(int position) => new Dictionary<string, object>
+    {
+        ["oninput"] = EventCallback.Factory.Create<ChangeEventArgs>(this, (ChangeEventArgs args) => RelabelAsync(position, args.Value as string)),
+    };
+
+    private Task RelabelAsync(int position, string? text) =>
+        ChangeAsync(options => options[position] = options[position] with { Label = text ?? string.Empty }, position);
+
+    private Task ToggleRetiredAsync(int position) =>
+        ChangeAsync(options => options[position] = options[position] with { IsRetired = !options[position].IsRetired }, position);
+
+    private Task RemoveAsync(int position) =>
+        ChangeAsync(options => options.RemoveAt(position), position, unsavedOnly: true);
+
+    private Task AddAsync() =>
+        Options.Count >= AttributeChoiceOption.MaxOptions ? Task.CompletedTask : ChangeAsync(options => options.Add(new AttributeChoiceOption(string.Empty, string.Empty)), position: null);
+
+    private async Task ChangeAsync(Action<List<AttributeChoiceOption>> change, int? position, bool unsavedOnly = false)
+    {
+        if (!IsEditable || (position is { } at && (at < 0 || at >= Options.Count || (unsavedOnly && IsSaved(Options[at])))))
+        {
+            return;
+        }
+
+        var options = new List<AttributeChoiceOption>(Options);
+        change(options);
+        await SetAsync(options);
+        DialogContext?.NotifyEdited();
+    }
+}

@@ -1,0 +1,153 @@
+@implements IDisposable
+@inject DialogService DialogService
+@inject UrlStateService UrlState
+@inject WorkflowService Workflows
+@inject TimeProvider Clock
+@inject IServiceProvider Services
+@inject ILogger<StateEntityDialogHost> Log
+@inject NavigationManager Navigation
+
+<CascadingValue Value="DialogScope.Instance" IsFixed="true">
+    @if (Session.Targets.Count > 1)
+    {
+        <StateEntityDialogSessionNavigator Session="@Session" />
+    }
+    <StateEntityDialogNavigationGuard Session="@Session" />
+    <StateEntityDialogLayout @key="Session.Current" Context="@Session.Current.Context" BodyType="@Session.Current.BodyType" />
+</CascadingValue>
+
+@code {
+    private IDisposable? stackEntry;
+
+    private StateEntityDialogContext? onTheStack;
+
+    private int above;
+
+    private bool closePending;
+
+    [Parameter, EditorRequired] public StateEntityDialogSession Session { get; set; } = null!;
+
+    protected override void OnInitialized()
+    {
+        foreach (var target in Session.Targets)
+        {
+            target.Context.Attach(Workflows, Clock, Services, Log, DialogService);
+            target.Context.Changed += OnContextChanged;
+            target.Context.CloseRequested += OnCloseRequested;
+        }
+
+        Session.Changed += OnSessionChanged;
+
+        DialogService.OnOpen += OnDialogOpened;
+        DialogService.OnClose += OnDialogClosed;
+        Navigation.LocationChanged += OnLocationChanged;
+        PushSegment();
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e) => EndEveryContext();
+
+    private void PushSegment()
+    {
+        var shown = Session.Current.Context;
+        if (!ReferenceEquals(this.onTheStack, shown))
+        {
+            this.stackEntry?.Dispose();
+            this.stackEntry = null;
+            this.onTheStack = null;
+        }
+
+        if (this.stackEntry is null && shown.UrlSegment is { } segment)
+        {
+            this.stackEntry = UrlState.PushDialog(segment);
+            this.onTheStack = shown;
+        }
+    }
+
+    private void OnContextChanged() => PushSegment();
+
+    private void OnSessionChanged() => _ = InvokeAsync(() =>
+    {
+        PushSegment();
+        StateHasChanged();
+    });
+
+    private void OnDialogOpened(string? title, Type type, Dictionary<string, object?> parameters, DialogOptions options)
+    {
+        this.above++;
+        Session.DialogOpenedAbove();
+    }
+
+    private void OnDialogClosed(dynamic result)
+    {
+        if (this.above == 0)
+        {
+            return;
+        }
+
+        this.above--;
+        Session.DialogClosedAbove();
+        if (this.above == 0 && this.closePending)
+        {
+            this.closePending = false;
+            _ = InvokeAsync(CloseAfterTheOneAboveAsync);
+        }
+    }
+
+    private async Task CloseAfterTheOneAboveAsync()
+    {
+        await Task.Yield();
+        DialogService.Close(Session.Result);
+    }
+
+    private void OnCloseRequested(StateEntityDialogContext deleted)
+    {
+        if (Session.Targets.Count > 1)
+        {
+            _ = InvokeAsync(async () =>
+            {
+                if (!await Session.RemoveDeletedAsync(deleted))
+                {
+                    CloseThisDialog();
+                }
+            });
+            return;
+        }
+
+        CloseThisDialog();
+    }
+
+    private void CloseThisDialog()
+    {
+        if (this.above > 0)
+        {
+            this.closePending = true;
+            return;
+        }
+
+        _ = InvokeAsync(() => DialogService.Close(Session.Result));
+    }
+
+    private void EndEveryContext()
+    {
+        foreach (var context in Session.AllContexts)
+        {
+            context.End();
+        }
+    }
+
+    public void Dispose()
+    {
+        Session.Changed -= OnSessionChanged;
+        foreach (var context in Session.AllContexts)
+        {
+            context.Changed -= OnContextChanged;
+            context.CloseRequested -= OnCloseRequested;
+        }
+
+        EndEveryContext();
+        Navigation.LocationChanged -= OnLocationChanged;
+        DialogService.OnOpen -= OnDialogOpened;
+        DialogService.OnClose -= OnDialogClosed;
+        this.stackEntry?.Dispose();
+    }
+}

@@ -1,0 +1,16 @@
+.customer-contact-dialog {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+}
+
+.customer-contact-dialog__customer,
+.customer-contact-dialog__help {
+    margin: 0;
+}
+
+.customer-contact-dialog__help {
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+}
+

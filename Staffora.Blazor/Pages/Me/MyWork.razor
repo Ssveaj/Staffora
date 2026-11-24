@@ -1,0 +1,458 @@
+@page "/me/work"
+@attribute [Authorize]
+@using System.Globalization
+@using Staffora.Core.Entities.Jobs
+@using Staffora.Core.Entities.Scheduling
+@using Staffora.Core.Scheduling
+@using Staffora.Services.Home
+@using Staffora.Services.Jobs
+@using Staffora.Services.Scheduling
+@using Staffora.Services.Settings
+@inject SlotAssignmentService AssignmentService
+@inject ResourceAbsenceService AbsenceService
+@inject StaffAvailabilityService Availability
+@inject TenantHomeService HomeService
+@inject PermissionService Permissions
+@inject IRuntimeExecutionContext Runtime
+@inject DialogService DialogService
+@inject TenantClock Clock
+@inject Staffora.Services.Coordination.TenantChangeFeed ChangeFeed
+
+<PermissionView Permission="RolePermission.ViewOwnAssignments">
+    <Loading>
+        <HomeBoard aria-busy="true">
+            <HomeHero Label="Your work today">
+                <HomeHead Title="My work" Hero="true" />
+                <p class="home-hero__status" role="status">
+                    <span class="ui-spinner ui-spinner--sm" aria-hidden="true"></span>
+                    <span>Loading your work...</span>
+                </p>
+            </HomeHero>
+        </HomeBoard>
+    </Loading>
+    <Authorized>
+        <LiveRefresh Interest="Staffora.Services.Coordination.ChangeInterest.OwnWork" OnChange="LoadAsync" Since="this.mark" />
+        <HomeBoard data-my-work="@(this.loaded ? "ready" : "loading")" aria-busy="@(this.loaded ? "false" : "true")">
+            <HomeHero Label="Your work today">
+                <ChildContent>
+                    <HomeHead Title="My work"
+                              Eyebrow="@Overline"
+                              Description="What waits for your answer, when and where you work next, your week and your absence. Days and times follow your company's time zone."
+                              Hero="true" />
+
+                    @if (!this.loaded)
+                    {
+                        <p class="home-hero__status" role="status">
+                            <span class="ui-spinner ui-spinner--sm" aria-hidden="true"></span>
+                            <span>Loading your work...</span>
+                        </p>
+                    }
+                    else
+                    {
+                        <HomeHeroFigures Label="Your work in figures">
+                            <HomeHeroFigure Key="next" Label="Next assignment" Text="true" Value="@NextValue" Note="@NextNote" />
+                            <HomeHeroFigure Key="requests" Label="Waiting for your answer" Value="@CountText(this.work?.RequestCount)"
+                                            Tone="HomeRules.WaitingTone(this.work?.RequestCount ?? 0)"
+                                            Note="@(this.work is null ? "could not be read" : this.work.RequestCount == 0 ? "nothing to answer" : HomeRules.Count(this.work.RequestCount, "request", "requests"))" />
+                            @if (this.thisWeek is not null)
+                            {
+                                <HomeHeroFigure Key="week" Label="Assignments this week" Value="@Number(WeekAssigned)" Note="@WeekNote" />
+                            }
+                            @if (this.mayAbsence)
+                            {
+                                <HomeHeroFigure Key="absence" Label="Your absence" Text="true" Value="@AbsenceValue" Note="@AbsenceNote" />
+                            }
+                        </HomeHeroFigures>
+                    }
+                </ChildContent>
+                <Aside>
+                    @if (this.thisWeek is { } week)
+                    {
+                        <HomeRing Segments="WeekSegments(week)"
+                                  Title="@HomeRules.WeekRingTitle(WeekAssigned, WeekToCome)"
+                                  Caption="@HomeRules.WeekRingCaption(WeekAssigned, WeekToCome)"
+                                  CentreTone="@HomeToneClass.Of(WeekAsked > 0 ? HomeTone.Attention : HomeTone.Calm)"
+                                  Legend="WeekLegend(week)"
+                                  LegendLabel="This week by day" />
+                    }
+                </Aside>
+            </HomeHero>
+
+            <HomeFloor>
+                <div class="home-floor__row home-floor__row--lifted">
+                    <HomeSheet Title="Waiting for your answer" Note="Open a request to accept or decline it." Href="/me/assignments" LinkText="All my requests" Lifted="true" Rise="1" data-my-work-section="requests">
+                        @if (this.workError is { } workError)
+                        {
+                            <EmptyState Icon="error" Title="Your requests could not be shown" Text="@workError" Tone="UiTone.Warning" Role="alert" />
+                        }
+                        else if (this.work is { } work)
+                        {
+                            @if (work.Requests.Count == 0)
+                            {
+                                <p class="home-calm home-calm--large">
+                                    <MaterialSymbol Name="check_circle" />
+                                    <span>No request waits for your answer. A request shows here, and in your notifications, when a coordinator asks you to work a job.</span>
+                                </p>
+                            }
+                            else
+                            {
+                                <ul class="home-rows" aria-label="Waiting for your answer">
+                                    @foreach (var row in work.Requests)
+                                    {
+                                        <HomeRow Title="@row.Label"
+                                                 Meta="@($"{row.Customer}{(row.Place is { } place ? $" · {place}" : string.Empty)} · {row.PeriodLabel}")"
+                                                 Aside="@row.NextLabelWithDeadline"
+                                                 Date="row.PeriodStart"
+                                                 Edge="UiTone.Warning"
+                                                 OnClick="() => OpenAssignmentAsync(row.Id)"
+                                                 data-own-request="@row.Id" />
+                                    }
+                                </ul>
+                                @if (work.RequestCount > work.Requests.Count)
+                                {
+                                    <p class="home-foot"><span>@ShownText(work.Requests.Count, work.RequestCount, "open request", "open requests")</span></p>
+                                }
+                            }
+                        }
+                    </HomeSheet>
+
+                    <HomeSheet Title="Next up" Note="@NextUpNote" Href="/me/schedule" LinkText="My schedule" Lifted="true" Wide="true" Rise="2" data-my-work-section="next">
+                        @if (this.workError is { } nextError && this.nextUp.Count == 0)
+                        {
+                            <EmptyState Icon="error" Title="Your assignments could not be shown" Text="@nextError" Tone="UiTone.Warning" Role="alert" />
+                        }
+                        else if (this.nextUp.Count > 0)
+                        {
+                            <ul class="home-rows" aria-label="Next up">
+                                @foreach (var time in this.nextUp)
+                                {
+                                    <HomeRow Title="@($"{time.Entry.Job}: {time.Entry.Slot}")"
+                                             Meta="@($"{time.Entry.TimesLabel}{(time.Entry.Place is { } place ? $" · {place}" : string.Empty)}")"
+                                             Aside="@DayWords(time.Date)"
+                                             Date="time.Date"
+                                             Edge="UiTone.Success"
+                                             OnClick="() => OpenAssignmentAsync(time.Entry.AssignmentId)"
+                                             data-own-next="@time.Entry.AssignmentId" />
+                                }
+                            </ul>
+                        }
+                        else if (this.work is { Next.Count: > 0 } later)
+                        {
+                            <ul class="home-rows" aria-label="Next up">
+                                @foreach (var row in later.Next)
+                                {
+                                    <HomeRow Title="@row.Label"
+                                             Meta="@($"{row.Customer}{(row.Place is { } place ? $" · {place}" : string.Empty)} · {row.PeriodLabel}")"
+                                             Aside="@row.NextLabel"
+                                             Date="row.PeriodStart"
+                                             Edge="UiTone.Success"
+                                             OnClick="() => OpenAssignmentAsync(row.Id)"
+                                             data-own-next="@row.Id" />
+                                }
+                            </ul>
+                        }
+                        else if (this.work is not null)
+                        {
+                            <p class="home-calm home-calm--large">
+                                <MaterialSymbol Name="event_available" />
+                                <span>Nothing assigned ahead. A job you are assigned to shows here with its time and place.</span>
+                            </p>
+                        }
+                    </HomeSheet>
+                </div>
+
+                <div class="home-floor__row">
+                    @if (this.thisWeek is { } strip)
+                    {
+                        <HomeSheet Title="This week" Note="@strip.Label" Href="/me/schedule" LinkText="My schedule" Wide="true" Rise="3" data-my-work-section="week">
+                            <ol class="week-strip" aria-label="This week, Monday to Sunday">
+                                @foreach (var day in strip.Days)
+                                {
+                                    var isToday = day.Date == strip.Today;
+                                    <li class="@(isToday ? "week-day week-day--today" : day.Date < strip.Today ? "week-day week-day--past" : "week-day")" data-day="@day.Date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)">
+                                        <p class="week-day__head">
+                                            <span class="week-day__name">@HomeRules.WeekdayText(day.Date)</span>
+                                            <span class="week-day__date">@day.Date.Day</span>
+                                            @if (isToday)
+                                            {
+                                                <span class="week-day__today">Today</span>
+                                            }
+                                        </p>
+                                        @foreach (var away in day.Absences)
+                                        {
+                                            <button type="button" class="week-absence" @onclick="() => OpenAbsenceAsync(away.AbsenceId)" data-week-absence="@away.AbsenceId">@away.Label</button>
+                                        }
+                                        @foreach (var entry in day.Occurrences)
+                                        {
+                                            <button type="button" class="@(entry.State == SlotAssignmentState.Assigned ? "week-time" : "week-time week-time--asked")"
+                                                    @onclick="() => OpenAssignmentAsync(entry.AssignmentId)" data-week-time="@entry.AssignmentId" data-state="@entry.State">
+                                                <span class="week-time__when">@entry.TimesLabel</span>
+                                                <span class="week-time__what">@entry.Job</span>
+                                                @if (entry.State != SlotAssignmentState.Assigned)
+                                                {
+                                                    <span class="week-time__state">@entry.StateLabel</span>
+                                                }
+                                            </button>
+                                        }
+                                        @if (day.IsQuiet)
+                                        {
+                                            <p class="week-day__free">@(day.Working.Count == 0 ? "Day off" : "Free")</p>
+                                        }
+                                    </li>
+                                }
+                            </ol>
+                        </HomeSheet>
+                    }
+                    else if (this.weekError is { } stripError)
+                    {
+                        <HomeSheet Title="This week" Wide="true" Rise="3" data-my-work-section="week">
+                            <EmptyState Icon="error" Title="Your week could not be shown" Text="@stripError" Tone="UiTone.Warning" Role="alert" />
+                        </HomeSheet>
+                    }
+
+                    @if (this.mayAbsence)
+                    {
+                        <HomeSheet Title="Absence" Href="/staffing/absence" LinkText="All my absence" Rise="4" data-my-work-section="absence">
+                            <HeadAside>
+                                @if (this.mayReport)
+                                {
+                                    <IconTextButton Text="Report absence" Icon="event_busy" ButtonStyle="ButtonStyle.Light" Click="ReportAbsenceAsync" />
+                                }
+                            </HeadAside>
+                            <ChildContent>
+                                @if (this.absenceError is { } absenceError)
+                                {
+                                    <EmptyState Icon="error" Title="Your absence could not be shown" Text="@absenceError" Tone="UiTone.Warning" Role="alert" />
+                                }
+                                else if (this.absence is { } absence)
+                                {
+                                    <p class="home-situation__line" data-absence-status>@absence.Summary@(absence.WaitingCount > 0 ? $" ({absence.WaitingCount} waiting for approval)" : string.Empty)</p>
+                                    @if (absence.Ahead.Count > 0)
+                                    {
+                                        <ul class="home-rows" aria-label="Absence ahead">
+                                            @foreach (var row in absence.Ahead)
+                                            {
+                                                <HomeRow Title="@row.KindLabel"
+                                                         Meta="@row.PeriodLabel"
+                                                         Aside="@OwnStatus(row.State)"
+                                                         Date="row.FirstDay"
+                                                         Edge="UiTone.Info"
+                                                         OnClick="() => OpenAbsenceAsync(row.Id)"
+                                                         data-own-absence="@row.Id" />
+                                            }
+                                        </ul>
+                                    }
+                                    @if (absence.AheadCount > absence.Ahead.Count)
+                                    {
+                                        <p class="home-foot"><span>@ShownText(absence.Ahead.Count, absence.AheadCount, "absence", "absences")</span></p>
+                                    }
+                                }
+                            </ChildContent>
+                        </HomeSheet>
+                    }
+
+                    @if (this.work is { UnreadCount: > 0 } unread)
+                    {
+                        <HomeSheet Title="Unread" Note="@HomeRules.Count(unread.UnreadCount, "conversation with a new reply", "conversations with a new reply")" Rise="5" data-my-work-section="unread">
+                            <ul class="home-rows" aria-label="Unread conversations">
+                                @foreach (var row in unread.Unread)
+                                {
+                                    <HomeRow Title="@row.Label"
+                                             Meta="@($"A coordinator replied · {row.Customer}")"
+                                             Edge="UiTone.Info"
+                                             OnClick="() => OpenAssignmentAsync(row.Id)"
+                                             data-own-unread="@row.Id" />
+                                }
+                            </ul>
+                        </HomeSheet>
+                    }
+                </div>
+            </HomeFloor>
+        </HomeBoard>
+    </Authorized>
+    <NotAuthorized>
+        <HomeBoard>
+            <HomeBand Head="true">
+                <HomeHead Eyebrow="My work" Title="My work" />
+            </HomeBand>
+            <HomeBand>
+                <EmptyState Icon="lock" Title="Access denied" Text="You do not have permission to view your own assignments." Tone="UiTone.Warning" Role="alert" />
+            </HomeBand>
+        </HomeBoard>
+    </NotAuthorized>
+</PermissionView>
+
+@code {
+    private string? firstName;
+    private OwnWork? work;
+    private string? workError;
+    private OwnScheduleWeek? thisWeek;
+    private string? weekError;
+    private IReadOnlyList<OwnTime> nextUp = [];
+    private OwnAbsenceStatus? absence;
+    private string? absenceError;
+    private bool mayAbsence;
+    private bool mayReport;
+    private bool mayWeek;
+    private bool loaded;
+
+    private long? mark;
+
+    private DateTimeOffset? localNow;
+
+    private DateOnly Today => this.thisWeek?.Today ?? (this.localNow is { } now ? DateOnly.FromDateTime(now.DateTime) : DateOnly.MinValue);
+
+    private TimeOnly NowTime => this.localNow is { } now ? TimeOnly.FromDateTime(now.DateTime) : TimeOnly.MinValue;
+
+    private string? Overline => this.localNow?.ToString("dddd d MMMM' · 'HH:mm", CultureInfo.InvariantCulture);
+
+    private IReadOnlyList<OwnTime> WeekTimes => this.thisWeek is { } week ? HomeRules.TimesOf([week]) : [];
+
+    private int WeekAssigned => this.thisWeek is { } week ? HomeRules.DayCounts(week).Sum(day => day.Assigned) : 0;
+
+    private int WeekAsked => this.thisWeek is { } week ? HomeRules.DayCounts(week).Sum(day => day.Asked) : 0;
+
+    private int WeekToCome => HomeRules.NextUp(WeekTimes, Today, NowTime, int.MaxValue).Count;
+
+    private string WeekNote => WeekAssigned == 0 ? "nothing assigned" : WeekToCome == 0 ? "all done" : $"{Number(WeekToCome)} still to come";
+
+    private string NextValue => this.nextUp.FirstOrDefault() is { } next ? HomeRules.WhenText(next.Date, next.Entry.Start, Today)
+        : this.work is { Next.Count: > 0 } later ? HomeRules.DayText(later.Next[0].PeriodStart)
+        : this.work is null ? "-"
+        : "None ahead";
+
+    private string NextNote => this.nextUp.FirstOrDefault() is { } next ? next.Entry.Place ?? next.Entry.Job
+        : this.work is { Next.Count: > 0 } later ? later.Next[0].Place ?? later.Next[0].Job
+        : this.work is null ? "could not be read"
+        : "nothing assigned";
+
+    private string? NextUpNote => this.nextUp.Count > 0 ? "Your next times, with where" : this.work is { Next.Count: > 0 } ? "Nothing in this week or the next, so your assignments ahead" : null;
+
+    private string AbsenceValue => this.absence switch
+    {
+        null => "-",
+        { Current: not null } => "Absent today",
+        { Ahead.Count: > 0 } status => HomeRules.DayText(status.Ahead[0].FirstDay),
+        _ => "None ahead",
+    };
+
+    private string AbsenceNote => this.absence switch
+    {
+        null => "could not be read",
+        { Current: { } now } => $"{now.KindLabel} · {StateWords(now.State)} · until {HomeRules.DayText(now.LastDay)}",
+        { Ahead.Count: > 0 } status => $"{status.Ahead[0].KindLabel} · {StateWords(status.Ahead[0].State)}",
+        _ => "no absence planned",
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        this.mark = ChangeFeed.Mark();
+        this.mayAbsence = await Permissions.HasPermissionAsync(RolePermission.ReportOwnAbsence);
+        this.mayWeek = await Permissions.HasPermissionAsync(RolePermission.ViewOwnSchedule);
+        this.mayReport = Runtime.EffectiveUserId is { } self && await AbsenceService.MayAddAbsenceForUserAsync(self);
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        var now = await Clock.NowAsync();
+        this.localNow = now.IsSuccess ? now.Value : null;
+
+        var name = await HomeService.ReadFirstNameAsync();
+        this.firstName = name.IsSuccess ? name.Value : null;
+
+        var work = await AssignmentService.ReadOwnWorkAsync();
+        this.work = work.IsSuccess ? work.Value : null;
+        this.workError = work.IsSuccess ? null : work.Error;
+
+        if (this.mayWeek)
+        {
+            var week = await Availability.ReadOwnWeekAsync(null);
+            this.thisWeek = week.IsSuccess ? week.Value : null;
+            this.weekError = week.IsSuccess ? null : week.Error;
+            OwnScheduleWeek? following = null;
+            if (this.thisWeek is { } current)
+            {
+                var next = await Availability.ReadOwnWeekAsync(current.Monday.AddDays(7));
+                following = next.IsSuccess ? next.Value : null;
+            }
+
+            var weeks = new[] { this.thisWeek, following }.OfType<OwnScheduleWeek>();
+            this.nextUp = HomeRules.NextUp(HomeRules.TimesOf(weeks), Today, NowTime, HomeRules.Shown);
+        }
+
+        if (this.mayAbsence)
+        {
+            var absence = await AbsenceService.ReadOwnAbsenceStatusAsync();
+            this.absence = absence.IsSuccess ? absence.Value : null;
+            this.absenceError = absence.IsSuccess ? null : absence.Error;
+        }
+
+        this.loaded = true;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task OpenAssignmentAsync(Guid id)
+    {
+        await SlotAssignmentDialog.OpenAsync(DialogService, AssignmentService, id);
+        await LoadAsync();
+    }
+
+    private async Task OpenAbsenceAsync(Guid id)
+    {
+        await AbsenceDialog.OpenAsync(DialogService, AbsenceService, id);
+        await LoadAsync();
+    }
+
+    private async Task ReportAbsenceAsync()
+    {
+        if (Runtime.EffectiveUserId is not { } self)
+        {
+            return;
+        }
+
+        await AbsenceDialog.OpenCreateAsync(DialogService, AbsenceService, self);
+        await LoadAsync();
+    }
+
+    private IReadOnlyList<HomeRingSegment> WeekSegments(OwnScheduleWeek week) =>
+    [
+        .. HomeRules.DayCounts(week).SelectMany(day => new[]
+        {
+            new HomeRingSegment(DayKey(day.Date), day.Assigned, DayTone(day.Date, week.Today)),
+            new HomeRingSegment($"{DayKey(day.Date)}-asked", day.Asked, HomeToneClass.Of(HomeTone.Attention)),
+        }),
+    ];
+
+    private IReadOnlyList<HomeLegendItem> WeekLegend(OwnScheduleWeek week) =>
+    [
+        .. HomeRules.DayCounts(week).Where(day => day.Assigned + day.Asked > 0).Select(day => new HomeLegendItem(
+            DayKey(day.Date),
+            day.Date == week.Today ? $"{HomeRules.DayText(day.Date)} · today" : HomeRules.DayText(day.Date),
+            string.Join(" · ", new[]
+            {
+                day.Assigned > 0 ? HomeRules.Count(day.Assigned, "assigned", "assigned") : null,
+                day.Asked > 0 ? HomeRules.Count(day.Asked, "asked of you", "asked of you") : null,
+            }.Where(part => part is not null)),
+            Number(day.Assigned + day.Asked),
+            day.Assigned == 0 ? HomeToneClass.Of(HomeTone.Attention) : DayTone(day.Date, week.Today))),
+    ];
+
+    private static string DayTone(DateOnly date, DateOnly today) =>
+        date < today ? HomeToneClass.Of(HomeTone.Held) : date == today ? HomeToneClass.Of(HomeTone.Calm) : HomeToneClass.Of(HomeTone.Calm, soft: true);
+
+    private static string DayKey(DateOnly date) => date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+    private string DayWords(DateOnly date) => date == Today ? "Today" : date == Today.AddDays(1) ? "Tomorrow" : HomeRules.DayText(date);
+
+    private static string StateWords(ResourceAbsenceState state) => AbsenceRules.OwnStatusText(state);
+
+    private static string OwnStatus(ResourceAbsenceState state) => StateWords(state) is var words && words.Length > 0 ? char.ToUpperInvariant(words[0]) + words[1..] : words;
+
+    private static string Number(int value) => value.ToString(CultureInfo.InvariantCulture);
+
+    private static string CountText(int? count) => count?.ToString(CultureInfo.InvariantCulture) ?? "-";
+
+    private static string ShownText(int shown, int total, string one, string many) =>
+        shown < total ? $"Showing {shown} of {total} {(total == 1 ? one : many)}." : string.Empty;
+}

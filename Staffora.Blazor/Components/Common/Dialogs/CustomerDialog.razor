@@ -1,0 +1,84 @@
+@using Staffora.Blazor.Components.Common.Dialogs.StateEntity
+@using Staffora.Blazor.Components.Common.List
+@using Staffora.Blazor.Components.Common.WorkflowFields
+@using Staffora.Core.Entities.Customers
+@using Staffora.Core.Lists
+@using Staffora.Core.Models
+@using Staffora.Services.Customers
+@implements IStateEntityDialog<CustomerDialogContext>
+@inject DialogService DialogService
+
+<StateEntityDialogViewPanel Key="@CustomerDialogContext.InfoView">
+    <div class="customer-dialog">
+        <StateFieldTextBox @bind-Value="Context.Entity!.Name" Label="Name" MaxLength="@Customer.NameMaxLength" Name="customer-name" />
+        <StateFieldTextArea @bind-Value="Context.Entity!.Description" Label="Description" MaxLength="@Customer.DescriptionMaxLength" Rows="3" Name="customer-description" />
+        <p class="customer-dialog__help">
+            Save a new customer to add its contacts, then activate it. Deactivating a customer takes its active contacts out of
+            use with it, and deleting one removes its contacts too.
+        </p>
+        @if (Context.PortalStatus is { } portal)
+        {
+            <p class="customer-dialog__portal" data-customer-portal="@Context.PortalState">@portal</p>
+        }
+    </div>
+</StateEntityDialogViewPanel>
+<StateEntityDialogViewPanel Key="@CustomerDialogContext.ContactsView">
+    <StateEntityDialogChildList TItem="CustomerContactRow"
+                                View="@CustomerDialogContext.ContactsView"
+                                RowKey="@(row => row.Id)"
+                                RowLabel="@(row => row.FullName)"
+                                RowStateOf="@(row => row.State)"
+                                Label="Contacts"
+                                ItemName="contact"
+                                ItemsName="contacts"
+                                EmptyIcon="contacts"
+                                EmptyTitle="No contact yet"
+                                EmptyText="Add the people at the customer you deal with: who orders a job and whom it is confirmed to."
+                                OpenRow="@OpenContactAsync">
+        <Columns>
+            <ListColumn TItem="CustomerContactRow" Title="Name" Primary="true">@context.FullName</ListColumn>
+            <ListColumn TItem="CustomerContactRow" Title="Title">@context.Title</ListColumn>
+            <ListColumn TItem="CustomerContactRow" Title="Email">@context.Email</ListColumn>
+            <ListColumn TItem="CustomerContactRow" Title="Phone">@context.Phone</ListColumn>
+        </Columns>
+    </StateEntityDialogChildList>
+</StateEntityDialogViewPanel>
+
+@code {
+    private int? shownVersion;
+
+    [Parameter, EditorRequired] public CustomerDialogContext Context { get; set; } = null!;
+
+    protected override void OnParametersSet()
+    {
+        Context.OnBeforeTransition ??= AskBeforeStepAsync;
+
+        if (this.shownVersion != Context.Version)
+        {
+            this.shownVersion = Context.Version;
+            Context.DisplayName = string.IsNullOrWhiteSpace(Context.Entity!.Name) ? null : Context.Entity.Name;
+        }
+    }
+
+    private async Task<bool> AskBeforeStepAsync(Staffora.Core.Workflow.ITransition step)
+    {
+        if (step.Key != Staffora.Core.Workflow.WorkflowAttributes.CustomerWorkflowAttribute.EnablePortalStep)
+        {
+            return true;
+        }
+
+        Context.PortalRequest = await EnableCustomerPortalDialog.OpenAsync(DialogService, Context.Entity?.Name, Context.PortalUnits);
+        return Context.PortalRequest is not null;
+    }
+
+    private Task<StateEntityDialogResult> OpenContactAsync(CustomerContactRow row) => Context.OpenContactAsync(DialogService, row);
+
+    internal static CustomerDialogContext ContextFor(CustomerService service, Guid? customerId) =>
+        new(service, customerId) { DefaultTitle = "Customer", CreateTitle = "New customer", EntityIcon = "storefront" };
+
+    public static Task<StateEntityDialogResult> OpenAsync(DialogService dialogService, CustomerService service, Guid customerId, StateEntityDialogOptions? options = null) =>
+        dialogService.OpenStateEntityDialogAsync<CustomerDialog, CustomerDialogContext>(ContextFor(service, customerId), options);
+
+    public static Task<StateEntityDialogResult> OpenCreateAsync(DialogService dialogService, CustomerService service) =>
+        dialogService.OpenStateEntityDialogAsync<CustomerDialog, CustomerDialogContext>(ContextFor(service, null));
+}

@@ -1,0 +1,60 @@
+@using Staffora.Blazor.Components.Common.Dialogs.StateEntity
+@using Staffora.Blazor.Components.Common.WorkflowFields
+@using Staffora.Core.Entities.Scheduling
+@using Staffora.Core.Models
+@using Staffora.Core.Scheduling
+@using Staffora.Services.Scheduling
+@using Staffora.Blazor.Components.Coordination
+@implements IStateEntityDialog<AbsenceDialogContext>
+
+<StateEntityDialogViewPanel Key="@AbsenceDialogContext.InfoView">
+    <div class="absence-dialog">
+        <p class="absence-dialog__staff" data-staff>
+            <span>Staff:</span>
+            <strong>@Context.Staff</strong>
+        </p>
+        @if (Context.Note is { } note)
+        {
+            <p class="absence-dialog__note" data-absence-note>@note</p>
+        }
+        <StateFieldDropDown TValue="AbsenceKind" TItem="AbsenceKindOption" @bind-Value="Context.Entity!.Kind" Data="@AbsenceKindOption.All"
+                            TextProperty="Label" ValueProperty="Value" Label="Kind" Name="absence-kind" />
+        <div class="field-row">
+            <StateFieldDayAndTime TDay="DateOnly" @bind-Day="Context.Entity!.FirstDay" @bind-Time="Context.Entity!.StartTime" Label="From" TimeLabel="From time"
+                                  Name="absence-first-day" TimeName="absence-start-time" />
+            <StateFieldDayAndTime TDay="DateOnly" @bind-Day="Context.Entity!.LastDay" @bind-Time="Context.Entity!.EndTime" Label="Until" TimeLabel="Until time"
+                                  Name="absence-last-day" TimeName="absence-end-time" />
+        </div>
+    </div>
+</StateEntityDialogViewPanel>
+<StateEntityDialogViewPanel Key="@AbsenceDialogContext.ImpactView">
+    <AbsenceImpactView Version="@Context.Version" />
+</StateEntityDialogViewPanel>
+
+@code {
+    private int? shownVersion;
+
+    [Parameter, EditorRequired] public AbsenceDialogContext Context { get; set; } = null!;
+
+    protected override void OnParametersSet()
+    {
+        if (this.shownVersion != Context.Version)
+        {
+            this.shownVersion = Context.Version;
+            var absence = Context.Entity!;
+            Context.DisplayName = $"{(absence.Kind == AbsenceKind.SickLeave ? "Sick leave" : "Planned leave")} {AbsenceRules.PeriodText(absence.FirstDay, absence.StartTime, absence.LastDay, absence.EndTime)}";
+        }
+    }
+
+    internal static AbsenceDialogContext ContextFor(ResourceAbsenceService service, Guid? absenceId, Guid? userId = null) =>
+        new(service, absenceId) { UserId = userId, DefaultTitle = "Absence", CreateTitle = "New absence", EntityIcon = "event_busy" };
+
+    public static Task<StateEntityDialogResult> OpenAsync(DialogService dialogService, ResourceAbsenceService service, Guid absenceId, StateEntityDialogOptions? options = null) =>
+        dialogService.OpenStateEntityDialogAsync<AbsenceDialog, AbsenceDialogContext>(ContextFor(service, absenceId), options);
+
+    public static Task<StateEntityDialogResult> OpenImpactAsync(DialogService dialogService, ResourceAbsenceService service, Guid absenceId) =>
+        OpenAsync(dialogService, service, absenceId, new StateEntityDialogOptions { View = AbsenceDialogContext.ImpactView });
+
+    public static Task<StateEntityDialogResult> OpenCreateAsync(DialogService dialogService, ResourceAbsenceService service, Guid userId) =>
+        dialogService.OpenStateEntityDialogAsync<AbsenceDialog, AbsenceDialogContext>(ContextFor(service, null, userId));
+}

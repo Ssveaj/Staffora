@@ -1,0 +1,18 @@
+<div class="@CssClass" data-home-board @attributes="AdditionalAttributes">
+    @ChildContent
+</div>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter] public HomeBoardKind Kind { get; set; } = HomeBoardKind.Bands;
+
+    [Parameter(CaptureUnmatchedValues = true)] public IReadOnlyDictionary<string, object>? AdditionalAttributes { get; set; }
+
+    private string CssClass => Kind switch
+    {
+        HomeBoardKind.Page => "home-board home-board--page",
+        HomeBoardKind.Inline => "home-board home-board--inline",
+        _ => "home-board",
+    };
+}

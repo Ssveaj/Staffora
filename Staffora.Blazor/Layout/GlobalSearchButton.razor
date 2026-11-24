@@ -1,0 +1,176 @@
+@using Staffora.Services.Search
+@implements IAsyncDisposable
+@inject GlobalSearchService Search
+@inject DialogService Dialogs
+@inject DialogRouteRegistry Routes
+@inject NavigationManager Navigation
+@inject IServiceProvider Services
+@inject IJSRuntime JS
+@inject ILogger<GlobalSearchButton> Log
+
+@if (this.kinds.Count > 0)
+{
+    <button type="button"
+            class="global-search-trigger"
+            aria-label="Search"
+            title="Search (/)"
+            aria-keyshortcuts="/"
+            aria-haspopup="dialog"
+            data-global-search
+            @onclick="OpenAsync"
+            @ref="this.trigger">
+        <MaterialSymbol Name="search" />
+    </button>
+}
+
+@code {
+    private const string ModulePath = "./scripts/global-search.js";
+
+    private readonly string owner = Guid.NewGuid().ToString("N");
+    private readonly CancellationTokenSource closing = new();
+    private IReadOnlyList<SearchKind> kinds = [];
+    private ElementReference trigger;
+    private IJSObjectReference? module;
+    private DotNetObjectReference<GlobalSearchButton>? shortcut;
+    private bool open;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        try
+        {
+            this.kinds = await Search.KindsAsync(this.closing.Token);
+        }
+        catch (Exception exception)
+        {
+            if (!this.closing.IsCancellationRequested)
+            {
+                Log.LogWarning(exception, "What the session may search could not be read, so the search button stays hidden.");
+            }
+
+            return;
+        }
+
+        if (this.kinds.Count == 0)
+        {
+            return;
+        }
+
+        StateHasChanged();
+        try
+        {
+            this.shortcut = DotNetObjectReference.Create(this);
+            this.module = await JS.InvokeAsync<IJSObjectReference>("import", ModulePath);
+            await this.module.InvokeVoidAsync("listen", this.shortcut, this.owner);
+        }
+        catch (Exception exception) when (exception is JSException or JSDisconnectedException or TaskCanceledException or ObjectDisposedException or InvalidOperationException)
+        {
+        }
+    }
+
+    [JSInvokable]
+    public async Task OpenFromShortcutAsync()
+    {
+        if (this.kinds.Count == 0 || this.open)
+        {
+            return;
+        }
+
+        try
+        {
+            await this.trigger.FocusAsync();
+        }
+        catch (Exception exception) when (exception is JSException or JSDisconnectedException or TaskCanceledException or InvalidOperationException)
+        {
+        }
+
+        await OpenAsync();
+    }
+
+    private async Task OpenAsync()
+    {
+        if (this.open)
+        {
+            return;
+        }
+
+        this.open = true;
+        SearchHit? hit;
+        try
+        {
+            hit = await Dialogs.OpenFormDialogAsync<GlobalSearchDialog, SearchHit>(
+                GlobalSearchDialog.Title,
+                parameters => parameters.Set(dialog => dialog.Kinds, this.kinds),
+                new FormDialogOptions { Width = "640px", Icon = "search", CloseOnEsc = false, CloseOnOverlayClick = true });
+        }
+        finally
+        {
+            this.open = false;
+        }
+
+        if (hit is not null)
+        {
+            Open(hit);
+        }
+    }
+
+    private void Open(SearchHit hit)
+    {
+        if (TokenOf(hit.Opens) is not { } token)
+        {
+            Navigation.NavigateTo($"/superadmin/tenants/{hit.Id}");
+            return;
+        }
+
+        if (Routes.Find(token) is not { } route)
+        {
+            Log.LogWarning("A search hit names the dialog {Opens}, which no dialog route declares.", hit.Opens);
+            return;
+        }
+
+        _ = ObserveAsync(route.InvokeOpenerAsync(Dialogs, Services, hit.Id, new StateEntityDialogOptions()), route.Token);
+    }
+
+    internal static string? TokenOf(SearchOpens opens) => opens switch
+    {
+        SearchOpens.StaffMember => DialogTokens.User,
+        SearchOpens.Job => DialogTokens.Job,
+        SearchOpens.Assignment => DialogTokens.SlotAssignment,
+        SearchOpens.Customer => DialogTokens.Customer,
+        _ => null,
+    };
+
+    private async Task ObserveAsync(Task<StateEntityDialogResult> opened, string token)
+    {
+        try
+        {
+            await opened;
+        }
+        catch (Exception exception)
+        {
+            Log.LogWarning(exception, "The {Token} dialog a search hit opened failed.", token);
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        this.closing.Cancel();
+        try
+        {
+            if (this.module is not null)
+            {
+                await this.module.InvokeVoidAsync("stop", this.owner);
+                await this.module.DisposeAsync();
+            }
+        }
+        catch (Exception exception) when (exception is JSException or JSDisconnectedException or TaskCanceledException or ObjectDisposedException)
+        {
+        }
+
+        this.shortcut?.Dispose();
+    }
+}

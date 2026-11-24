@@ -1,0 +1,132 @@
+@inject ILogger<StateHistoryDialog> Log
+
+<FormDialogFrame ReadOnly="true">
+    <div class="state-history" data-state-history aria-busy="@(this.loading ? "true" : "false")">
+        @if (this.error is not null)
+        {
+            <div class="state-history__error" role="alert">
+                <MaterialSymbol Name="error" />
+                <span>@this.error</span>
+            </div>
+            <RadzenButton Text="Try again" ButtonStyle="ButtonStyle.Light" Variant="Variant.Flat" Click="@(() => LoadAsync(this.query))" />
+        }
+        else if (this.page is null)
+        {
+            <p class="state-history__status" role="status">Loading the history…</p>
+        }
+        else if (this.page.TotalCount == 0)
+        {
+            <p class="state-history__status" role="status">No steps yet. The first step, such as a save, starts the history.</p>
+        }
+        else if (this.page.Steps.Count == 0)
+        {
+            <p class="state-history__status" role="status">No steps on this page. The history holds @StepCount(this.page.TotalCount).</p>
+            <RadzenButton Text="Newest steps" ButtonStyle="ButtonStyle.Light" Variant="Variant.Flat" Click="@(() => LoadAsync(StateHistoryQuery.Newest(PageSize)))" />
+        }
+        else
+        {
+            <p class="state-history__summary" role="status">@Range(this.page) · newest first · times in <span data-history-zone>@this.page.TimeZoneId</span>@(this.page.InReadersZone ? string.Empty : RecordsZone)</p>
+            <ol class="state-history__steps" start="@(this.page.NewerCount + 1)">
+                @for (var index = 0; index < this.page.Steps.Count; index++)
+                {
+                    var step = this.page.Steps[index];
+                    var day = DayOf(step);
+                    var startsDay = index == 0 || DayOf(this.page.Steps[index - 1]) != day;
+                    var linked = index + 1 < this.page.Steps.Count && DayOf(this.page.Steps[index + 1]) == day;
+                    <li class="@(startsDay ? "state-history__step state-history__step--day" : "state-history__step")">
+                        @if (startsDay)
+                        {
+                            <h3 class="state-history__day">@StateHistoryStepView.DayOf(day, this.page.Today)</h3>
+                        }
+                        <StateHistoryStepView Step="@step" Today="@this.page.Today" ShowDay="false" LinksToNext="@linked" />
+                    </li>
+                }
+            </ol>
+            @if (this.page.HasNewer || this.page.HasOlder)
+            {
+                <div class="state-history__pager" role="group" aria-label="Pages of the history">
+                    <IconTextButton Text="Newer steps" Icon="chevron_left" ButtonStyle="ButtonStyle.Light" Variant="Variant.Flat"
+                                  Disabled="@(this.loading || !this.page.HasNewer)" Click="@(() => PageAsync(this.page.Newer(PageSize)))" />
+                    <IconTextButton Text="Older steps" Icon="chevron_right" ButtonStyle="ButtonStyle.Light" Variant="Variant.Flat"
+                                  Disabled="@(this.loading || !this.page.HasOlder)" Click="@(() => PageAsync(this.page.Older(PageSize)))" />
+                </div>
+            }
+        }
+    </div>
+</FormDialogFrame>
+
+@code {
+    public const int PageSize = 20;
+
+    public const string ReadFailed = "The history could not be read. Try again.";
+
+    public const string RecordsZone = ", the zone of this record's organization";
+
+    private StateHistoryPage? page;
+    private string? error;
+    private bool loading;
+    private StateHistoryQuery query = StateHistoryQuery.Newest(PageSize);
+    private int request;
+
+    public static Task OpenAsync(DialogService dialogService, StateEntityDialogContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        return dialogService.OpenFormDialogAsync<StateHistoryDialog>(
+            $"History: {context.Title}",
+            parameters => parameters.Set(dialog => dialog.LoadPage, query => context.GetHistoryAsync(query)),
+            new FormDialogOptions { Icon = "history", Width = "640px", CloseOnOverlayClick = true, StateColor = context.State?.GetStateColor() });
+    }
+
+    [Parameter, EditorRequired] public Func<StateHistoryQuery, Task<Result<StateHistoryPage>>> LoadPage { get; set; } = null!;
+
+    protected override Task OnInitializedAsync() => LoadAsync(StateHistoryQuery.Newest(PageSize));
+
+    private Task PageAsync(StateHistoryQuery? query) => query is null ? Task.CompletedTask : LoadAsync(query);
+
+    private async Task LoadAsync(StateHistoryQuery query)
+    {
+        var request = ++this.request;
+        this.query = query;
+        this.loading = true;
+        this.error = null;
+        Result<StateHistoryPage> page;
+        try
+        {
+            page = await LoadPage(query);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        catch (Exception exception)
+        {
+            Log.LogError(exception, "Reading a page of a state entity's history failed.");
+            page = Result<StateHistoryPage>.Failure(ReadFailed);
+        }
+
+        if (request != this.request)
+        {
+            return;
+        }
+
+        this.loading = false;
+        if (page.IsSuccess && page.Value is not null)
+        {
+            this.page = page.Value;
+        }
+        else
+        {
+            this.page = null;
+            this.error = string.IsNullOrWhiteSpace(page.Error) ? ReadFailed : page.Error;
+        }
+    }
+
+    private static string StepCount(int count) => count == 1 ? "1 step" : $"{count} steps";
+
+    private static string Range(StateHistoryPage page) =>
+        page.Steps.Count == page.TotalCount
+            ? StepCount(page.TotalCount)
+            : $"Steps {page.NewerCount + 1} to {page.NewerCount + page.Steps.Count} of {page.TotalCount}";
+
+    private static DateOnly DayOf(StateHistoryStep step) => DateOnly.FromDateTime(step.At.DateTime);
+}

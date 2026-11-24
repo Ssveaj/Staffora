@@ -1,0 +1,91 @@
+.state-pattern-segments {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    min-width: 0;
+}
+
+.state-pattern-segments__note {
+    margin: 0;
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+}
+
+.state-pattern-segments__week {
+    margin: var(--space-2) 0 0;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+}
+
+.state-pattern-segments__days {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+}
+
+.state-pattern-segments__day {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--space-1) var(--space-3);
+    align-items: center;
+    padding: var(--space-2) var(--space-3);
+}
+
+.state-pattern-segments__day + .state-pattern-segments__day {
+    border-top: 1px solid var(--color-border);
+}
+
+@media (min-width: 640px) {
+    .state-pattern-segments__day {
+        grid-template-columns: 7.5rem 1fr auto;
+    }
+}
+
+.state-pattern-segments__day-name {
+    font-weight: var(--font-weight-semibold);
+}
+
+.state-pattern-segments__hours {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    min-width: 0;
+}
+
+.state-pattern-segments__off {
+    color: var(--color-text-muted);
+}
+
+.state-pattern-segments__segment {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+}
+
+.state-pattern-segments__time {
+    width: 7.25rem;
+    min-height: 2.25rem;
+}
+
+.state-pattern-segments__outside {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--color-warning-border);
+    border-radius: var(--radius-md);
+    background: var(--color-warning-soft);
+}
+
+.state-pattern-segments__problems {
+    margin: 0;
+    padding: var(--space-2) var(--space-3) var(--space-2) var(--space-6);
+    border: 1px solid var(--color-danger-border);
+    border-radius: var(--radius-md);
+    background: var(--color-danger-soft);
+    color: var(--color-danger);
+}

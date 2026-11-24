@@ -1,0 +1,50 @@
+@using Staffora.Core.Models
+
+@if (Dialog is JobDialogContext job && job.Staff is { Count: > 0 } entries)
+{
+    var chosen = job.StaffingSlot;
+    var shown = entries.FirstOrDefault(entry => entry.SlotId == chosen) ?? entries[0];
+    <div class="job-staffing" data-job-staffing>
+        <div class="job-staffing__slots" role="group" aria-label="Slots to staff">
+            @foreach (var entry in entries)
+            {
+                var on = entry.SlotId == shown.SlotId;
+                var filled = entry.Open == 0;
+                <button type="button" @key="entry.SlotId" class="@SlotClass(on, filled)" aria-pressed="@(on ? "true" : "false")"
+                        data-staffing-slot="@entry.Name" data-open-again="@(entry.OpenAgain > 0 ? "true" : null)" @onclick="() => job.StaffingSlot = entry.SlotId">
+                    <span class="job-staffing__slot-head">
+                        <span class="job-staffing__dot" aria-hidden="true"></span>
+                        <b class="job-staffing__slot-name">@entry.Name</b>
+                        <span class="job-staffing__slot-state">@StateText(entry)</span>
+                    </span>
+                    @if (entry.Assigned.Count > 0)
+                    {
+                        <span class="job-staffing__slot-people">@string.Join(", ", entry.Assigned)</span>
+                    }
+                </button>
+            }
+        </div>
+        <SlotStaffingPanel SlotId="@shown.SlotId" Version="@Version" ShowJob="false" Label="@shown.Name" />
+    </div>
+}
+
+@code {
+    [CascadingParameter] public StateEntityDialogContext? Dialog { get; set; }
+
+    [Parameter] public int Version { get; set; }
+
+    private static string SlotClass(bool on, bool filled) =>
+        "job-staffing__slot" + (on ? " job-staffing__slot--on" : string.Empty) + (filled ? " job-staffing__slot--filled" : string.Empty);
+
+    private static string StateText(JobStaffEntry entry)
+    {
+        var count = entry.Assigned.Count + entry.Open;
+        if (count <= 1)
+        {
+            return entry.Open == 0 ? "Filled" : entry.OpenAgain > 0 ? "Open again" : "Open";
+        }
+
+        var held = Math.Min(count, entry.Assigned.Count + entry.SaidYes.Count);
+        return entry.OpenAgain > 0 ? $"{held} of {count} held, {entry.OpenAgain} open again" : $"{held} of {count} held";
+    }
+}

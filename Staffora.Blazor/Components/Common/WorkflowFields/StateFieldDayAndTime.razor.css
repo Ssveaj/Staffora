@@ -1,0 +1,85 @@
+.state-field-day-time {
+    container: day-time / inline-size;
+    min-width: 0;
+}
+
+.state-field-day-time__row {
+    display: flex;
+    align-items: stretch;
+    min-width: 0;
+}
+
+.state-field-day-time__day {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.state-field-day-time__time {
+    position: relative;
+    display: flex;
+    flex: 0 0 7.5rem;
+    align-items: center;
+}
+
+.state-field-day-time__time::before {
+    content: "";
+    position: absolute;
+    inset-block: var(--space-2);
+    inset-inline-start: 0;
+    border-inline-start: 1px solid var(--color-border-strong);
+}
+
+.state-field-day-time__time--alone {
+    flex: 1 1 auto;
+}
+
+.state-field-day-time__time--alone::before {
+    content: none;
+}
+
+.state-field-day-time__time--read-only {
+    background-color: var(--color-surface-sunken);
+}
+
+.state-field-day-time__time-input {
+    width: 100%;
+    min-width: 0;
+    min-height: 2.5rem;
+}
+
+.state-field-day-time__time-input--empty:not(:focus) {
+    color: transparent;
+}
+
+.state-field-day-time__placeholder {
+    position: absolute;
+    inset-inline-start: var(--rz-input-padding-inline, var(--space-3));
+    inset-block: 0;
+    display: flex;
+    align-items: center;
+    pointer-events: none;
+    color: var(--rz-input-placeholder-color);
+    font-size: var(--font-size-sm);
+    white-space: nowrap;
+}
+
+.state-field-day-time__time-input:focus + .state-field-day-time__placeholder {
+    display: none;
+}
+
+@container day-time (max-width: 15rem) {
+    .state-field-day-time__row {
+        flex-direction: column;
+    }
+
+    .state-field-day-time__time {
+        flex-basis: auto;
+    }
+
+    .state-field-day-time__time::before {
+        inset-block: 0 auto;
+        inset-inline: var(--space-2);
+        border-inline-start: none;
+        border-block-start: 1px solid var(--color-border-strong);
+    }
+}

@@ -1,0 +1,69 @@
+@using Staffora.Blazor.Components.Common.Dialogs.StateEntity
+@using Staffora.Blazor.Components.Common.List
+@using Staffora.Blazor.Components.Common.WorkflowFields
+@using Staffora.Core.Lists
+@using Staffora.Core.Models
+@using Staffora.Core.Workflow.WorkflowAttributes
+@implements IStateEntityDialog<TenantRoleDialogContext>
+@inject DialogService DialogService
+
+<StateEntityDialogViewPanel Key="@TenantRoleDialogContext.InfoView">
+    <div class="role-dialog">
+        @if (Context.LockedReason is { } locked)
+        {
+            <p class="role-dialog__locked" data-role-beyond-ceiling>@locked</p>
+        }
+
+        <StateFieldTextBox @bind-Value="Context.Entity!.Name" Label="Name" MaxLength="100" Name="role-name" />
+        <StateFieldTextArea @bind-Value="Context.Entity!.Description" Label="Description" MaxLength="500" Rows="3" Name="role-description" />
+        <StateFieldSwitch @bind-Value="Context.Entity!.ApplyResourceMembershipToUser" Label="Holders are staff members" Name="role-staff" />
+        <RadzenText TextStyle="TextStyle.Body2" class="text-muted">Whoever holds the role on a unit in use is a staff member of that unit and can be staffed while their account is active. Changing it needs the permission to manage staff members.</RadzenText>
+    </div>
+</StateEntityDialogViewPanel>
+<StateEntityDialogViewPanel Key="@TenantRoleDialogContext.PermissionsView">
+    <StatePermissionMatrix Area="@TenantRoleWorkflowAttribute.AreaPermissions" Values="@Context.Entity!.Permissions" Grantable="@Context.Grantable" Offered="@Context.Offered" NamePrefix="role-permission" />
+</StateEntityDialogViewPanel>
+<StateEntityDialogViewPanel Key="@TenantRoleDialogContext.HoldersView">
+    <StateEntityDialogChildList TItem="UserRoleHoldingRow"
+                                View="@TenantRoleDialogContext.HoldersView"
+                                RowKey="@(row => row.Id)"
+                                RowLabel="@(row => $"{row.Person} on {row.Unit}")"
+                                Label="Holders"
+                                ItemName="holder"
+                                ItemsName="holders"
+                                EmptyIcon="group"
+                                EmptyTitle="Nobody holds this role"
+                                EmptyText="A role held on a unit grants its permissions across the whole company. The unit records where the person works."
+                                OpenRow="@OpenHoldingAsync">
+        <Columns>
+            <ListColumn TItem="UserRoleHoldingRow" Title="Person" Primary="true">@context.Person</ListColumn>
+            <ListColumn TItem="UserRoleHoldingRow" Title="Unit">@context.UnitLabel</ListColumn>
+        </Columns>
+    </StateEntityDialogChildList>
+</StateEntityDialogViewPanel>
+
+@code {
+    private int? shownVersion;
+
+    [Parameter, EditorRequired] public TenantRoleDialogContext Context { get; set; } = null!;
+
+    protected override void OnParametersSet()
+    {
+        if (this.shownVersion != Context.Version)
+        {
+            this.shownVersion = Context.Version;
+            Context.DisplayName = string.IsNullOrWhiteSpace(Context.Entity!.Name) ? null : Context.Entity.Name;
+        }
+    }
+
+    private Task<StateEntityDialogResult> OpenHoldingAsync(UserRoleHoldingRow row) => Context.OpenHolderAsync(DialogService, row);
+
+    internal static TenantRoleDialogContext ContextFor(TenantRoleService service, Guid? roleId) =>
+        new(service, roleId) { DefaultTitle = "Role", CreateTitle = "New role", EntityIcon = "admin_panel_settings" };
+
+    public static Task<StateEntityDialogResult> OpenAsync(DialogService dialogService, TenantRoleService service, Guid roleId, StateEntityDialogOptions? options = null) =>
+        dialogService.OpenStateEntityDialogAsync<TenantRoleDialog, TenantRoleDialogContext>(ContextFor(service, roleId), options);
+
+    public static Task<StateEntityDialogResult> OpenCreateAsync(DialogService dialogService, TenantRoleService service) =>
+        dialogService.OpenStateEntityDialogAsync<TenantRoleDialog, TenantRoleDialogContext>(ContextFor(service, null));
+}

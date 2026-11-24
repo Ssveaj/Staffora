@@ -1,0 +1,85 @@
+@using Staffora.Blazor.Helper
+@using Staffora.Core
+@using Staffora.Services.Comments
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+<div class="dialog-side-tabs" role="tablist" aria-label="Comment threads" @ref="this.tablist">
+    @foreach (var thread in Context.CommentThreads)
+    {
+        var isSelected = thread.Audience == Context.SelectedCommentThread?.Audience;
+        var label = thread.Title ?? EnumDisplayHelper.GetDisplayName(thread.Audience);
+        @Tab(TabId(Context, thread), thread.Audience.ToString().ToLowerInvariant(), label, thread.Audience.GetIcon(), thread.TotalCount, thread.RequiresAttention, thread.AttentionText, isSelected, () => Context.SelectCommentThread(thread.Audience))
+    }
+    @if (Context.HasConversationsTab)
+    {
+        var rows = Context.Conversations ?? [];
+        var waiting = rows.Count(row => row.AwaitsReply);
+        @Tab(ConversationsTabId(Context), "conversations", Context.ConversationsLabel, "groups", rows.Count, waiting > 0, waiting == 1 ? "1 awaits your reply" : $"{waiting} await your reply", Context.ConversationsShown, Context.SelectConversations, "conversation", "conversations")
+    }
+</div>
+
+@code {
+    private ElementReference tablist;
+    private IJSObjectReference? module;
+
+    [Parameter, EditorRequired] public StateEntityDialogContext Context { get; set; } = null!;
+
+    internal static string TabId(StateEntityDialogContext context, CommentThread thread) =>
+        $"{context.DomId}-side-tab-{thread.Audience.ToString().ToLowerInvariant()}";
+
+    internal static string ConversationsTabId(StateEntityDialogContext context) => $"{context.DomId}-side-tab-conversations";
+
+    internal static string PanelId(StateEntityDialogContext context) => $"{context.DomId}-side-panel";
+
+    private RenderFragment Tab(string id, string key, string label, string icon, int count, bool attention, string attentionText, bool selected, Action select, string one = "comment", string many = "comments") => __builder =>
+    {
+        var name = $"{label}, {count} {(count == 1 ? one : many)}{(attention ? $", {attentionText.ToLowerInvariant()}" : null)}";
+        <button type="button"
+                role="tab"
+                id="@id"
+                class="@(selected ? "dialog-side-tabs__tab dialog-side-tabs__tab--selected" : "dialog-side-tabs__tab")"
+                data-audience="@key"
+                data-attention="@(attention ? "true" : "false")"
+                aria-selected="@(selected ? "true" : "false")"
+                aria-controls="@PanelId(Context)"
+                aria-label="@name"
+                title="@name"
+                tabindex="@(selected ? "0" : "-1")"
+                @onclick="select">
+            <MaterialSymbol Name="@icon" Class="dialog-side-tabs__icon" />
+            <span class="@(attention ? "dialog-side-tabs__count dialog-side-tabs__count--attention" : "dialog-side-tabs__count")" data-count="@count" aria-hidden="true">@count.ToString(System.Globalization.CultureInfo.InvariantCulture)</span>
+        </button>
+    };
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        try
+        {
+            this.module = await JS.InvokeAsync<IJSObjectReference>("import", StateEntityDialogHeader.ModulePath);
+            await this.module.InvokeVoidAsync("attachTabs", this.tablist);
+        }
+        catch (Exception exception) when (exception is JSException or JSDisconnectedException or TaskCanceledException or ObjectDisposedException or InvalidOperationException)
+        {
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (this.module is not null)
+            {
+                await this.module.DisposeAsync();
+            }
+        }
+        catch (Exception exception) when (exception is JSDisconnectedException or TaskCanceledException)
+        {
+        }
+    }
+}

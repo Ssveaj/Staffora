@@ -1,0 +1,42 @@
+@page "/status/{Code:int}"
+@attribute [Microsoft.AspNetCore.Authorization.AllowAnonymous]
+@attribute [Staffora.Blazor.Layout.CustomerPortalPage]
+@attribute [ExcludeFromInteractiveRouting]
+@attribute [Microsoft.AspNetCore.Antiforgery.RequireAntiforgeryToken(required: false)]
+@layout MainLayout
+
+<SystemPage Title="@Heading" Eyebrow="@($"Error {Status}")" Message="@Message" Icon="@Icon" Tone="@Tone" />
+
+@code {
+    [Parameter]
+    public int Code { get; set; }
+
+    [CascadingParameter]
+    private HttpContext? HttpContext { get; set; }
+
+    private int Status => HttpContext?.Features.Get<Microsoft.AspNetCore.Diagnostics.IStatusCodeReExecuteFeature>() is not null ? HttpContext.Response.StatusCode : Code;
+
+    private string Heading => Status switch
+    {
+        StatusCodes.Status404NotFound => "Not found",
+        StatusCodes.Status429TooManyRequests => "Too many attempts",
+        _ => "Something went wrong",
+    };
+
+    private string Icon => Status switch
+    {
+        StatusCodes.Status404NotFound => "search_off",
+        StatusCodes.Status429TooManyRequests => "hourglass_top",
+        _ => "error",
+    };
+
+    private UiTone Tone => Status == StatusCodes.Status404NotFound ? UiTone.Neutral : UiTone.Warning;
+
+    private string Message => Status switch
+    {
+        StatusCodes.Status404NotFound => "Sorry, the content you are looking for does not exist.",
+        StatusCodes.Status429TooManyRequests => "Too many attempts — try again in a minute.",
+        StatusCodes.Status400BadRequest => "The request could not be handled. Go back, reload the page and try again.",
+        _ => $"The request could not be completed (status {Status}). Try again later.",
+    };
+}

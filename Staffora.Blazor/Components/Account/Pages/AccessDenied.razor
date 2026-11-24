@@ -1,0 +1,25 @@
+@page "/Account/AccessDenied"
+@attribute [Microsoft.AspNetCore.Authorization.AllowAnonymous]
+
+@if (IsImpersonating)
+{
+    <SystemPage Title="Access denied" Eyebrow="Error 403"
+                Message="You are impersonating a user. This page is not open while impersonating: end the impersonation first."
+                Icon="lock" Tone="UiTone.Warning" LinkPath="@null">
+        <form method="post" action="Account/Impersonation/End">
+            <AntiforgeryToken />
+            <RadzenButton Text="End impersonation" ButtonType="ButtonType.Submit" ButtonStyle="ButtonStyle.Primary" />
+        </form>
+    </SystemPage>
+}
+else
+{
+    <SystemPage Title="Access denied" Eyebrow="Error 403" Message="You do not have access to this page." Icon="lock" Tone="UiTone.Warning" />
+}
+
+@code {
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    private bool IsImpersonating => Staffora.Services.Authorization.ImpersonationClaims.IsPresent(HttpContext.User);
+}

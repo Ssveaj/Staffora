@@ -1,0 +1,755 @@
+@implements IAsyncDisposable
+@using System.Globalization
+@using Staffora.Core
+@using Staffora.Core.Entities.Jobs
+@using Staffora.Core.Entities.Scheduling
+@using Staffora.Core.Scheduling
+@using Staffora.Core.Staffing
+@using Staffora.Services.Coordination
+@using Staffora.Services.Jobs
+@using Staffora.Services.Scheduling
+@using Staffora.Services.Settings
+@inject CoordinationService Board
+@inject JobSlotService SlotService
+@inject JobService JobService
+@inject ResourceAbsenceService AbsenceService
+@inject DialogService DialogService
+@inject UrlStateService UrlState
+@inject TimeProvider Clock
+@inject IJSRuntime JS
+
+<div class="coordination-timeline" @ref="this.root"
+     data-board-state="@StateName"
+     data-board-week="@(this.load.First is { } shown ? ScheduleRules.DateText(shown.Monday) : null)"
+     data-day="@(this.load.First is not null ? ScheduleRules.DateText(ShownDay) : null)">
+    <div class="timeline-toolbar">
+        <div class="timeline-toolbar__start">
+            <button type="button" class="timeline-tool timeline-tool--icon" aria-label="Previous day" title="Previous day" data-step="previous" disabled="@(this.load.First is null)" @onclick="() => StepAsync(-1)">
+                <MaterialSymbol Name="chevron_left" />
+            </button>
+            <div class="timeline-toolbar__title">
+                <h2 class="timeline-toolbar__day" id="timeline-title" tabindex="-1">@Title</h2>
+                @if (this.load.First is not null)
+                {
+                    <span class="timeline-toolbar__week" data-week-line>@WeekLine</span>
+                    @if (Holidays?.ByDay(ShownDay, ShownDay).GetValueOrDefault(ShownDay) is { Count: > 0 } holidaysToday)
+                    {
+                        <span class="timeline-toolbar__holiday" data-holiday-note="@Holidays.TextOf(holidaysToday)">
+                            <MaterialSymbol Name="celebration" Class="material-symbol--sm" /><span>@Holidays.TextOf(holidaysToday)</span>
+                        </span>
+                    }
+                    @if (ClosedOn?.Invoke(ShownDay) is { Count: > 0 } closedToday)
+                    {
+                        <span class="timeline-toolbar__closed" data-closed-day-note="@ClosedDayRules.MarksText(closedToday)">
+                            <MaterialSymbol Name="event_busy" Class="material-symbol--sm" /><span>@ClosedDayRules.MarksText(closedToday)</span>
+                        </span>
+                    }
+                }
+            </div>
+            <button type="button" class="timeline-tool timeline-tool--icon" aria-label="Next day" title="Next day" data-step="next" disabled="@(this.load.First is null)" @onclick="() => StepAsync(1)">
+                <MaterialSymbol Name="chevron_right" />
+            </button>
+            <button type="button" class="timeline-tool" title="Show today and the time now" data-today disabled="@(this.load.First is null)" @onclick="TodayAsync">Today</button>
+        </div>
+        <div class="timeline-toolbar__tools">
+            <PermissionView Permission="RolePermission.JobsCreate">
+                <Authorized>
+                    <button type="button" class="timeline-tool timeline-tool--primary" data-new-job @onclick="NewJobAsync">
+                        <MaterialSymbol Name="add" /> New job
+                    </button>
+                </Authorized>
+            </PermissionView>
+        </div>
+    </div>
+
+    <div class="timeline-columns">
+        @if (Rail is not null)
+        {
+            <aside class="timeline-rail" aria-label="Calendar">
+                @Rail
+            </aside>
+        }
+
+        <div class="timeline-main">
+            <p class="visually-hidden" role="status">@StatusText</p>
+
+            <div class="timeline-body">
+                @if (this.load.State == TwoStepLoadState.Failed)
+                {
+                    <div class="timeline-message">
+                        <EmptyState Icon="error" Title="The timeline could not be shown" Text="@this.load.Error" Tone="UiTone.Warning" Role="alert" />
+                    </div>
+                }
+                else if (this.load.First is { } board)
+                {
+                    var bookings = this.load.Second;
+                    var day = ShownOn(board);
+                    var now = NowOn(board, day);
+                    var toStaff = bookings is null ? [] : bookings.ToStaff.Where(occurrence => occurrence.Date == day).ToList();
+                    var toStaffSlots = toStaff.Select(occurrence => occurrence.SlotId).Distinct().Count();
+                    <div class="timeline-scroll" @ref="this.scroll" tabindex="0" aria-label="@($"Schedule of {board.TotalStaffMembers} staff")"
+                         data-opens-at="@OpensAt(board, bookings, day, now).ToString("0.####", CultureInfo.InvariantCulture)">
+                        <div class="timeline-canvas" style="@CanvasStyle">
+                            <div class="timeline-grid" role="grid" aria-labelledby="timeline-title" aria-describedby="timeline-note" aria-rowcount="-1">
+                                <div class="timeline-head" role="row">
+                                    <div class="timeline-corner" role="columnheader">
+                                        <span class="timeline-find">
+                                            <MaterialSymbol Name="search" Class="timeline-find__icon" />
+                                            <input type="search" class="timeline-find__input" name="board-find-staff" aria-label="Find staff" placeholder="Find staff"
+                                                   value="@this.nameText" maxlength="@BoardFilter.MaxNameLength" data-find-staff
+                                                   @oninput="OnFindInput" @onkeydown="OnFindKeyDownAsync" />
+                                        </span>
+                                        <button type="button" class="timeline-sort" aria-label="@SortLabel" title="@SortLabel" data-staff-sort="@this.order.Value.ToString().ToLowerInvariant()" @onclick="ToggleOrderAsync">
+                                            <MaterialSymbol Name="sort_by_alpha" />
+                                        </button>
+                                    </div>
+                                    <div class="timeline-hours" role="columnheader" aria-label="@HoursLabel(day, now)">
+                                        @foreach (var hour in TimelineRules.HourMarks)
+                                        {
+                                            <span class="@(hour == TimelineRules.HoursInDay ? "timeline-hours__tick timeline-hours__tick--end" : "timeline-hours__tick")" style="@FromStyle(hour)" data-hour="@hour.ToString("00", CultureInfo.InvariantCulture)" aria-hidden="true">
+                                                <span class="timeline-hours__label">@hour.ToString("00", CultureInfo.InvariantCulture)</span>
+                                            </span>
+                                        }
+                                        @if (now is { } nowInHead)
+                                        {
+                                            <span class="timeline-hours__now" style="@FromStyle(nowInHead.At)" aria-hidden="true">
+                                                <span class="timeline-hours__now-time" data-now-time>@nowInHead.Text</span>
+                                            </span>
+                                        }
+                                    </div>
+                                </div>
+
+                                @{
+                                    var staffSpans = toStaff.Select(occurrence => TimelineRules.Place(occurrence.Start, occurrence.End)).ToList();
+                                    var staffLanes = TimelineRules.Lanes(staffSpans);
+                                }
+                                <div class="timeline-row timeline-row--staff" role="row" data-board-row="staff" style="@LanesStyle(staffLanes)">
+                                    <div class="timeline-name timeline-name--staff" role="rowheader">
+                                        <span class="timeline-name__open" id="board-row-staff" tabindex="-1">Open slots</span>
+                                        @if (bookings is null)
+                                        {
+                                            <span class="timeline-name__reading">Reading...</span>
+                                        }
+                                        else if (toStaffSlots > 0)
+                                        {
+                                            <button type="button" class="timeline-open-link" data-open-slots-link="@toStaffSlots" title="Show these slots in Priorities" @onclick="OpenSlotsInPrioritiesAsync">
+                                                @OpenSlotsText(toStaffSlots, day)<MaterialSymbol Name="south" />
+                                            </button>
+                                        }
+                                        else
+                                        {
+                                            <span class="timeline-name__reading">None this day</span>
+                                        }
+                                    </div>
+                                    <div class="timeline-track timeline-track--staff" role="gridcell">
+                                        @for (var index = 0; index < toStaff.Count; index++)
+                                        {
+                                            var occurrence = toStaff[index];
+                                            var key = $"slot-{occurrence.SlotId}-{ScheduleRules.DateText(occurrence.Date)}-{occurrence.Times}";
+                                            <button type="button" @key="key"
+                                                    class="@SlotClass(occurrence.Kind)"
+                                                    style="@BarStyle(staffSpans[index], staffLanes[index])"
+                                                    data-board-focus="@key"
+                                                    data-open-slot="@occurrence.SlotId"
+                                                    data-day="@ScheduleRules.DateText(occurrence.Date)"
+                                                    @onclick="() => OpenSlotAsync(occurrence, key)">
+                                                <span class="timeline-bar__fit" aria-hidden="true">
+                                                    <span class="timeline-bar__caption timeline-bar__caption--long"><MaterialSymbol Name="@(occurrence.Kind == PriorityKind.Unanswered ? "hourglass_top" : "person_add")" />@occurrence.Slot, @occurrence.Job</span>
+                                                    <span class="timeline-bar__caption timeline-bar__caption--short">@occurrence.Job</span>
+                                                </span>
+                                                <span class="visually-hidden" data-bar-name>@occurrence.Slot, @occurrence.Job@SlotDetails(occurrence)</span>
+                                                <span class="timeline-card" aria-hidden="true">
+                                                    <span class="timeline-card__title">@occurrence.Job</span>
+                                                    <span class="timeline-card__facts">
+                                                        <span class="timeline-card__period">Customer</span><span>@occurrence.Customer</span>
+                                                        <span class="timeline-card__period">Slot</span><span>@occurrence.Slot</span>
+                                                        @if (occurrence.Place is { } toStaffPlace)
+                                                        {
+                                                            <span class="timeline-card__period">Place</span><span data-place>@toStaffPlace</span>
+                                                        }
+                                                        <span class="timeline-card__period">When</span><span>@(occurrence.Occurrence ?? WhenText(occurrence.Date, occurrence.Times))</span>
+                                                        <span class="timeline-card__period">Staffing</span><span>@CoordinationSlotRow.KindText(occurrence.Kind). <span data-free>@occurrence.FreeText</span>.</span>
+                                                    </span>
+                                                </span>
+                                            </button>
+                                        }
+                                    </div>
+                                </div>
+
+                                @foreach (var staff in board.StaffMembers)
+                                {
+                                    var rowId = $"board-row-{staff.ResourceId}";
+                                    var layout = LayoutOf(staff, bookings, day);
+                                    <div @key="staff.ResourceId" class="timeline-row" role="row"
+                                         data-board-row="@staff.ResourceId" data-staff="@staff.Name"
+                                         style="@LanesStyle(layout.Lanes)">
+                                        <div class="timeline-name" role="rowheader">
+                                            <button type="button" class="timeline-name__title" id="@rowId" data-board-focus="@($"name-{staff.ResourceId}")"
+                                                    title="@($"Open the schedule of {staff.Name}")" data-open-schedule="@staff.Name"
+                                                    @onclick="() => OpenScheduleAsync(staff)">@staff.Name</button>
+                                        </div>
+                                        <div class="timeline-track" role="gridcell">
+                                            @if (layout.Closed is { } closedBand)
+                                            {
+                                                <span class="timeline-closed" style="@SpanStyle(closedBand.Span)" data-closed="@closedBand.Text" data-day="@ScheduleRules.DateText(day)">
+                                                    <span class="timeline-closed__caption" aria-hidden="true"><MaterialSymbol Name="event_busy" />@closedBand.Text</span>
+                                                    <span class="visually-hidden">@closedBand.Text, @LongDay(day), @staff.Name</span>
+                                                </span>
+                                            }
+                                            @foreach (var work in layout.Work)
+                                            {
+                                                <span class="timeline-work" style="@SpanStyle(work.Span)" data-day="@ScheduleRules.DateText(day)" data-band="@work.Text" aria-hidden="true"></span>
+                                            }
+                                            @foreach (var away in layout.Absences)
+                                            {
+                                                <button type="button" @key="away.Key"
+                                                        class="@AbsenceClass(away.Absence)"
+                                                        style="@SpanStyle(away.Span)"
+                                                        data-board-focus="@away.Key"
+                                                        data-absence="@away.Absence.AbsenceId"
+                                                        data-absence-state="@away.Absence.State.ToString().ToLowerInvariant()"
+                                                        data-day="@ScheduleRules.DateText(day)"
+                                                        @onclick="() => OpenAbsenceAsync(staff, away.Absence, away.Key)">
+                                                    <span class="timeline-bar__fit" aria-hidden="true">
+                                                        <span class="timeline-bar__caption timeline-bar__caption--long"><MaterialSymbol Name="@(away.Absence.Kind == AbsenceKind.SickLeave ? "sick" : "beach_access")" />@away.Absence.Text</span>
+                                                        <span class="timeline-bar__caption timeline-bar__caption--short">@ShortAbsence(away.Absence)</span>
+                                                    </span>
+                                                    <span class="visually-hidden" data-bar-name>@away.Absence.Text, @away.Absence.TimeText, @LongDay(day), @staff.Name</span>
+                                                </button>
+                                            }
+                                            @for (var index = 0; index < layout.Bars.Count; index++)
+                                            {
+                                                var bar = layout.Bars[index];
+                                                var held = bar.Held;
+                                                var clash = layout.Clashes.Contains(bar.Key);
+                                                <button type="button" @key="bar.Key"
+                                                        class="@HeldClass(held, clash)"
+                                                        style="@BarStyle(bar.Span, layout.Lanes[index])"
+                                                        data-board-focus="@bar.Key"
+                                                        data-slot="@held.Job"
+                                                        data-day="@ScheduleRules.DateText(day)"
+                                                        @onclick="() => OpenJobAsync(staff, held, bar.Key)">
+                                                    <span class="timeline-bar__fit" aria-hidden="true">
+                                                        <span class="timeline-bar__caption timeline-bar__caption--long">
+                                                            @if (HeldIcon(held) is { } icon)
+                                                            {
+                                                                <MaterialSymbol Name="@icon" />
+                                                            }
+                                                            <strong>@held.Job</strong> <span class="timeline-bar__sub">@held.Customer</span>
+                                                        </span>
+                                                        <span class="timeline-bar__caption timeline-bar__caption--short"><strong>@held.Job</strong></span>
+                                                    </span>
+                                                    <span class="visually-hidden" data-bar-name>@held.Job, @held.Slot@HeldDetails(held, day, staff)</span>
+                                                    @if (held.AwaitsReply)
+                                                    {
+                                                        <span class="visually-hidden" data-awaits-reply>Waits for your reply</span>
+                                                    }
+                                                    <span class="timeline-card" aria-hidden="true">
+                                                        <span class="timeline-card__title">@held.Job</span>
+                                                        <span class="timeline-card__facts">
+                                                            <span class="timeline-card__period">Customer</span><span>@held.Customer</span>
+                                                            <span class="timeline-card__period">Slot</span><span>@held.Slot</span>
+                                                            @if (held.Place is { } heldPlace)
+                                                            {
+                                                                <span class="timeline-card__period">Place</span><span data-place>@heldPlace</span>
+                                                            }
+                                                            <span class="timeline-card__period">When</span><span>@(held.Occurrence ?? WhenText(day, held.Times))</span>
+                                                            <span class="timeline-card__period">Staffing</span><span>@held.StateText: @staff.Name</span>
+                                                        </span>
+                                                        @if (held.AwaitsReply)
+                                                        {
+                                                            <span class="timeline-card__note">@staff.Name wrote and waits for your reply.</span>
+                                                        }
+                                                        @if (clash)
+                                                        {
+                                                            <span class="timeline-card__note">Overlaps another booking, an absence or a closed day of @staff.Name.</span>
+                                                        }
+                                                    </span>
+                                                </button>
+                                            }
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+
+                            @if (now is { } nowAt)
+                            {
+                                <span class="timeline-now" style="@FromStyle(nowAt.At)" title="@($"Now, {nowAt.Text}")" aria-hidden="true" data-now-line="@nowAt.Text"></span>
+                            }
+                        </div>
+
+                        @if (board.StaffMembers.Count == 0)
+                        {
+                            <div class="timeline-message">
+                                <EmptyState Icon="person_search" Title="No staff member to show" Text="@(board.Filter.IsEmpty ? "No staff member of the organization is in service." : "No staff member in service matches the search. Change the search, or clear it.")" />
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="timeline-end">
+                                <span data-board-position>@EndText(board)</span>
+                                @if (board.PageCount > 1)
+                                {
+                                    <nav class="timeline-pager" aria-label="Pages of staff members">
+                                        <button type="button" class="timeline-tool" data-board-page="previous" disabled="@(board.Page <= 1)" @onclick="() => SetPageAsync(board.Page - 1)">
+                                            <MaterialSymbol Name="chevron_left" /> Previous staff
+                                        </button>
+                                        <button type="button" class="timeline-tool" data-board-page="next" disabled="@(board.Page >= board.PageCount)" @onclick="() => SetPageAsync(board.Page + 1)">
+                                            Next staff <MaterialSymbol Name="chevron_right" />
+                                        </button>
+                                    </nav>
+                                }
+                            </div>
+                        }
+                    </div>
+                    <button type="button" class="timeline-more" data-more-staff aria-label="More staff below" hidden>
+                        <MaterialSymbol Name="south" />
+                        <span class="timeline-more__text" data-more-staff-text></span>
+                    </button>
+                    <p class="visually-hidden" id="timeline-note">Times on the organization's clock (@board.TimeZoneId), from 00:00 to 24:00. A tinted stretch is working time, a striped band is an absence, dashed while it waits, a grey striped day is a closed day, and a public holiday is named beside the day.</p>
+                }
+                else
+                {
+                    <div class="timeline-message">
+                        <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" Size="ProgressBarCircularSize.Small" aria-hidden="true" />
+                    </div>
+                }
+            </div>
+
+            @Dock
+        </div>
+    </div>
+</div>
+
+@code {
+    public const string AddressPrefix = "board";
+
+    public const string ModulePath = "./scripts/coordination-timeline.js";
+
+    private static readonly UrlStateKey<int> pageKey = UrlStateKey.Int(ListDefinition.AddressName(AddressPrefix, UrlStateKeys.Page), 1, page => page >= 1);
+    private static readonly UrlStateKey<string> nameKey = UrlStateKey.Text(ListDefinition.AddressName(AddressPrefix, UrlStateKeys.Search), BoardFilter.MaxNameLength);
+    private static readonly UrlStateKey<StaffOrder> orderKey = UrlStateKey.Enum(ListDefinition.AddressName(AddressPrefix, UrlStateKeys.Sort), StaffOrder.AToZ);
+
+    private const int NameWidth = 176;
+
+    private static readonly TimeSpan FindDelay = TimeSpan.FromMilliseconds(300);
+
+    private static readonly string CanvasStyle = string.Create(CultureInfo.InvariantCulture, $"--hours: {TimelineRules.HoursInDay}; --name-w: {NameWidth}px;");
+
+    private readonly TwoStepLoad<BoardStaffMembers, BoardBookings> load = new();
+    private UrlStateValue<int> page = null!;
+    private UrlStateValue<string> name = null!;
+    private UrlStateValue<StaffOrder> order = null!;
+    private string nameText = string.Empty;
+    private CancellationTokenSource? finding;
+    private ElementReference root;
+    private ElementReference scroll;
+    private IJSObjectReference? module;
+    private ITimer? minute;
+    private bool started;
+    private DateOnly? week;
+    private (string Key, string Row)? refocus;
+
+    private DateOnly? scrolledTo;
+    private bool scrollSmoothly;
+    private bool disposed;
+
+    [Parameter] public DateOnly? Day { get; set; }
+
+    [Parameter] public RenderFragment? Rail { get; set; }
+
+    [Parameter] public RenderFragment? Dock { get; set; }
+
+    [Parameter] public EventCallback<DateOnly> OnOpenSlots { get; set; }
+
+    [Parameter, EditorRequired] public Func<Task<Result<CoordinationSnapshot>>> Snapshot { get; set; } = null!;
+
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    [Parameter] public EventCallback<DateOnly> OnShow { get; set; }
+
+    [Parameter] public EventCallback OnNewJob { get; set; }
+
+    [Parameter] public Func<DateOnly, IReadOnlyList<ClosedDayMark>>? ClosedOn { get; set; }
+
+    [Parameter] public TenantHolidays? Holidays { get; set; }
+
+    internal TwoStepLoad<BoardStaffMembers, BoardBookings> Load => this.load;
+
+    internal DateOnly ShownDay => Day ?? this.load.First?.Today ?? DateOnly.FromDateTime(Clock.GetUtcNow().UtcDateTime);
+
+    private string SortLabel => this.order.Value == StaffOrder.ZToA ? "Sort, now by name Z to A" : "Sort, now by name A to Z";
+
+    private string Title => this.load.First is null ? "Schedule" : LongDay(ShownDay);
+
+    private string WeekLine
+    {
+        get
+        {
+            var day = ShownDay.ToDateTime(TimeOnly.MinValue);
+            return $"Week {ISOWeek.GetWeekOfYear(day)} · {ISOWeek.GetYear(day)}";
+        }
+    }
+
+    private string StateName => this.load.State switch
+    {
+        TwoStepLoadState.Ready => "ready",
+        TwoStepLoadState.FirstShown => "staff",
+        TwoStepLoadState.Failed => "failed",
+        TwoStepLoadState.SecondFailed => "bookings-failed",
+        _ => "loading",
+    };
+
+    private string StatusText => this.load.State switch
+    {
+        TwoStepLoadState.Loading => "Reading the timeline...",
+        TwoStepLoadState.FirstShown => this.load.Second is null ? "Reading the bookings..." : "Updating the bookings...",
+        TwoStepLoadState.SecondFailed => $"The bookings could not be shown: {this.load.SecondError}",
+        TwoStepLoadState.Ready when this.load.First is { PageCount: > 1 } paged => $"Staff {paged.FirstShown}-{paged.FirstShown + paged.StaffMembers.Count - 1} of {paged.TotalStaffMembers} shown.",
+        TwoStepLoadState.Ready when this.load.First is { } read => read.StaffMembers.Count == 1 ? "1 staff member shown." : $"{read.StaffMembers.Count} staff members shown.",
+        _ => string.Empty,
+    };
+
+    protected override void OnInitialized()
+    {
+        this.load.Changed += StateHasChanged;
+        this.page = UrlState.Bind(pageKey, exclusive: true);
+        this.name = UrlState.Bind(nameKey, exclusive: true);
+        this.order = UrlState.Bind(orderKey, exclusive: true);
+        this.nameText = this.name.Value;
+        this.page.Changed += OnSearchChangedByAddress;
+        this.name.Changed += OnNameChangedByAddress;
+        this.order.Changed += OnSearchChangedByAddress;
+
+        var now = Clock.GetUtcNow();
+        var toNextMinute = TimeSpan.FromMinutes(1) - TimeSpan.FromTicks(now.Ticks % TimeSpan.TicksPerMinute);
+        this.minute = Clock.CreateTimer(_ => _ = InvokeAsync(StateHasChanged), null, toNextMinute, TimeSpan.FromMinutes(1));
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var week = Day is { } day ? ScheduleRules.MondayOf(day) : (DateOnly?)null;
+        if (!this.started || week != this.week)
+        {
+            (this.started, this.week) = (true, week);
+            await ReloadAsync();
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (this.load.First is not null)
+        {
+            await CallModuleAsync(module => module.InvokeVoidAsync("watchMore", this.root).AsTask());
+            await CallModuleAsync(module => module.InvokeVoidAsync("dragToScroll", this.root).AsTask());
+        }
+
+        if (this.load.First is { } board && !this.load.IsRunning && this.load.State is TwoStepLoadState.Ready or TwoStepLoadState.SecondFailed)
+        {
+            var day = ShownOn(board);
+            if (this.scrolledTo != day)
+            {
+                this.scrolledTo = day;
+                var now = NowOn(board, day);
+                var hour = OpensAt(board, this.load.Second, day, now);
+                var smoothly = this.scrollSmoothly;
+                this.scrollSmoothly = false;
+                await CallModuleAsync(module => module.InvokeVoidAsync("scrollToHour", this.root, hour, now is null ? "start" : "third", smoothly).AsTask());
+            }
+        }
+
+        if (this.refocus is not { } refocus || this.load.IsRunning || this.load.State is TwoStepLoadState.Loading or TwoStepLoadState.FirstShown)
+        {
+            return;
+        }
+
+        this.refocus = null;
+        await CallModuleAsync(module => module.InvokeVoidAsync("focusItem", this.root, refocus.Key, refocus.Row).AsTask());
+    }
+
+    public async Task ReloadAsync()
+    {
+        if (this.disposed)
+        {
+            return;
+        }
+
+        var (week, filter, page) = (Day, new BoardFilter(this.name.Value, this.order.Value == StaffOrder.ZToA), this.page.Value);
+        await this.load.LoadAsync(
+            token => Board.ReadStaffMembersAsync(week, filter, page, token),
+            async (staffMembers, token) =>
+            {
+                var snapshot = await Snapshot();
+                return snapshot.IsSuccess && snapshot.Value is { } read
+                    ? await Board.ReadBookingsAsync(staffMembers, read, token)
+                    : Result<BoardBookings>.Failure(snapshot.Error);
+            },
+            (staffMembers, bookings) => bookings.Monday == staffMembers.Monday && bookings.Filter == staffMembers.Filter && bookings.Page == staffMembers.Page);
+    }
+
+    private Task StepAsync(int days) => OnShow.InvokeAsync(ShownDay.AddDays(days));
+
+    private async Task TodayAsync()
+    {
+        if (this.load.First is { } board)
+        {
+            (this.scrolledTo, this.scrollSmoothly) = (null, true);
+            await OnShow.InvokeAsync(board.Today);
+            StateHasChanged();
+        }
+    }
+
+    private Task NewJobAsync() => OnNewJob.InvokeAsync();
+
+    private async Task SetPageAsync(int page)
+    {
+        this.page.Value = Math.Max(1, page);
+        await ReloadAsync();
+    }
+
+    private void OnSearchChangedByAddress() => _ = InvokeAsync(ReloadAsync);
+
+    private void OnNameChangedByAddress() => _ = InvokeAsync(() =>
+    {
+        this.nameText = this.name.Value;
+        return ReloadAsync();
+    });
+
+    private async Task OnFindInput(ChangeEventArgs args)
+    {
+        this.nameText = args.Value?.ToString() ?? string.Empty;
+        this.finding?.Cancel();
+        var typing = this.finding = new CancellationTokenSource();
+        try
+        {
+            await Task.Delay(FindDelay, Clock, typing.Token);
+        }
+        catch (TaskCanceledException)
+        {
+            return;
+        }
+
+        await FindAsync();
+    }
+
+    private Task OnFindKeyDownAsync(KeyboardEventArgs args)
+    {
+        if (args.Key != "Enter")
+        {
+            return Task.CompletedTask;
+        }
+
+        this.finding?.Cancel();
+        return FindAsync();
+    }
+
+    private async Task FindAsync()
+    {
+        var text = this.nameText.Trim();
+        if (text == this.name.Value)
+        {
+            return;
+        }
+
+        this.name.Value = text;
+        this.page.Value = 1;
+        await ReloadAsync();
+    }
+
+    private async Task ToggleOrderAsync()
+    {
+        this.order.Value = this.order.Value == StaffOrder.ZToA ? StaffOrder.AToZ : StaffOrder.ZToA;
+        this.page.Value = 1;
+        await ReloadAsync();
+    }
+
+    private Task OpenSlotsInPrioritiesAsync() => OnOpenSlots.InvokeAsync(ShownDay);
+
+    private async Task OpenSlotAsync(BoardSlotOccurrence occurrence, string key)
+    {
+        await JobSlotDialog.OpenStaffingAsync(DialogService, SlotService, occurrence.SlotId);
+        await ClosedAsync(key, "staff");
+    }
+
+    private async Task OpenJobAsync(BoardStaff staff, BoardOccurrence held, string key)
+    {
+        await JobDialog.OpenAsync(DialogService, JobService, held.JobId);
+        await ClosedAsync(key, staff.ResourceId.ToString());
+    }
+
+    private async Task OpenAbsenceAsync(BoardStaff staff, BoardAbsence absence, string key)
+    {
+        await AbsenceDialog.OpenAsync(DialogService, AbsenceService, absence.AbsenceId);
+        await ClosedAsync(key, staff.ResourceId.ToString());
+    }
+
+    private async Task OpenScheduleAsync(BoardStaff staff)
+    {
+        await PersonScheduleDialog.OpenAsync(DialogService, staff.ResourceId, staff.Name);
+        await ClosedAsync($"name-{staff.ResourceId}", staff.ResourceId.ToString());
+    }
+
+    private async Task ClosedAsync(string key, string row)
+    {
+        if (OnChanged.HasDelegate)
+        {
+            await OnChanged.InvokeAsync();
+        }
+        else
+        {
+            await ReloadAsync();
+        }
+
+        if (!this.disposed)
+        {
+            this.refocus = (key, row);
+            StateHasChanged();
+        }
+    }
+
+    private async Task CallModuleAsync(Func<IJSObjectReference, Task> call)
+    {
+        try
+        {
+            this.module ??= await JS.InvokeAsync<IJSObjectReference>("import", ModulePath);
+            if (this.module is not null)
+            {
+                await call(this.module);
+            }
+        }
+        catch (Exception exception) when (exception is JSException or JSDisconnectedException or TaskCanceledException or ObjectDisposedException or InvalidOperationException or NullReferenceException)
+        {
+        }
+    }
+
+    private DateOnly ShownOn(BoardStaffMembers board) => board.Days.Contains(ShownDay) ? ShownDay : board.Days[0];
+
+    private TimelineNow? NowOn(BoardStaffMembers board, DateOnly day)
+    {
+        try
+        {
+            return TimelineRules.NowOn(TenantClock.ToLocal(Clock.GetUtcNow(), TimeZoneInfo.FindSystemTimeZoneById(board.TimeZoneId)), day);
+        }
+        catch (Exception exception) when (exception is TimeZoneNotFoundException or InvalidTimeZoneException)
+        {
+            return null;
+        }
+    }
+
+    private static double OpensAt(BoardStaffMembers board, BoardBookings? bookings, DateOnly day, TimelineNow? now)
+    {
+        if (now is not null)
+        {
+            return now.At;
+        }
+
+        var starts = bookings is null
+            ? []
+            : bookings.ToStaff.Where(occurrence => occurrence.Date == day).Select(occurrence => occurrence.Start)
+                .Concat(board.StaffMembers.SelectMany(staff => bookings.OccurrencesOf(staff.ResourceId, day)).Select(held => held.Start));
+        return TimelineRules.OpeningHour(starts);
+    }
+
+    private static RowLayout LayoutOf(BoardStaff staff, BoardBookings? bookings, DateOnly day)
+    {
+        var row = staff.Days.FirstOrDefault(row => row.Date == day);
+        var work = row is null ? [] : row.Bands.Select(band => new WorkSpan(TimelineRules.Place(band.Start, band.End), band.Text)).ToList();
+        var absences = row is null ? [] : row.Absences.Select(absence => new AbsenceBand($"absence-{absence.AbsenceId}-{ScheduleRules.DateText(day)}", TimelineRules.Place(absence.Start, absence.End), absence)).ToList();
+        var bars = bookings is null
+            ? []
+            : bookings.OccurrencesOf(staff.ResourceId, day).Select(held => new HeldBar($"slot-{held.AssignmentId}-{ScheduleRules.DateText(day)}-{held.Times}", TimelineRules.Place(held.Start, held.End), held)).ToList();
+        var lanes = TimelineRules.Lanes([.. bars.Select(bar => bar.Span)]);
+        var closed = row is { IsClosed: true } ? new ClosedBand(TimelineRules.Place(TimeOnly.MinValue, TimeOnly.MinValue), row.ClosedText) : null;
+        static bool Overlap(TimelineSpan one, TimelineSpan other) => one.From < other.To && other.From < one.To;
+        var clashes = bars
+            .Where(bar => closed is not null || bars.Any(other => !ReferenceEquals(other, bar) && Overlap(other.Span, bar.Span)) || absences.Any(absence => Overlap(absence.Span, bar.Span)))
+            .Select(bar => bar.Key)
+            .ToHashSet(StringComparer.Ordinal);
+        return new RowLayout(work, absences, bars, lanes, clashes, closed);
+    }
+
+    private static string FromStyle(double from) => string.Create(CultureInfo.InvariantCulture, $"--from: {from};");
+
+    private static string SpanStyle(TimelineSpan span) => string.Create(CultureInfo.InvariantCulture, $"--from: {span.From}; --len: {span.Length};");
+
+    private static string BarStyle(TimelineSpan span, int lane) => string.Create(CultureInfo.InvariantCulture, $"--from: {span.From}; --len: {span.Length}; --lane: {lane};");
+
+    private static string LanesStyle(IReadOnlyList<int> lanes) => string.Create(CultureInfo.InvariantCulture, $"--lanes: {(lanes.Count == 0 ? 1 : lanes.Max() + 1)};");
+
+    private static string LongDay(DateOnly day) => day.ToString("dddd d MMMM", CultureInfo.InvariantCulture);
+
+    private static string WhenText(DateOnly day, string times) => $"{day.ToString("ddd d MMM", CultureInfo.InvariantCulture)}, {times}";
+
+    private static string HoursLabel(DateOnly day, TimelineNow? now) => $"{LongDay(day)}, 00:00 to 24:00{(now is null ? null : $", now {now.Text}")}";
+
+    private static string OpenSlotsText(int slots, DateOnly day) => $"{slots} on {day.ToString("dddd", CultureInfo.InvariantCulture)}";
+
+    private string EndText(BoardStaffMembers board)
+    {
+        var sorted = this.order.Value == StaffOrder.ZToA ? "sorted by name Z to A" : "sorted by name";
+        return board.PageCount > 1
+            ? $"Staff {board.FirstShown}-{board.FirstShown + board.StaffMembers.Count - 1} of {board.TotalStaffMembers} · {sorted}"
+            : $"{board.TotalStaffMembers} staff · {sorted}";
+    }
+
+    private static string AbsenceClass(BoardAbsence absence) =>
+        absence.State == ResourceAbsenceState.Approved ? "timeline-bar timeline-bar--absence" : "timeline-bar timeline-bar--absence timeline-bar--waiting";
+
+    private static string? HeldIcon(BoardOccurrence held) =>
+        held.AwaitsReply ? "chat"
+        : held.State == SlotAssignmentState.Requested ? "help"
+        : held.State == SlotAssignmentState.StaffQuestion ? "contact_support"
+        : held.State == SlotAssignmentState.Accepted ? "thumb_up"
+        : null;
+
+    private static string ShortAbsence(BoardAbsence absence) => absence.Kind == AbsenceKind.SickLeave ? "Sick" : "Leave";
+
+    private static string SlotDetails(BoardSlotOccurrence occurrence) =>
+        $", {LongDay(occurrence.Date)} {occurrence.Times}, {CoordinationSlotRow.KindText(occurrence.Kind)}, {occurrence.FreeText}";
+
+    private static string HeldDetails(BoardOccurrence held, DateOnly day, BoardStaff staff) =>
+        $", {LongDay(day)} {held.Times}, {held.StateText}, {staff.Name}, {held.Customer}";
+
+    private static string SlotClass(PriorityKind kind) =>
+        kind == PriorityKind.Unanswered ? "timeline-bar timeline-bar--open timeline-bar--unanswered" : "timeline-bar timeline-bar--open";
+
+    private static string HeldClass(BoardOccurrence held, bool clash) =>
+        $"timeline-bar timeline-bar--slot timeline-bar--{held.State.ToString().ToLowerInvariant()}"
+        + (held.AwaitsReply ? " timeline-bar--awaits" : null)
+        + (clash ? " timeline-bar--clash" : null);
+
+    public async ValueTask DisposeAsync()
+    {
+        this.disposed = true;
+        this.minute?.Dispose();
+        this.load.Changed -= StateHasChanged;
+        this.load.Dispose();
+        this.page.Changed -= OnSearchChangedByAddress;
+        this.name.Changed -= OnNameChangedByAddress;
+        this.order.Changed -= OnSearchChangedByAddress;
+        this.finding?.Cancel();
+        this.page.Dispose();
+        this.name.Dispose();
+        this.order.Dispose();
+        if (this.module is not null)
+        {
+            try
+            {
+                await this.module.DisposeAsync();
+            }
+            catch (Exception exception) when (exception is JSDisconnectedException or ObjectDisposedException or TaskCanceledException)
+            {
+            }
+        }
+    }
+
+    private sealed record WorkSpan(TimelineSpan Span, string Text);
+
+    private sealed record AbsenceBand(string Key, TimelineSpan Span, BoardAbsence Absence);
+
+    private sealed record HeldBar(string Key, TimelineSpan Span, BoardOccurrence Held);
+
+    private sealed record ClosedBand(TimelineSpan Span, string Text);
+
+    private sealed record RowLayout(IReadOnlyList<WorkSpan> Work, IReadOnlyList<AbsenceBand> Absences, IReadOnlyList<HeldBar> Bars, IReadOnlyList<int> Lanes, IReadOnlySet<string> Clashes, ClosedBand? Closed);
+}

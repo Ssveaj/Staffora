@@ -1,0 +1,213 @@
+@page "/portal"
+@using Staffora.Services.Settings
+@using Staffora.Services.Home
+@inject TenantHomeService HomeService
+@inject TenantClock Clock
+
+<PermissionView AnyOf="gate">
+    <Loading>
+        <div class="portal-home">
+            <HomeBoard aria-busy="true">
+                <HomeBand Head="true">
+                    <HomeHead Eyebrow="@Eyebrow" Title="Your portal" />
+                </HomeBand>
+                <HomeBand>
+                    <p class="home-calm" role="status">
+                        <span class="ui-spinner ui-spinner--sm" aria-hidden="true"></span>
+                        <span>Loading your portal...</span>
+                    </p>
+                </HomeBand>
+            </HomeBoard>
+        </div>
+    </Loading>
+    <Authorized>
+        <div class="portal-home">
+            <HomeBoard data-portal-home="@(this.loaded ? "ready" : "loading")" aria-busy="@(this.loaded ? "false" : "true")">
+                <HomeBand Head="true">
+                    <HomeHead Eyebrow="@Eyebrow"
+                              Title="Your portal"
+                              Description="Order staff members for your jobs and follow your orders."
+                              Now="this.readAt"
+                              OnRefresh="LoadAsync"
+                              Busy="this.reading" />
+                </HomeBand>
+
+                @if (this.error is { } error)
+                {
+                    <HomeBand>
+                        <EmptyState Icon="error" Title="Your portal could not be shown" Text="@error" Tone="UiTone.Warning" Role="alert" />
+                    </HomeBand>
+                }
+                else if (this.home is { } home)
+                {
+                    <HomeBand Title="To do">
+                        <div class="home-columns">
+                            <div class="home-column home-column--wide">
+                                @if (home.MayFollowRequests)
+                                {
+                                    <ul class="home-figures" aria-label="Your orders in figures">
+                                        <HomeFigure Lead="true" Value="@home.OwnRequests.ToString(System.Globalization.CultureInfo.InvariantCulture)" Label="orders you sent" Zero="@(home.OwnRequests == 0)" />
+                                    </ul>
+
+                                    @if (home.RecentRequests.Count == 0)
+                                    {
+                                        <p class="home-calm home-calm--large">
+                                            <MaterialSymbol Name="check_circle" />
+                                            <span><strong>No orders yet.</strong> An order shows here once you have written it, and follows your supplier's work until the job is staffed.</span>
+                                        </p>
+                                        <p class="home-foot home-foot--start">
+                                            <span class="home-foot__links">
+                                                <a class="home-link" href="/portal/orders">My orders <MaterialSymbol Name="arrow_forward" /></a>
+                                                @if (home.MayRequest)
+                                                {
+                                                    <a class="home-link" href="/portal/orders/new">New order <MaterialSymbol Name="arrow_forward" /></a>
+                                                }
+                                            </span>
+                                        </p>
+                                    }
+                                    else
+                                    {
+                                        <div class="home-card">
+                                            <ul class="home-rows" aria-label="Your latest orders" data-portal-orders>
+                                                @foreach (var request in home.RecentRequests)
+                                                {
+                                                    <HomeRow Title="@request.Name"
+                                                             Meta="@request.PeriodLabel"
+                                                             Aside="@StateLabel(request.State)"
+                                                             Edge="UiTone.Accent"
+                                                             Href="@MyRequests.DetailsPath(request.Id)"
+                                                             data-order-state="@request.State" />
+                                                }
+                                            </ul>
+                                            <p class="home-foot">
+                                                <span class="home-foot__links">
+                                                    <a class="home-link" href="/portal/orders">@(home.OwnRequests > home.RecentRequests.Count ? $"All your {home.OwnRequests} orders" : "My orders") <MaterialSymbol Name="arrow_forward" /></a>
+                                                    @if (home.MayRequest)
+                                                    {
+                                                        <a class="home-link" href="/portal/orders/new">New order <MaterialSymbol Name="arrow_forward" /></a>
+                                                    }
+                                                </span>
+                                            </p>
+                                        </div>
+                                    }
+                                }
+                                else
+                                {
+                                    <p class="home-calm home-calm--large">
+                                        <MaterialSymbol Name="check_circle" />
+                                        <span>Nothing waits for you here. What you can do in the portal is listed below.</span>
+                                    </p>
+                                }
+                            </div>
+
+                            <div class="home-column">
+                                <section class="home-situation" aria-labelledby="portal-supplier">
+                                    <div class="home-situation__head">
+                                        <h3 class="home-situation__title" id="portal-supplier">Your supplier</h3>
+                                    </div>
+                                    @if (home.Supplier is { } name)
+                                    {
+                                        <div class="portal-home__supplier" data-portal-supplier>
+                                            <IconChip Icon="handshake" Tone="UiTone.Success" />
+                                            <div class="portal-home__supplier-text">
+                                                <span class="portal-home__supplier-name">@name</span>
+                                                <span class="portal-home__supplier-note">The staffing company that places staff members on your jobs: your orders go to them, and they confirm the staff members.</span>
+                                            </div>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <p class="home-calm">
+                                            <MaterialSymbol Name="link_off" />
+                                            <span><strong>No supplier in use</strong> · your staffing company takes no orders from your organization for now</span>
+                                        </p>
+                                    }
+                                </section>
+                            </div>
+                        </div>
+                    </HomeBand>
+
+                    <HomeBand Title="Situation" Muted="true">
+                        <section class="home-situation" aria-labelledby="portal-abilities">
+                            <div class="home-situation__head">
+                                <h3 class="home-situation__title" id="portal-abilities">What you can do here</h3>
+                            </div>
+                            <ul class="portal-home__abilities" aria-label="What you can do here">
+                                @if (home.MayRequest)
+                                {
+                                    <li class="portal-home__ability">
+                                        <IconChip Icon="post_add" Tone="UiTone.Accent" />
+                                        <span><strong>Order staff members</strong> for a job: its dates, its times and the staff members it needs.</span>
+                                    </li>
+                                }
+                                @if (home.MayFollowRequests)
+                                {
+                                    <li class="portal-home__ability">
+                                        <IconChip Icon="track_changes" Tone="UiTone.Info" />
+                                        <span><strong>Follow your orders</strong> until your supplier confirms the staff members, and cancel one before then.</span>
+                                    </li>
+                                }
+                                @if (home.MayManageUsers)
+                                {
+                                    <li class="portal-home__ability">
+                                        <IconChip Icon="group_add" Tone="UiTone.Neutral" />
+                                        <span><strong>Manage your organization's users</strong>: add the people who order, and take them out of use. <a href="@PortalUsers.Path" data-portal-users-link>Users</a></span>
+                                    </li>
+                                }
+                            </ul>
+                        </section>
+                    </HomeBand>
+                }
+            </HomeBoard>
+        </div>
+    </Authorized>
+    <NotAuthorized>
+        <div class="portal-home">
+            <HomeBoard>
+                <HomeBand Head="true">
+                    <HomeHead Eyebrow="@Eyebrow" Title="Your portal" />
+                </HomeBand>
+                <HomeBand>
+                    <EmptyState Icon="lock" Title="Access denied" Text="This page is a customer portal's, and your organization's account is no portal." Tone="UiTone.Warning" Role="alert" />
+                </HomeBand>
+            </HomeBoard>
+        </div>
+    </NotAuthorized>
+</PermissionView>
+
+@code {
+    private const string Eyebrow = "Customer portal";
+
+    private static readonly RolePermission[] gate =
+    [
+        RolePermission.OrdersView,
+        RolePermission.OrdersCreate,
+        RolePermission.OrdersSend,
+        RolePermission.OrdersCancel,
+        RolePermission.CustomerUsersManage
+    ];
+
+    private PortalOverview? home;
+    private string? error;
+    private bool loaded;
+
+    private DateTimeOffset? readAt;
+
+    private bool reading;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        this.reading = true;
+        var read = await HomeService.ReadPortalAsync();
+        this.home = read.IsSuccess ? read.Value : null;
+        this.error = read.IsSuccess ? null : read.Error;
+        var now = await Clock.NowAsync();
+        this.readAt = now.IsSuccess ? now.Value : null;
+        this.reading = false;
+        this.loaded = true;
+    }
+
+    private static string StateLabel(OrderState state) => ListOption.ForEnum<OrderState>().First(option => option.Value == state.ToString().ToLowerInvariant()).Label;
+}

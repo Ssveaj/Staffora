@@ -1,0 +1,184 @@
+@using Staffora.Blazor.Components.Common.Dialogs.StateEntity
+@using Staffora.Blazor.Components.Coordination
+@using Staffora.Blazor.Components.Common.List
+@using Staffora.Blazor.Components.Common.WorkflowFields
+@using Staffora.Core.Entities.Jobs
+@using Staffora.Core.Jobs
+@using Staffora.Core.Entities.Customers
+@using Staffora.Core.Entities.EntityAttributes.JobAttributes
+@using Staffora.Core.Entities.Organization
+@using Staffora.Core.Lists
+@using Staffora.Core.Models
+@using Staffora.Core.Workflow.WorkflowAttributes
+@using Staffora.Services.Jobs
+@implements IStateEntityDialog<JobDialogContext>
+@inject DialogService DialogService
+
+<StateEntityDialogViewPanel Key="@JobDialogContext.InfoView">
+    <div class="job-dialog">
+        <StateFieldTextBox @bind-Value="Context.Entity!.Name" Label="Name" MaxLength="@Job.NameMaxLength" Name="job-name" />
+        <StateFieldTextArea @bind-Value="Context.Entity!.Description" Label="Description" MaxLength="@Job.DescriptionMaxLength" Rows="2" Name="job-description" />
+        <div class="field-row">
+            <StateFieldDropDown TValue="Guid" TItem="Customer" @bind-Value="Context.Entity!.CustomerId" @bind-Value:after="CustomerChosen" Data="@Context.Customers"
+                                TextProperty="Name" Label="Customer" Name="job-customer" Placeholder="Choose an active customer" AllowFiltering="true" />
+            <StateFieldDropDown TValue="Guid?" TItem="CustomerContact" @bind-Value="Context.Entity!.ContactId" Data="@Context.ContactsOf(Context.Entity!.CustomerId)"
+                                TextProperty="FullName" Label="Contact" Name="job-contact" Placeholder="Choose one of the customer's contacts" AllowClear="true" />
+        </div>
+        <StateFieldDropDown TValue="Guid" TItem="OrganizationUnit" @bind-Value="Context.Entity!.OrganizationUnitId" Data="@Context.Units"
+                            TextProperty="Name" Label="Unit" Name="job-unit" Placeholder="Choose a unit in use" AllowFiltering="true" />
+        <StateFieldDropDown TValue="JobSchedule" TItem="ScheduleOption" @bind-Value="Context.Entity!.Schedule" @bind-Value:after="ScheduleChosenAsync" Data="@ScheduleOptions"
+                            TextProperty="Label" ValueProperty="Value" Label="Schedule" Name="job-schedule" />
+        @if (Context.Entity!.Schedule == JobSchedule.Single)
+        {
+            <div class="field-row">
+                <StateFieldDatePicker TValue="DateOnly" @bind-Value="Context.Entity!.PeriodStart" @bind-Value:after="TimesEdited" Label="Day" Name="job-day" />
+                <StateFieldTime @bind-Value="Context.Entity!.StartTime" @bind-Value:after="TimesEdited" Label="Starts" Name="job-start-time" />
+                <StateFieldTime @bind-Value="Context.Entity!.EndTime" @bind-Value:after="TimesEdited" Label="Ends" Name="job-end-time"
+                                Helper="@(EndsNextDay ? "Ends the next day." : null)" />
+            </div>
+        }
+        else
+        {
+        <div class="field-row">
+            <StateFieldDatePicker TValue="DateOnly" @bind-Value="Context.Entity!.PeriodStart" Label="Period starts" Name="job-period-start" />
+            <StateFieldDatePicker TValue="DateOnly" @bind-Value="Context.Entity!.PeriodEnd" Label="Period ends" Name="job-period-end" />
+        </div>
+        }
+        <StateCustomFields TValue="JobAttribute" Values="@Context.Entity!.Attributes" NamePrefix="job-attribute" />
+        <JobStaffSection Entries="@Context.Staff" Version="@Context.Version" />
+    </div>
+</StateEntityDialogViewPanel>
+<StateEntityDialogViewPanel Key="@JobDialogContext.StaffingView">
+    <JobStaffingView Version="@Context.Version" />
+</StateEntityDialogViewPanel>
+<StateEntityDialogViewPanel Key="@JobDialogContext.PlaceView">
+    <StateAreaFieldset Area="@JobWorkflowAttribute.AreaPlace" Legend="Place">
+        <StateFieldTextBox @bind-Value="Context.Entity!.PlaceName" Label="Place" MaxLength="@Job.PlaceNameMaxLength" Name="job-place-name" />
+        <StateFieldTextBox @bind-Value="Context.Entity!.StreetAddress" Label="Street address" MaxLength="@Job.StreetAddressMaxLength" Name="job-street" />
+        <div class="field-row">
+            <StateFieldTextBox @bind-Value="Context.Entity!.PostalCode" Label="Postal code" MaxLength="@Job.PostalCodeMaxLength" Name="job-postal-code" />
+            <StateFieldTextBox @bind-Value="Context.Entity!.City" Label="City" MaxLength="@Job.CityMaxLength" Name="job-city" />
+        </div>
+        <StateFieldTextArea @bind-Value="Context.Entity!.AccessNotes" Label="Access notes" MaxLength="@Job.AccessNotesMaxLength" Rows="3" Name="job-access-notes"
+                            Helper="Shown only to the staff assigned to the job." />
+    </StateAreaFieldset>
+</StateEntityDialogViewPanel>
+<StateEntityDialogViewPanel Key="@JobDialogContext.TimetableView">
+    @if (Context.Entity!.Schedule == JobSchedule.Single)
+    {
+        <p class="job-dialog__help" data-single-job-note>A single job has its day and times under Info.</p>
+    }
+    else
+    {
+    <StateAreaFieldset Area="@JobWorkflowAttribute.AreaTimetable" Legend="Weekly times">
+        <StateJobTimetable Area="@JobWorkflowAttribute.AreaTimetable" Values="@Context.Entity!.TimeSlots" NamePrefix="job-occurrence" />
+    </StateAreaFieldset>
+    }
+</StateEntityDialogViewPanel>
+<StateEntityDialogViewPanel Key="@JobDialogContext.SlotsView">
+    <StateEntityDialogChildList TItem="JobSlotRow"
+                                View="@JobDialogContext.SlotsView"
+                                RowKey="@(row => row.Id)"
+                                RowLabel="@(row => row.Name)"
+                                RowStateOf="@(row => row.State)"
+                                Label="Slots"
+                                ItemName="slot"
+                                ItemsName="slots"
+                                EmptyIcon="person_search"
+                                EmptyTitle="No slot yet"
+                                EmptyText="Add the staff members the job needs, such as a main staff member and an assistant, with the qualifications each requires."
+                                OpenRow="@OpenSlotAsync">
+        <Columns>
+            <ListColumn TItem="JobSlotRow" Title="Name" Primary="true">@context.Name</ListColumn>
+            <ListColumn TItem="JobSlotRow" Title="Qualifications">@context.QualificationsLabel</ListColumn>
+            <ListColumn TItem="JobSlotRow" Title="Coverage">@context.CoverageLabel</ListColumn>
+            <ListColumn TItem="JobSlotRow" Title="Staff">@context.StaffMembersLabel</ListColumn>
+        </Columns>
+    </StateEntityDialogChildList>
+</StateEntityDialogViewPanel>
+
+@code {
+    private int? shownVersion;
+
+    [Parameter, EditorRequired] public JobDialogContext Context { get; set; } = null!;
+
+    protected override void OnParametersSet()
+    {
+        if (this.shownVersion != Context.Version)
+        {
+            this.shownVersion = Context.Version;
+            Context.DisplayName = string.IsNullOrWhiteSpace(Context.Entity!.Name) ? null : Context.Entity.Name;
+        }
+    }
+
+    private void CustomerChosen()
+    {
+        var job = Context.Entity!;
+        if (job.Contact is { } contact && contact.CustomerId != job.CustomerId)
+        {
+            job.ContactId = null;
+            job.Contact = null;
+            Context.NotifyEdited();
+        }
+    }
+
+    private static readonly IReadOnlyList<ScheduleOption> ScheduleOptions = [new(JobSchedule.Single, "Single"), new(JobSchedule.Recurring, "Every week")];
+
+    private bool EndsNextDay => Context.Entity is { Schedule: JobSchedule.Single, StartTime: { } start, EndTime: { } end } && end <= start;
+
+    private async Task ScheduleChosenAsync()
+    {
+        var job = Context.Entity!;
+        if (job.Schedule == JobSchedule.Single)
+        {
+            if (job.TimeSlots.Count > 0)
+            {
+                var count = job.TimeSlots.Count;
+                if (!await DialogService.ConfirmAsync($"Remove the {count} weekly {(count == 1 ? "time" : "times")}? A single job has its day and times instead.", "Single job", "Remove"))
+                {
+                    job.Schedule = JobSchedule.Recurring;
+                    Context.NotifyEdited();
+                    return;
+                }
+
+                job.TimeSlots.Clear();
+            }
+
+            job.PeriodEnd = job.PeriodStart;
+            JobRules.Normalize(job);
+        }
+        else
+        {
+            (job.StartTime, job.EndTime) = (null, null);
+            job.PeriodEnd = job.PeriodStart.AddMonths(3);
+        }
+
+        Context.NotifyEdited();
+    }
+
+    private void TimesEdited()
+    {
+        JobRules.Normalize(Context.Entity!);
+        Context.NotifyEdited();
+    }
+
+    private sealed record ScheduleOption(JobSchedule Value, string Label);
+
+    private Task<StateEntityDialogResult> OpenSlotAsync(JobSlotRow row) => Context.OpenSlotAsync(DialogService, row);
+
+    internal static JobDialogContext ContextFor(JobService service, Guid? jobId) =>
+        new(service, jobId) { DefaultTitle = "Job", CreateTitle = "New job", EntityIcon = "work" };
+
+    public static Task<StateEntityDialogResult> OpenAsync(DialogService dialogService, JobService service, Guid jobId, StateEntityDialogOptions? options = null) =>
+        dialogService.OpenStateEntityDialogAsync<JobDialog, JobDialogContext>(ContextFor(service, jobId), options);
+
+    public static Task<StateEntityDialogResult> OpenStaffingAsync(DialogService dialogService, JobService service, Guid jobId, Guid slotId)
+    {
+        var context = ContextFor(service, jobId);
+        context.StaffingSlot = slotId;
+        return dialogService.OpenStateEntityDialogAsync<JobDialog, JobDialogContext>(context, new StateEntityDialogOptions { View = JobDialogContext.StaffingView });
+    }
+
+    public static Task<StateEntityDialogResult> OpenCreateAsync(DialogService dialogService, JobService service) =>
+        dialogService.OpenStateEntityDialogAsync<JobDialog, JobDialogContext>(ContextFor(service, null));
+}

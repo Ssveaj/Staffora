@@ -1,0 +1,143 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1200" viewBox="0 0 1200 1200" fill="none" aria-hidden="true" focusable="false">
+  <!--
+    The sign-in page's art (docs/features.md, "Sign-in page"): an abstract map of the staffing network on the brand's deep
+    ink teal. A hub with gentle concentric orbits, companies as ringed nodes on them, smaller satellites (portals, people)
+    joined by hairlines, three softly glowing points and a fine dot grid that fades away from the hub. No text. The
+    colours are the values of the ink tokens in app.tokens.css (ink #0b2e2b, ink strong #082522, ink accent #5eead4, ink
+    glow #2dd4bf, on ink muted #a9cbc5), since an image cannot read custom properties. The hub
+    sits right of centre, so the page's words on the left stand over the calm part of the picture.
+  -->
+  <defs>
+    <linearGradient id="base" x1="0" y1="0" x2="0.4" y2="1">
+      <stop offset="0" stop-color="#0b2e2b"/>
+      <stop offset="1" stop-color="#082522"/>
+    </linearGradient>
+    <radialGradient id="ambient" cx="1010" cy="260" r="620" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2dd4bf" stop-opacity="0.16"/>
+      <stop offset="1" stop-color="#2dd4bf" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="pool" cx="240" cy="1180" r="560" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0f766e" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#0f766e" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glow">
+      <stop offset="0" stop-color="#5eead4" stop-opacity="0.55"/>
+      <stop offset="0.35" stop-color="#2dd4bf" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#2dd4bf" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="grid-fade" cx="860" cy="620" r="640" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.9"/>
+      <stop offset="0.6" stop-color="#ffffff" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="dots" width="26" height="26" patternUnits="userSpaceOnUse">
+      <circle cx="13" cy="13" r="1.1" fill="#a9cbc5"/>
+    </pattern>
+    <mask id="grid-mask">
+      <rect width="1200" height="1200" fill="url(#grid-fade)"/>
+    </mask>
+  </defs>
+
+  <!-- The ink, a soft light from the top right and a deeper teal pool at the bottom left. -->
+  <rect width="1200" height="1200" fill="url(#base)"/>
+  <rect width="1200" height="1200" fill="url(#ambient)"/>
+  <rect width="1200" height="1200" fill="url(#pool)"/>
+
+  <!-- The fine dot grid, strongest around the hub. -->
+  <rect width="1200" height="1200" fill="url(#dots)" mask="url(#grid-mask)" opacity="0.28"/>
+
+  <!-- Depth: two tilted orbits behind the rings, like paths seen at an angle. -->
+  <g stroke="#a9cbc5" stroke-width="1">
+    <ellipse cx="860" cy="640" rx="500" ry="168" transform="rotate(-24 860 640)" stroke-opacity="0.1"/>
+    <ellipse cx="860" cy="640" rx="340" ry="112" transform="rotate(34 860 640)" stroke-opacity="0.08"/>
+  </g>
+
+  <!-- The concentric orbits around the hub, fading outwards; two of them dotted. -->
+  <g stroke="#5eead4" stroke-width="1">
+    <circle cx="860" cy="640" r="110" stroke-opacity="0.26"/>
+    <circle cx="860" cy="640" r="190" stroke-opacity="0.2"/>
+    <circle cx="860" cy="640" r="285" stroke-opacity="0.32" stroke-width="1.6" stroke-linecap="round" stroke-dasharray="0.1 10"/>
+    <circle cx="860" cy="640" r="395" stroke-opacity="0.12"/>
+    <circle cx="860" cy="640" r="520" stroke-opacity="0.16" stroke-width="1.4" stroke-linecap="round" stroke-dasharray="0.1 14"/>
+    <circle cx="860" cy="640" r="660" stroke-opacity="0.06"/>
+  </g>
+
+  <!-- Hairline connectors: the hub to its companies, each company to its satellites, and an arc between two companies. -->
+  <g stroke="#5eead4" stroke-width="0.9" stroke-opacity="0.3" stroke-linecap="round">
+    <path d="M860 640 L955 476"/>
+    <path d="M860 640 L592 542"/>
+    <path d="M860 640 L995 1011"/>
+    <path d="M860 640 L693 282"/>
+    <path d="M955 476 L1120 190"/>
+    <path d="M955 476 L1128 543"/>
+    <path d="M693 282 L462 306"/>
+    <path d="M693 282 L860 120"/>
+    <path d="M592 542 L489 505"/>
+    <path d="M995 1011 L811 921"/>
+    <path d="M995 1011 L955 805"/>
+  </g>
+  <g stroke="#a9cbc5" stroke-width="0.8" stroke-opacity="0.2" stroke-linecap="round" fill="none">
+    <path d="M693 282 Q 880 300 955 476"/>
+    <path d="M592 542 Q 640 840 811 921"/>
+    <path d="M1128 543 Q 1150 800 995 1011"/>
+  </g>
+
+  <!-- Three softly glowing points: the hub and two companies. -->
+  <circle cx="860" cy="640" r="120" fill="url(#glow)"/>
+  <circle cx="955" cy="476" r="78" fill="url(#glow)" opacity="0.85"/>
+  <circle cx="693" cy="282" r="64" fill="url(#glow)" opacity="0.7"/>
+
+  <!-- The hub. -->
+  <circle cx="860" cy="640" r="42" stroke="#5eead4" stroke-opacity="0.3"/>
+  <circle cx="860" cy="640" r="24" fill="#0b2e2b" stroke="#5eead4" stroke-width="1.6"/>
+  <circle cx="860" cy="640" r="8" fill="#5eead4"/>
+  <circle cx="860" cy="640" r="3" fill="#f0fdfa"/>
+
+  <!-- Companies: ringed nodes on the orbits. -->
+  <g stroke="#5eead4" stroke-width="1.4" fill="#0b2e2b">
+    <circle cx="955" cy="476" r="14"/>
+    <circle cx="592" cy="542" r="12" stroke-opacity="0.75"/>
+    <circle cx="995" cy="1011" r="13" stroke-opacity="0.7"/>
+    <circle cx="693" cy="282" r="13"/>
+  </g>
+  <g fill="#5eead4">
+    <circle cx="955" cy="476" r="5"/>
+    <circle cx="592" cy="542" r="4" fill-opacity="0.75"/>
+    <circle cx="995" cy="1011" r="4.5" fill-opacity="0.7"/>
+    <circle cx="693" cy="282" r="4.5"/>
+  </g>
+  <g fill="#f0fdfa">
+    <circle cx="955" cy="476" r="2"/>
+    <circle cx="693" cy="282" r="1.8"/>
+  </g>
+
+  <!-- Satellites: the portals and people around the companies, smaller and fainter. -->
+  <g fill="#a9cbc5">
+    <circle cx="1120" cy="190" r="5" fill-opacity="0.7"/>
+    <circle cx="1128" cy="543" r="5.5" fill-opacity="0.75"/>
+    <circle cx="462" cy="306" r="4.5" fill-opacity="0.55"/>
+    <circle cx="860" cy="120" r="4" fill-opacity="0.6"/>
+    <circle cx="489" cy="505" r="3.5" fill-opacity="0.45"/>
+    <circle cx="811" cy="921" r="5" fill-opacity="0.6"/>
+    <circle cx="955" cy="805" r="4" fill-opacity="0.65"/>
+    <circle cx="765" cy="585" r="3" fill-opacity="0.7"/>
+    <circle cx="955" cy="695" r="3.5" fill-opacity="0.7"/>
+    <circle cx="670" cy="640" r="3" fill-opacity="0.5"/>
+    <circle cx="600" cy="1090" r="3.5" fill-opacity="0.35"/>
+  </g>
+  <g stroke="#a9cbc5" stroke-width="1" fill="none">
+    <circle cx="1128" cy="543" r="11" stroke-opacity="0.3"/>
+    <circle cx="811" cy="921" r="10" stroke-opacity="0.25"/>
+    <circle cx="1120" cy="190" r="10" stroke-opacity="0.25"/>
+  </g>
+
+  <!-- A few far lights. -->
+  <g fill="#ccfbf1">
+    <circle cx="1060" cy="88" r="1.4" fill-opacity="0.55"/>
+    <circle cx="1170" cy="380" r="1.2" fill-opacity="0.45"/>
+    <circle cx="730" cy="160" r="1.2" fill-opacity="0.4"/>
+    <circle cx="1100" cy="880" r="1.4" fill-opacity="0.45"/>
+    <circle cx="1170" cy="1120" r="1.2" fill-opacity="0.35"/>
+    <circle cx="560" cy="80" r="1" fill-opacity="0.3"/>
+  </g>
+</svg>

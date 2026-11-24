@@ -1,0 +1,375 @@
+@page "/staffing/overview"
+@attribute [Authorize]
+@using System.Globalization
+@using Staffora.Core.Settings
+@using Staffora.Core.Staffing
+@using Staffora.Services.Coordination
+@using Staffora.Services.Home
+@using Staffora.Services.Jobs
+@using Staffora.Services.Settings
+@inject TenantHomeService HomeService
+@inject CoordinationService Workspace
+@inject JobService JobService
+@inject SlotAssignmentService AssignmentService
+@inject ResourceAbsenceService AbsenceService
+@inject DialogService DialogService
+@inject TenantClock Clock
+@inject TenantChangeFeed ChangeFeed
+
+<PermissionView Permission="RolePermission.ViewCoordination">
+    <Loading>
+        <HomeBoard aria-busy="true">
+            <HomeHero Label="Your staffing today">
+                <HomeHead Title="Staffing overview" Hero="true" />
+                <p class="home-hero__status" role="status">
+                    <span class="ui-spinner ui-spinner--sm" aria-hidden="true"></span>
+                    <span>Loading the overview...</span>
+                </p>
+            </HomeHero>
+        </HomeBoard>
+    </Loading>
+    <Authorized>
+        <LiveRefresh Interest="ChangeInterest.Coordination" OnChange="LoadAsync" Since="this.mark" />
+        <HomeBoard data-coordinator-home="@(this.loaded ? "ready" : "loading")" aria-busy="@(this.loaded ? "false" : "true")">
+            <HomeHero Label="Your staffing today">
+                <ChildContent>
+                    <HomeHead Title="Staffing overview"
+                              Eyebrow="@Overline"
+                              Description="What is short of staff, what waits for you, today's jobs and what the portals sent. Days and times follow your company's time zone."
+                              Hero="true" />
+
+                    @if (!this.loaded)
+                    {
+                        <p class="home-hero__status" role="status">
+                            <span class="ui-spinner ui-spinner--sm" aria-hidden="true"></span>
+                            <span>Loading the overview...</span>
+                        </p>
+                    }
+                    else if (this.home is { } figures)
+                    {
+                        <HomeHeroFigures Label="Your staffing in figures">
+                            <HomeHeroFigure Key="open-soon" Label="@($"Open within {HomeRules.SoonDays} days")" Value="@Number(figures.Staffing.OpenSlotsSoon)" Tone="HomeRules.OpenSlotsTone(figures.Staffing)"
+                                            Note="@(figures.Staffing.OpenSlots == 0 ? "no slot is open" : $"{HomeRules.Count(figures.Staffing.OpenSlots, "open slot", "open slots")} in all")" />
+                            <HomeHeroFigure Key="unanswered" Label="Without an answer" Value="@Number(figures.Answers.Unanswered)"
+                                            Note="@(figures.Answers.Unanswered == 0 ? "no request waits" : HomeRules.Count(figures.Answers.Unanswered, "request sent", "requests sent"))" />
+                            <HomeHeroFigure Key="yeses" Label="Waiting for your pick" Value="@Number(figures.Answers.YesCount)" Tone="HomeRules.WaitingTone(figures.Answers.YesCount)"
+                                            Note="@(figures.Answers.YesCount == 0 ? "nothing to pick" : HomeRules.Count(figures.Answers.YesCount, "yes to pick or let go", "yeses to pick or let go"))" />
+                            @if (figures.Approvals is { } approvals)
+                            {
+                                <HomeHeroFigure Key="approval" Label="Waiting for approval" Value="@Number(approvals.WaitingCount)" Tone="HomeRules.WaitingTone(approvals.WaitingCount)"
+                                                Note="@(approvals.WaitingCount == 0 ? "nothing to approve" : HomeRules.Count(approvals.WaitingCount, "absence request", "absence requests"))" />
+                            }
+                        </HomeHeroFigures>
+                    }
+                    else if (this.homeError is { } heroError)
+                    {
+                        <p class="home-hero__status" role="alert">@heroError</p>
+                    }
+                </ChildContent>
+                <Aside>
+                    @if (this.home?.Staffing is { } week)
+                    {
+                        <HomeRing Segments="HomeStaffingParts.SlotSegments(week)"
+                                  Title="@HomeRules.SlotRingTitle(week)"
+                                  Caption="@HomeRules.SlotRingCaption(week)"
+                                  CentreTone="@HomeToneClass.Of(HomeRules.SlotRingTone(week))"
+                                  Legend="HomeStaffingParts.SlotLegend(week)"
+                                  LegendLabel="This week's slots" />
+                    }
+                </Aside>
+            </HomeHero>
+
+            <HomeFloor>
+                <div class="home-floor__row home-floor__row--lifted">
+                    <HomeSheet Title="Short of staff" Note="@ShortNote" Href="/coordination" LinkText="Open coordination" Lifted="true" Wide="true" Rise="1" data-coordinator-section="short-of-staff">
+                        @if (this.snapshotError is { } workspaceError)
+                        {
+                            <EmptyState Icon="error" Title="What is short of staff could not be shown" Text="@workspaceError" Tone="UiTone.Warning" Role="alert" />
+                        }
+                        else if (this.shortRows is null)
+                        {
+                            <p class="home-calm" role="status"><span class="ui-spinner ui-spinner--sm" aria-hidden="true"></span><span>Reading the coordination...</span></p>
+                        }
+                        else if (this.shortRows.Count == 0)
+                        {
+                            <p class="home-calm home-calm--large">
+                                <MaterialSymbol Name="check_circle" />
+                                <span>Every slot of the jobs being staffed has its staff.</span>
+                            </p>
+                        }
+                        else
+                        {
+                            <ul class="home-rows" aria-label="Short of staff">
+                                @foreach (var row in this.shortRows.Take(HomeRules.Shown))
+                                {
+                                    <HomeRow Title="@row.Job"
+                                             Meta="@($"{row.Slot} · {row.Customer} · {row.StaffMembersLabel}")"
+                                             Aside="@($"{row.KindLabel} · {row.StartsLabel}")"
+                                             Date="LocalDay(row.NextOccurrenceUtc)"
+                                             Edge="HomeStaffingParts.ShortEdge(row.Kind)"
+                                             OnClick="() => OpenJobAsync(row.JobId)"
+                                             data-short-slot="@row.SlotId"
+                                             data-kind="@row.Kind" />
+                                }
+                            </ul>
+                            @if (this.shortRows.Count > HomeRules.Shown)
+                            {
+                                <p class="home-foot"><span>@($"Showing {HomeRules.Shown} of {this.shortRows.Count}. The rest are in the coordination's priority list.")</span></p>
+                            }
+                        }
+                    </HomeSheet>
+
+                    <HomeSheet Title="Waiting for you" Note="@WaitingNote" Lifted="true" Rise="2" data-coordinator-section="waiting">
+                        @if (this.home is { } waiting)
+                        {
+                            var messages = waiting.Portal is { MessageCount: > 0 } portal ? portal : null;
+                            var approvals = waiting.Approvals is { WaitingCount: > 0 } approve ? approve : null;
+                            @if (waiting.Answers.YesCount == 0 && approvals is null && messages is null)
+                            {
+                                <p class="home-calm home-calm--large">
+                                    <MaterialSymbol Name="check_circle" />
+                                    <span>@CalmWaiting(waiting)</span>
+                                </p>
+                            }
+
+                            @if (waiting.Answers.YesCount > 0)
+                            {
+                                <h3 class="home-list-title" id="waiting-yeses">Yeses to pick</h3>
+                                <ul class="home-rows" aria-labelledby="waiting-yeses">
+                                    @foreach (var yes in waiting.Answers.Yeses)
+                                    {
+                                        <HomeRow Title="@($"{yes.Staff} said yes")"
+                                                 Meta="@($"{yes.Job}: {yes.Slot} · {yes.Customer}")"
+                                                 Date="yes.PeriodStart"
+                                                 Edge="UiTone.Info"
+                                                 OnClick="() => OpenAssignmentAsync(yes.AssignmentId)"
+                                                 data-yes="@yes.AssignmentId" />
+                                    }
+                                </ul>
+                                @if (waiting.Answers.YesCount > waiting.Answers.Yeses.Count)
+                                {
+                                    <p class="home-foot"><span>@($"Showing {waiting.Answers.Yeses.Count} of {waiting.Answers.YesCount}. The rest are in the coordination.")</span></p>
+                                }
+                            }
+
+                            @if (approvals is not null)
+                            {
+                                <h3 class="home-list-title" id="waiting-approval">Absence to approve</h3>
+                                <ul class="home-rows" aria-labelledby="waiting-approval">
+                                    @foreach (var row in approvals.Waiting)
+                                    {
+                                        <HomeRow Title="@row.Staff" Meta="@($"{row.KindLabel} · {row.PeriodLabel}")" Edge="UiTone.Warning"
+                                                 OnClick="() => OpenAbsenceAsync(row.Id)" data-approval="@row.Id" />
+                                    }
+                                </ul>
+                                @if (approvals.WaitingCount > approvals.Waiting.Count)
+                                {
+                                    <p class="home-foot"><span>@($"Showing {approvals.Waiting.Count} of {approvals.WaitingCount}.")</span><span class="home-foot__links"><a class="home-link" href="/staffing/absence">All absence <MaterialSymbol Name="arrow_forward" /></a></span></p>
+                                }
+                            }
+
+                            @if (messages is not null)
+                            {
+                                <h3 class="home-list-title" id="waiting-messages">Customer messages</h3>
+                                <ul class="home-rows" aria-labelledby="waiting-messages">
+                                    @foreach (var message in messages.Messages)
+                                    {
+                                        <HomeRow Title="@message.Job"
+                                                 Meta="@($"{message.Customer} wrote · awaits your reply")"
+                                                 Aside="@PlatformOverviewRules.Ago(message.At, waiting.ReadAt)"
+                                                 Edge="UiTone.Info"
+                                                 OnClick="() => OpenJobAsync(message.JobId)"
+                                                 data-customer-message="@message.JobId" />
+                                    }
+                                </ul>
+                                @if (messages.MessageCount > messages.Messages.Count)
+                                {
+                                    <p class="home-foot"><span>@($"Showing {messages.Messages.Count} of {messages.MessageCount}.")</span></p>
+                                }
+                            }
+
+                            @if (waiting.WithoutWorkPattern is { } withoutPattern)
+                            {
+                                <HomePatternLine Count="withoutPattern" data-waiting="no-pattern" />
+                            }
+                        }
+                        else if (this.homeError is { } waitingError)
+                        {
+                            <EmptyState Icon="error" Title="What waits for you could not be shown" Text="@waitingError" Tone="UiTone.Warning" Role="alert" />
+                        }
+                    </HomeSheet>
+                </div>
+
+                @if (this.home is { } floor)
+                {
+                    <div class="home-floor__row">
+                        <HomeSheet Title="Today" Note="@TodayNote(floor)" Href="/staffing/jobs" LinkText="Jobs" Wide="true" Rise="3" data-coordinator-section="today">
+                            @if (floor.TodayJobs.Count == 0)
+                            {
+                                <p class="home-calm"><MaterialSymbol Name="event_available" /><span>No job has a time today.</span></p>
+                            }
+                            else
+                            {
+                                <ul class="home-rows" aria-label="Today">
+                                    @foreach (var job in floor.TodayJobs.Take(HomeRules.Shown))
+                                    {
+                                        <HomeRow Title="@job.Job"
+                                                 Meta="@($"{job.TimesLabel}{(job.Place is { } place ? $" · {place}" : string.Empty)} · {job.Customer}")"
+                                                 Aside="@job.HeldLabel"
+                                                 Edge="@(job.Held < job.Slots ? UiTone.Warning : UiTone.Success)"
+                                                 OnClick="() => OpenJobAsync(job.JobId)"
+                                                 data-today-job="@job.JobId" />
+                                    }
+                                </ul>
+                                @if (floor.TodayJobs.Count > HomeRules.Shown)
+                                {
+                                    <p class="home-foot"><span>@($"Showing {HomeRules.Shown} of {floor.TodayJobs.Count}. The rest are in the coordination's day.")</span></p>
+                                }
+                            }
+                        </HomeSheet>
+
+                        @if (floor.Portal is { } portals)
+                        {
+                            <HomeSheet Title="From the portals" Note="@PortalNote(portals)" Href="/staffing/customers" LinkText="Customers" Rise="4" data-coordinator-section="portals">
+                                @if (portals.Orders.Count == 0)
+                                {
+                                    <p class="home-calm"><MaterialSymbol Name="check_circle" /><span>No portal order waits for a coordinator or is being staffed.</span></p>
+                                }
+                                else
+                                {
+                                    <ul class="home-rows" aria-label="From the portals">
+                                        @foreach (var order in portals.Orders)
+                                        {
+                                            <HomeRow Title="@order.Job"
+                                                     Meta="@($"{order.Customer} · from {HomeRules.DayText(order.PeriodStart)}")"
+                                                     Aside="@order.StateLabel"
+                                                     Date="order.PeriodStart"
+                                                     Edge="@(order.State == Staffora.Core.Entities.Jobs.JobState.AwaitingCoordination ? UiTone.Warning : UiTone.Info)"
+                                                     OnClick="() => OpenJobAsync(order.JobId)"
+                                                     data-portal-order="@order.JobId" />
+                                        }
+                                    </ul>
+                                    @if (portals.Counts.Waiting + portals.Counts.BeingStaffed > portals.Orders.Count)
+                                    {
+                                        <p class="home-foot"><span>@($"Showing {portals.Orders.Count} of {portals.Counts.Waiting + portals.Counts.BeingStaffed}.")</span></p>
+                                    }
+                                }
+                            </HomeSheet>
+                        }
+                    </div>
+                }
+            </HomeFloor>
+        </HomeBoard>
+    </Authorized>
+    <NotAuthorized>
+        <HomeBoard>
+            <HomeBand Head="true">
+                <HomeHead Title="Staffing overview" />
+            </HomeBand>
+            <HomeBand>
+                <EmptyState Icon="lock" Title="Access denied" Text="You do not have permission to view the staffing overview." Tone="UiTone.Warning" Role="alert" />
+            </HomeBand>
+        </HomeBoard>
+    </NotAuthorized>
+</PermissionView>
+
+@code {
+    private CoordinatorHome? home;
+    private string? homeError;
+    private IReadOnlyList<CoordinationSlotRow>? shortRows;
+    private string? snapshotError;
+    private TimeZoneInfo? zone;
+    private bool loaded;
+
+    private long? mark;
+
+    private DateTimeOffset? localNow;
+
+    private string Overline => string.Join(" · ", new[]
+    {
+        this.home?.TenantName,
+        this.localNow?.ToString("dddd d MMMM", CultureInfo.InvariantCulture),
+        this.localNow?.ToString("HH:mm", CultureInfo.InvariantCulture),
+    }.Where(part => !string.IsNullOrWhiteSpace(part)));
+
+    private string? ShortNote => this.shortRows is { } rows
+        ? rows.Count == 0 ? "Nothing is short of staff" : $"{HomeRules.Count(rows.Count, "slot group", "slot groups")} short of staff, the soonest first"
+        : null;
+
+    private string? WaitingNote => this.home is { } read
+        ? WaitingCount(read) is var count and > 0 ? $"{HomeRules.Count(count, "thing", "things")} to decide. Open one to act on it" : "Nothing waits for you"
+        : null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        this.mark = ChangeFeed.Mark();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        var now = await Clock.NowAsync();
+        this.localNow = now.IsSuccess ? now.Value : null;
+
+        var home = await HomeService.ReadCoordinatorAsync();
+        this.home = home.IsSuccess ? home.Value : null;
+        this.homeError = home.IsSuccess ? null : home.Error;
+
+        var snapshot = await Workspace.ReadAsync();
+        if (snapshot.IsSuccess && snapshot.Value is { } coordination)
+        {
+            this.zone = IanaTimeZones.TryFind(coordination.TimeZoneId, out var found) ? found : null;
+            this.shortRows = coordination.ShortOfStaff();
+            this.snapshotError = null;
+        }
+        else
+        {
+            this.shortRows = null;
+            this.snapshotError = snapshot.Error ?? CoordinationService.ReadFailed;
+        }
+
+        this.loaded = true;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task OpenJobAsync(Guid jobId)
+    {
+        await JobDialog.OpenAsync(DialogService, JobService, jobId);
+        await LoadAsync();
+    }
+
+    private async Task OpenAssignmentAsync(Guid assignmentId)
+    {
+        await SlotAssignmentDialog.OpenAsync(DialogService, AssignmentService, assignmentId);
+        await LoadAsync();
+    }
+
+    private async Task OpenAbsenceAsync(Guid absenceId)
+    {
+        await AbsenceDialog.OpenAsync(DialogService, AbsenceService, absenceId);
+        await LoadAsync();
+    }
+
+    private static int WaitingCount(CoordinatorHome read) =>
+        read.Answers.YesCount + (read.Approvals?.WaitingCount ?? 0) + (read.Portal?.MessageCount ?? 0);
+
+    private static string CalmWaiting(CoordinatorHome read) => string.Join(" ", new[]
+    {
+        "No yes waits for your pick.",
+        read.Approvals is not null ? "No absence waits for approval." : null,
+        read.Portal is not null ? "No customer message waits for a reply." : null,
+    }.Where(part => part is not null));
+
+    private static string TodayNote(CoordinatorHome read) => read.TodayJobs.Count == 0
+        ? "Nothing on today"
+        : $"{HomeRules.Count(read.TodayJobs.Count, "job", "jobs")} today · {Number(read.TodayJobs.Sum(job => job.Held))} of {HomeRules.Count(read.TodayJobs.Sum(job => job.Slots), "slot", "slots")} held";
+
+    private static string PortalNote(HomePortal portal) =>
+        $"{Number(portal.Counts.Waiting)} waiting for a coordinator · {Number(portal.Counts.BeingStaffed)} being staffed";
+
+    private DateOnly? LocalDay(DateTime? utc) => utc is { } instant && this.zone is { } tenantZone
+        ? DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(instant, DateTimeKind.Utc), tenantZone))
+        : null;
+
+    private static string Number(int value) => value.ToString(CultureInfo.InvariantCulture);
+}

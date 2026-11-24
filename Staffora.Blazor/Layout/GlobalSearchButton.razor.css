@@ -1,0 +1,25 @@
+.global-search-trigger {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    margin-inline-end: var(--space-2);
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: 9px;
+    background: none;
+    color: var(--color-text-muted);
+    cursor: pointer;
+}
+
+    .global-search-trigger:hover {
+        background: var(--color-surface-sunken);
+        color: var(--color-text);
+    }
+
+    .global-search-trigger:focus-visible {
+        outline: none;
+        box-shadow: var(--focus-ring);
+    }

@@ -1,0 +1,110 @@
+.state-entity-dialog-header {
+    position: relative;
+    z-index: 2;
+    flex: none;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-1) var(--space-3);
+    min-height: 2.5rem;
+    padding: var(--space-1) var(--space-2) 0.45rem var(--space-4);
+    border-radius: 0 var(--radius-sm) 0 0;
+    background: var(--dialog-header-fill, var(--color-accent));
+    color: var(--dialog-header-text, var(--color-on-accent));
+}
+
+::deep .state-entity-dialog-header__icon {
+    flex: none;
+    color: inherit;
+    font-size: 1.5rem;
+}
+
+.state-entity-dialog-header__title {
+    flex: 1;
+    min-width: min(10rem, 100%);
+    margin: 0;
+    color: inherit;
+    font-size: var(--font-size-lg);
+    font-weight: var(--font-weight-semibold);
+    line-height: var(--line-height-tight);
+    overflow-wrap: anywhere;
+}
+
+.state-entity-dialog-header__title:focus {
+    outline: none;
+}
+
+.state-entity-dialog-header__title:focus-visible {
+    outline: none;
+    text-decoration: underline 2px color-mix(in srgb, currentColor 50%, transparent);
+    text-underline-offset: 0.3em;
+}
+
+.state-entity-dialog-header__unsaved {
+    flex: none;
+    padding: 0 var(--space-2);
+    border: 1px solid currentColor;
+    border-radius: var(--radius-full);
+    color: inherit;
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-semibold);
+    line-height: 1.4rem;
+}
+
+.state-entity-dialog-header__actions {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: 2px;
+    margin-left: auto;
+}
+
+.state-entity-dialog-header__history-host {
+    display: inline-flex;
+}
+
+::deep .state-entity-dialog-header__button.rz-button {
+    width: 32px;
+    min-width: 32px;
+    height: 32px;
+    padding: 0;
+    border-radius: var(--radius-full);
+    background: transparent;
+    color: inherit;
+}
+
+::deep .state-entity-dialog-header__button.rz-button .rz-button-icon-left {
+    color: inherit;
+    font-size: 1.25rem;
+}
+
+::deep .state-entity-dialog-header__button.rz-button:not(.rz-state-disabled):hover {
+    background: color-mix(in srgb, currentColor 14%, transparent);
+    color: inherit;
+}
+
+::deep .state-entity-dialog-header__button.rz-button:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: -2px;
+    box-shadow: none;
+}
+
+.state-entity-dialog-header ::deep .state-pill {
+    position: absolute;
+    right: var(--space-4);
+    bottom: -0.7rem;
+    z-index: 3;
+}
+
+@media (max-width: 640px) {
+    .state-entity-dialog-header {
+        padding-left: var(--space-4);
+        padding-right: calc(var(--space-2) + 4.75rem);
+    }
+
+    .state-entity-dialog-header__actions {
+        position: absolute;
+        top: var(--space-2);
+        right: var(--space-2);
+    }
+}

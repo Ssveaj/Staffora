@@ -1,0 +1,103 @@
+@page "/portal/orders"
+@inject OrderService OrderService
+@inject DialogService DialogService
+
+<PermissionView Permission="RolePermission.OrdersView">
+    <Loading>
+        <PageScaffold Class="page-scaffold--column">
+            <Main>
+                <LoadingState Text="Loading your orders…" />
+            </Main>
+        </PageScaffold>
+    </Loading>
+    <Authorized>
+        <PageScaffold Class="page-scaffold--column">
+            <Header>
+                <PageHeader Title="My orders"
+                            Count="@(this.count)"
+                            Description="The jobs you asked your staffing company to staff, and where each one stands."
+                            Icon="list_alt"
+                            RootText="Portal"
+                            RootPath="/portal">
+                    <Actions>
+                        <PermissionView Permission="RolePermission.OrdersCreate">
+                            <Authorized>
+                                <IconTextButton Text="New order"
+                                                Icon="post_add"
+                                                ButtonStyle="ButtonStyle.Primary"
+                                                Click="CreateRequestAsync" />
+                            </Authorized>
+                        </PermissionView>
+                    </Actions>
+                </PageHeader>
+            </Header>
+            <Main>
+                <PageSection>
+                    <ListView @ref="this.list"
+                              TItem="OrderListItem"
+                              TotalChanged="@(total => this.count = total)"
+                              Id="orders"
+                              Label="Orders"
+                              ItemName="order"
+                              ItemsName="orders"
+                              Definition="OrderList.Definition"
+                              Load="LoadAsync"
+                              RowKey="request => request.Id"
+                              RowLabel="request => request.Name"
+                              RowState="request => ListRowState.Of(request.State)"
+                              StateTitle="State"
+                              RowLink="@(request => DetailsPath(request.Id))"
+                              SearchPlaceholder="Job or description"
+                              EmptyIcon="inbox"
+                              EmptyText="No order yet. Write one to ask your staffing company for staff members.">
+                        <Columns>
+                            <ListColumn TItem="OrderListItem" Title="Job" Primary="true">
+                                @context.Name
+                            </ListColumn>
+                            <ListColumn TItem="OrderListItem" Title="Period">
+                                @context.PeriodLabel
+                            </ListColumn>
+                            <ListColumn TItem="OrderListItem" Title="Written by">
+                                @(context.IsOwn ? "You" : context.Orderer)
+                            </ListColumn>
+                            <ListColumn TItem="OrderListItem" Title="Written">
+                                @context.Written.ToString("yyyy-MM-dd")
+                            </ListColumn>
+                        </Columns>
+                    </ListView>
+                </PageSection>
+            </Main>
+        </PageScaffold>
+    </Authorized>
+    <NotAuthorized>
+        <PageScaffold Class="page-scaffold--column">
+            <Header>
+                <PageHeader Title="My orders" Icon="list_alt" RootText="Portal" RootPath="/portal" />
+            </Header>
+            <Main>
+                <PageSection>
+                    <EmptyState Icon="lock" Title="Access denied" Text="You do not have permission to view your organization's orders." Tone="UiTone.Warning" Role="alert" />
+                </PageSection>
+            </Main>
+        </PageScaffold>
+    </NotAuthorized>
+</PermissionView>
+
+@code {
+    private ListView<OrderListItem>? list;
+
+    private int? count;
+
+    internal static string DetailsPath(Guid id) => $"/portal/orders/{id}";
+
+    private Task<Result<ListPage<OrderListItem>>> LoadAsync(ListQuery query) => OrderService.QueryRequestsAsync(query);
+
+    private async Task CreateRequestAsync()
+    {
+        var result = await OrderDialog.OpenCreateAsync(DialogService, OrderService);
+        if (result.EntityId is not null && this.list is not null)
+        {
+            await this.list.ReloadAsync();
+        }
+    }
+}

@@ -1,0 +1,30 @@
+﻿@page "/"
+
+@using Microsoft.AspNetCore.Authorization
+@using Staffora.Blazor.Layout
+@using Staffora.Services.Authorization
+
+@attribute [Authorize]
+@attribute [CustomerPortalPage]
+
+<PageTitle>Staffora</PageTitle>
+
+@inject NavigationManager NavigationManager
+@inject IRuntimeExecutionContext Runtime
+@inject PermissionService Permissions
+
+@code {
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        var session = Runtime.Current;
+        var console = session.HasPlatformReach();
+        var edition = console ? TenantEdition.Staffing : await Permissions.GetEditionAsync(session);
+        var start = AppHome.For(console, edition, console ? new HashSet<RolePermission>() : await Permissions.GetUserPermissionsAsync(session));
+        NavigationManager.NavigateTo(start, new NavigationOptions { ReplaceHistoryEntry = true });
+    }
+}

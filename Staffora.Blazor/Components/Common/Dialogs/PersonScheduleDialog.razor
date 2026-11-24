@@ -1,0 +1,19 @@
+@using Staffora.Blazor.Components.Common.Schedule
+
+<FormDialogFrame ReadOnly="true">
+    <div class="person-schedule-dialog" data-person-schedule="@ResourceId">
+        <PersonSchedule ResourceId="ResourceId" @bind-Month="this.month" ShowPatternWeeks="false" />
+    </div>
+</FormDialogFrame>
+
+@code {
+    [Parameter, EditorRequired] public Guid ResourceId { get; set; }
+
+    private DateOnly? month;
+
+    public static Task OpenAsync(DialogService dialogService, Guid resourceId, string name) =>
+        dialogService.OpenFormDialogAsync<PersonScheduleDialog>(
+            $"Schedule of {name}",
+            parameters => parameters.Set(dialog => dialog.ResourceId, resourceId),
+            new FormDialogOptions { Width = "1280px", Icon = "calendar_month", CloseOnOverlayClick = true });
+}

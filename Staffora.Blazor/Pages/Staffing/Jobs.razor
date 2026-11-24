@@ -1,0 +1,117 @@
+@page "/staffing/jobs"
+@attribute [Authorize]
+@using Staffora.Services.Jobs
+@inject JobService JobService
+@inject DialogService DialogService
+
+<PermissionView AnyOf="readers">
+    <Loading>
+        <PageScaffold>
+            <Main>
+                <LoadingState Text="Loading jobs…" />
+            </Main>
+        </PageScaffold>
+    </Loading>
+    <Authorized>
+        <PageScaffold>
+            <Header>
+                <PageHeader Title="Jobs"
+                            Count="@(this.count)"
+                            Description="The jobs you staff for your customers, with their timetable and the staff members they need."
+                            Icon="work"
+                            RootText="Staffing">
+                    <Actions>
+                        <PermissionView Permission="RolePermission.JobsCreate">
+                            <Authorized>
+                                <IconTextButton Text="New job"
+                                                Icon="add_circle"
+                                                ButtonStyle="ButtonStyle.Primary"
+                                                Click="CreateJobAsync" />
+                            </Authorized>
+                        </PermissionView>
+                    </Actions>
+                </PageHeader>
+            </Header>
+            <Main>
+                <PageSection>
+                    <ListView @ref="this.list"
+                              TItem="JobListItem"
+                              TotalChanged="@(total => this.count = total)"
+                              Id="jobs"
+                              Label="Jobs"
+                              ItemName="job"
+                              ItemsName="jobs"
+                              Definition="JobList.Definition"
+                              Load="LoadAsync"
+                              RowKey="job => job.Id"
+                              RowLabel="job => job.Name"
+                              RowState="job => ListRowState.Of(job.State)"
+                              OnOpen="OpenJobAsync"
+                              SearchPlaceholder="Job or customer"
+                              EmptyIcon="work"
+                              EmptyText="No job yet. Register the jobs your customers need staff members for.">
+                        <Columns>
+                            <ListColumn TItem="JobListItem" Title="Name" Primary="true" Subtitle="job => job.Customer">
+                                @context.Name
+                            </ListColumn>
+                            <ListColumn TItem="JobListItem" Title="Period">
+                                @context.PeriodLabel
+                            </ListColumn>
+                            <ListColumn TItem="JobListItem" Title="Unit">
+                                @context.Unit
+                            </ListColumn>
+                            <ListColumn TItem="JobListItem" Title="Coordinator">
+                                @(context.Coordinator ?? "None yet")
+                            </ListColumn>
+                            <ListColumn TItem="JobListItem" Title="Coverage">
+                                @context.CoverageLabel
+                            </ListColumn>
+                        </Columns>
+                    </ListView>
+                </PageSection>
+            </Main>
+        </PageScaffold>
+    </Authorized>
+    <NotAuthorized>
+        <PageScaffold>
+            <Header>
+                <PageHeader Title="Jobs" Icon="work" RootText="Staffing" />
+            </Header>
+            <Main>
+                <PageSection>
+                    <EmptyState Icon="lock" Title="Access denied" Text="You do not have permission to view jobs." Tone="UiTone.Warning" Role="alert" />
+                </PageSection>
+            </Main>
+        </PageScaffold>
+    </NotAuthorized>
+</PermissionView>
+
+@code {
+    private static readonly RolePermission[] readers =
+    [
+        RolePermission.JobsView,
+        RolePermission.JobsCreate,
+        RolePermission.JobsEdit,
+        RolePermission.JobsDelete,
+        RolePermission.JobsCancel,
+        RolePermission.ViewCoordination,
+        RolePermission.PerformCoordination,
+    ];
+
+    private ListView<JobListItem>? list;
+
+    private int? count;
+
+    private Task<Result<ListPage<JobListItem>>> LoadAsync(ListQuery query) => JobService.QueryJobsAsync(query);
+
+    private async Task CreateJobAsync()
+    {
+        var result = await JobDialog.OpenCreateAsync(DialogService, JobService);
+        if (result.EntityId is not null && this.list is not null)
+        {
+            await this.list.ReloadAsync();
+        }
+    }
+
+    private Task OpenJobAsync(JobListItem job) => JobDialog.OpenAsync(DialogService, JobService, job.Id);
+}

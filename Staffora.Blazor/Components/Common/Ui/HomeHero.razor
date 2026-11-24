@@ -1,0 +1,23 @@
+<section class="home-hero" aria-label="@Label" @attributes="AdditionalAttributes">
+    <div class="home-hero__inner">
+        <div class="home-hero__main home-hero-rise">
+            @ChildContent
+        </div>
+        @if (Aside is not null)
+        {
+            <div class="home-hero__aside home-hero-rise home-hero-rise--2">
+                @Aside
+            </div>
+        }
+    </div>
+</section>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter] public RenderFragment? Aside { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)] public IReadOnlyDictionary<string, object>? AdditionalAttributes { get; set; }
+}

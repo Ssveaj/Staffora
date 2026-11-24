@@ -1,0 +1,59 @@
+@using Staffora.Services.Customers
+@inject DialogService DialogService
+
+<FormDialogFrame OnSave="EnableAsync" SaveText="Enable portal" SaveIcon="add_link" SaveDisabled="@(!Ready)">
+    <p class="enable-portal__note">
+        The customer gets a portal of its own to request staff members from you. Its first customer administrator signs in with an
+        initial password shown to you once, and adds the customer's orderers.
+    </p>
+    <RadzenFormField Text="Unit for portal jobs" Component="enable-portal-unit" Style="width: 100%;">
+        <RadzenDropDown Name="enable-portal-unit" InputAttributes="@FieldLabel.Of("Unit for portal jobs")" @bind-Value="this.unitId"
+                        Data="@Units" TextProperty="Name" ValueProperty="Id" TValue="Guid?"
+                        AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
+                        Placeholder="Select a unit" Style="width: 100%;" />
+    </RadzenFormField>
+
+    <fieldset class="enable-portal__administrator">
+        <legend class="enable-portal__legend">First customer administrator</legend>
+        <div class="enable-portal__pair">
+            <RadzenFormField Text="First name" Component="enable-portal-first-name" Style="width: 100%;">
+                <RadzenTextBox Name="enable-portal-first-name" @bind-Value="this.firstName" MaxLength="@TenantOnboardingService.NameMaxLength" />
+            </RadzenFormField>
+            <RadzenFormField Text="Last name" Component="enable-portal-last-name" Style="width: 100%;">
+                <RadzenTextBox Name="enable-portal-last-name" @bind-Value="this.lastName" MaxLength="@TenantOnboardingService.NameMaxLength" />
+            </RadzenFormField>
+        </div>
+        <RadzenFormField Text="Email" Component="enable-portal-email" Style="width: 100%;">
+            <RadzenTextBox Name="enable-portal-email" @bind-Value="this.email" MaxLength="@TenantOnboardingService.EmailMaxLength" />
+        </RadzenFormField>
+    </fieldset>
+</FormDialogFrame>
+
+@code {
+    private Guid? unitId;
+    private string? firstName;
+    private string? lastName;
+    private string? email;
+
+    [Parameter, EditorRequired] public IReadOnlyList<CustomerPortalUnit> Units { get; set; } = [];
+
+    private bool Ready => this.unitId is not null && !string.IsNullOrWhiteSpace(this.firstName) && !string.IsNullOrWhiteSpace(this.lastName) && !string.IsNullOrWhiteSpace(this.email);
+
+    protected override void OnInitialized() => this.unitId = Units.FirstOrDefault()?.Id;
+
+    private Task EnableAsync()
+    {
+        if (Ready)
+        {
+            DialogService.Close(new CustomerPortalRequest(this.unitId, this.firstName, this.lastName, this.email));
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public static Task<CustomerPortalRequest?> OpenAsync(DialogService dialogService, string? customerName, IReadOnlyList<CustomerPortalUnit> units) =>
+        dialogService.OpenFormDialogAsync<EnableCustomerPortalDialog, CustomerPortalRequest>(
+            string.IsNullOrWhiteSpace(customerName) ? "Enable portal" : $"Enable the portal of {customerName}",
+            parameters => parameters.Set(dialog => dialog.Units, units),
+            new FormDialogOptions { Width = "480px" });
+}

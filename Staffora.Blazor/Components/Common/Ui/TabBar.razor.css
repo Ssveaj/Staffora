@@ -1,0 +1,54 @@
+.tab-bar {
+    display: flex;
+    gap: 2px;
+    min-width: 0;
+}
+
+.tab-bar__tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.25rem 0.4rem 0.5rem;
+    border: 0;
+    border-bottom: 2.5px solid transparent;
+    background: transparent;
+    color: var(--color-text-muted);
+    font: inherit;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+    .tab-bar__tab:hover {
+        color: var(--color-text);
+    }
+
+    .tab-bar__tab:focus-visible {
+        outline: none;
+        box-shadow: var(--focus-ring);
+    }
+
+.tab-bar__tab--selected {
+    border-bottom-color: var(--color-accent);
+    color: var(--color-text);
+}
+
+::deep .tab-bar__icon {
+    --icon-size: 1.1rem;
+}
+
+.tab-bar__count {
+    padding: 0 0.4rem;
+    border-radius: var(--radius-full);
+    background: var(--color-surface-sunken);
+    color: var(--color-text);
+    font-size: var(--font-size-2xs);
+    font-weight: var(--font-weight-bold);
+    line-height: 17px;
+}
+
+.tab-bar__tab--selected .tab-bar__count {
+    background: var(--color-text);
+    color: var(--color-text-inverse);
+}

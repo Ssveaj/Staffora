@@ -1,0 +1,14 @@
+﻿@using Staffora.Blazor.Components.Account.Shared
+<Router AppAssembly="typeof(Program).Assembly" NotFoundPage="typeof(Staffora.Blazor.Pages.NotFound)">
+    <Found Context="routeData">
+        <Staffora.Blazor.Helper.UrlState.UrlStatePageTracker RouteData="routeData" />
+        <CascadingValue Value="routeData">
+            <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(Staffora.Blazor.Layout.MainLayout)">
+                <NotAuthorized>
+                    <RedirectToLogin />
+                </NotAuthorized>
+            </AuthorizeRouteView>
+        </CascadingValue>
+        <FocusOnNavigate RouteData="routeData" Selector="h1" />
+    </Found>
+</Router>

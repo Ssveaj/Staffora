@@ -1,0 +1,93 @@
+.transition-button {
+    position: relative;
+    display: inline-flex;
+}
+
+.transition-button ::deep .transition-button__button.rz-button {
+    min-height: var(--control-height-md);
+    padding: 0 var(--space-3) 0 10px;
+    border: 1px solid var(--color-border-strong);
+    border-left: 3px solid var(--transition-accent, var(--color-accent));
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-1);
+    color: var(--color-text);
+    font-size: var(--font-size-dense);
+    font-weight: var(--font-weight-semibold);
+    white-space: nowrap;
+}
+
+.transition-button ::deep .transition-button__button.rz-button .rz-button-icon-left {
+    color: var(--transition-accent, var(--color-accent));
+    font-size: 1.15rem;
+}
+
+.transition-button ::deep .transition-button__button.rz-button:not([aria-disabled="true"]):hover {
+    background: color-mix(in srgb, var(--transition-accent, var(--color-accent)) 8%, var(--color-surface));
+    color: var(--color-text);
+}
+
+.transition-button ::deep .transition-button__button.rz-button:focus-visible {
+    outline: none;
+    box-shadow: var(--focus-ring);
+}
+
+.transition-button--blocked ::deep .transition-button__button,
+::deep .transition-button__button[aria-disabled="true"] {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.transition-button--busy ::deep .transition-button__button {
+    cursor: progress;
+}
+
+.transition-button--busy ::deep .transition-button__button .rz-button-icon-left {
+    animation: transition-button-spin 1s linear infinite;
+}
+
+@keyframes transition-button-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .transition-button--busy ::deep .transition-button__button .rz-button-icon-left {
+        animation: none;
+    }
+}
+
+.transition-button__card {
+    position: absolute;
+    bottom: calc(100% + var(--space-2));
+    left: 0;
+    z-index: 2;
+    display: none;
+    flex-direction: column;
+    gap: var(--space-1);
+    width: max-content;
+    max-width: min(20rem, calc(100vw - 2rem));
+    padding: var(--space-3);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-pop);
+    color: var(--color-text);
+    font-size: var(--font-size-sm);
+    line-height: var(--line-height-snug);
+}
+
+.transition-button:hover .transition-button__card,
+.transition-button:focus-within .transition-button__card {
+    display: flex;
+}
+
+.transition-button__reasons-title {
+    font-weight: var(--font-weight-semibold);
+}
+
+.transition-button__reasons {
+    margin: 0;
+    padding-left: var(--space-4);
+}

@@ -1,0 +1,111 @@
+@page "/tenant/management/roles"
+@attribute [Authorize]
+@inject TenantRoleService TenantRoleService
+@inject DialogService DialogService
+
+<PermissionView Permission="RolePermission.RolesView">
+    <Loading>
+        <PageScaffold>
+            <Main>
+                <LoadingState Text="Loading roles…" />
+            </Main>
+        </PageScaffold>
+    </Loading>
+    <Authorized>
+        <PageScaffold>
+            <Header>
+                <PageHeader Title="Roles & permissions"
+                            Count="@this.count"
+                            Description="Configure roles and their permissions for your organization"
+                            Icon="admin_panel_settings"
+                            RootText="Organization"
+                            RootPath="/tenant/management">
+                    <Actions>
+                        <PermissionView Permission="RolePermission.RolesCreate">
+                            <Authorized>
+                                <IconTextButton Text="New Role"
+                                                Icon="add"
+                                                ButtonStyle="ButtonStyle.Primary"
+                                                Click="CreateNewRoleAsync" />
+                            </Authorized>
+                        </PermissionView>
+                    </Actions>
+                </PageHeader>
+            </Header>
+            <Main>
+                <PageSection>
+                    <ListView @ref="this.list"
+                              TItem="TenantRoleRow"
+                              TotalChanged="@(total => this.count = total)"
+                              Id="roles"
+                              Label="Roles"
+                              ItemName="role"
+                              ItemsName="roles"
+                              Definition="TenantRoleList.Definition"
+                              Load="TenantRoleService.QueryRolesAsync"
+                              RowKey="role => role.Id"
+                              RowLabel="role => role.Name"
+                              RowState="role => ListRowState.Of(role.State)"
+                              OnOpen="OpenRoleAsync"
+                              SearchPlaceholder="Role name or description"
+                              EmptyIcon="badge"
+                              EmptyText="Roles are used to assign permissions to users.">
+                        <Columns>
+                            <ListColumn TItem="TenantRoleRow" Title="Role" Primary="true" Subtitle="PermissionSummary">
+                                @context.Name
+                            </ListColumn>
+                            <ListColumn TItem="TenantRoleRow" Title="Permissions">
+                                @context.PermissionCount
+                            </ListColumn>
+                            <ListColumn TItem="TenantRoleRow" Title="Staff role">
+                                @(context.IsStaffRole ? "Holders are staff members" : "—")
+                            </ListColumn>
+                            <ListColumn TItem="TenantRoleRow" Title="Held by">
+                                @(context.HolderCount == 1 ? "1 person" : $"{context.HolderCount} people")
+                            </ListColumn>
+                        </Columns>
+                    </ListView>
+                </PageSection>
+            </Main>
+        </PageScaffold>
+    </Authorized>
+    <NotAuthorized>
+        <PageScaffold>
+            <Header>
+                <PageHeader Title="Roles & permissions" Icon="admin_panel_settings" RootText="Organization" RootPath="/tenant/management" />
+            </Header>
+            <Main>
+                <PageSection>
+                    <EmptyState Icon="lock" Title="Access denied" Text="You do not have permission to view roles." Tone="UiTone.Warning" Role="alert" />
+                </PageSection>
+            </Main>
+        </PageScaffold>
+    </NotAuthorized>
+</PermissionView>
+
+@code {
+    private ListView<TenantRoleRow>? list;
+
+    private int? count;
+
+    private async Task CreateNewRoleAsync()
+    {
+        if ((await TenantRoleDialog.OpenCreateAsync(DialogService, TenantRoleService)).Changed && this.list is not null)
+        {
+            await this.list.ReloadAsync();
+        }
+    }
+
+    private Task OpenRoleAsync(TenantRoleRow role) => TenantRoleDialog.OpenAsync(DialogService, TenantRoleService, role.Id);
+
+    private static string PermissionSummary(TenantRoleRow role)
+    {
+        if (role.PermissionCount == 0)
+        {
+            return "No permissions";
+        }
+
+        var more = role.PermissionCount - role.FirstPermissions.Count;
+        return string.Join(", ", role.FirstPermissions.Select(permission => EnumDisplayHelper.GetDisplayName(permission))) + (more > 0 ? $" +{more}" : string.Empty);
+    }
+}

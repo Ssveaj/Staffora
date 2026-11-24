@@ -1,0 +1,228 @@
+@using System.Globalization
+@using Staffora.Core.Entities.Scheduling
+@using Staffora.Core.Scheduling
+@using Staffora.Core.Workflow.FieldAccess
+
+@if (Access.HasFlag(FieldAccessFlags.Visible))
+{
+    <div class="state-pattern-segments" data-area="@Area" data-access="@(Editable ? "editable" : "read-only")">
+        @if (!Editable)
+        {
+            <p class="state-pattern-segments__note">The working hours are read-only.</p>
+        }
+
+        @for (var week = 0; week < Weeks; week++)
+        {
+            @if (Weeks > 1)
+            {
+                <h3 class="state-pattern-segments__week">Week @(week + 1)</h3>
+            }
+
+            <ul class="state-pattern-segments__days">
+                @for (var weekday = 0; weekday < WorkPatternRules.DaysPerWeek; weekday++)
+                {
+                    var day = week * WorkPatternRules.DaysPerWeek + weekday;
+                    var label = WorkPatternRules.DayLabel(day, Weeks);
+                    var segments = SegmentsOn(day);
+                    <li class="state-pattern-segments__day" data-day="@day">
+                        <span class="state-pattern-segments__day-name" id="@($"{NamePrefix}-day-{day}")">@label</span>
+                        <div class="state-pattern-segments__hours" role="group" aria-labelledby="@($"{NamePrefix}-day-{day}")">
+                            @if (segments.Count == 0)
+                            {
+                                <span class="state-pattern-segments__off">Not working</span>
+                            }
+                            else if (!Editable)
+                            {
+                                <span data-hours>@string.Join(", ", segments.Select(TimesOf))</span>
+                            }
+                            else
+                            {
+                                @for (var place = 0; place < segments.Count; place++)
+                                {
+                                    @SegmentEditor(segments[place], label, place + 1)
+                                }
+                            }
+                        </div>
+                        @if (Editable)
+                        {
+                            <IconTextButton Text="Add hours" Icon="add" ButtonStyle="ButtonStyle.Primary" Size="ButtonSize.Small" Variant="Variant.Outlined"
+                                            aria-label="@($"Add hours on {label}")" data-add-day="@day" Click="@(() => Add(day))" />
+                        }
+                    </li>
+                }
+            </ul>
+        }
+
+        @if (Outside.Count > 0)
+        {
+            <div class="state-pattern-segments__outside" data-outside>
+                <p class="state-pattern-segments__note">On days the cycle no longer has: remove these hours, or make the cycle longer again.</p>
+                @for (var place = 0; place < Outside.Count; place++)
+                {
+                    @SegmentEditor(Outside[place], "outside the cycle", place + 1)
+                }
+            </div>
+        }
+
+        @if (Editable)
+        {
+            <div class="state-pattern-segments__problems-region" aria-live="polite" data-problems-region>
+                @if (Problems.Count > 0)
+                {
+                    <ul class="state-pattern-segments__problems" aria-label="Problems with the working hours" data-problems>
+                        @foreach (var problem in Problems)
+                        {
+                            <li>@problem</li>
+                        }
+                    </ul>
+                }
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private readonly List<WorkPatternSegment> order = [];
+
+    private readonly HashSet<(WorkPatternSegment Segment, bool Start)> unreadable = [];
+    private ICollection<WorkPatternSegment>? rowsOf;
+
+    [CascadingParameter] public StateEntityDialogContext? DialogContext { get; set; }
+
+    [Parameter, EditorRequired] public string Area { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired] public ICollection<WorkPatternSegment> Values { get; set; } = null!;
+
+    [Parameter, EditorRequired] public int CycleWeeks { get; set; }
+
+    [Parameter, EditorRequired] public string NamePrefix { get; set; } = "segment";
+
+    private FieldAccessFlags Access { get; set; }
+
+    private bool Editable => Access.HasFlag(FieldAccessFlags.Editable);
+
+    private int Weeks => Math.Clamp(CycleWeeks, 1, WorkPatternRules.MaxCycleWeeks);
+
+    private IReadOnlyList<WorkPatternSegment> Outside => [.. Ordered.Where(segment => segment.DayIndex < 0 || segment.DayIndex >= WorkPatternRules.CycleDays(Weeks))];
+
+    private IReadOnlyList<string> Problems =>
+    [
+        .. Ordered.SelectMany(segment => new[] { true, false }.Where(start => this.unreadable.Contains((segment, start))).Select(start => EmptiedTime(segment, start))),
+        .. WorkPatternRules.Problems(CycleWeeks, Values.Select(segment => new PatternSegment(segment.DayIndex, segment.Start, segment.End))),
+    ];
+
+    private IEnumerable<WorkPatternSegment> Ordered => this.order.Where(Values.Contains).Concat(Values.Where(segment => !this.order.Contains(segment)));
+
+    protected override void OnParametersSet()
+    {
+        Access = (DialogContext ?? throw new InvalidOperationException("StateWorkPatternSegments is part of a state-entity dialog's body; its layout cascades the dialog's context.")).AreaAccessOf(Area);
+
+        if (!ReferenceEquals(this.rowsOf, Values))
+        {
+            this.rowsOf = Values;
+            this.order.Clear();
+            this.unreadable.Clear();
+            this.order.AddRange(Values.OrderBy(segment => segment.DayIndex).ThenBy(segment => segment.Start).ThenBy(segment => segment.End));
+        }
+    }
+
+    private List<WorkPatternSegment> SegmentsOn(int day) => [.. Ordered.Where(segment => segment.DayIndex == day)];
+
+    private string EmptiedTime(WorkPatternSegment segment, bool start) =>
+        $"{WorkPatternRules.DayLabel(segment.DayIndex, Weeks)}: the {(start ? "start" : "end")} of {TimesOf(segment)} is empty. It stays {WorkPatternRules.TimeText(start ? segment.Start : segment.End)} until a time is typed.";
+
+    private static string TimesOf(WorkPatternSegment segment) => $"{WorkPatternRules.TimeText(segment.Start)}–{WorkPatternRules.TimeText(segment.End)}";
+
+    private RenderFragment SegmentEditor(WorkPatternSegment segment, string dayLabel, int place) => __builder =>
+    {
+        var name = $"{NamePrefix}-{segment.DayIndex}-{place}";
+        <div class="state-pattern-segments__segment" @key="segment" data-segment="@name">
+            <input type="time" class="rz-textbox state-pattern-segments__time" name="@($"{name}-start")" aria-label="@($"Start, {dayLabel}, segment {place}")" aria-invalid="@(this.unreadable.Contains((segment, true)) ? "true" : null)"
+                   value="@WorkPatternRules.TimeText(segment.Start)" @onchange="@(change => SetTime(segment, change.Value, start: true))" />
+            <span aria-hidden="true">–</span>
+            <input type="time" class="rz-textbox state-pattern-segments__time" name="@($"{name}-end")" aria-label="@($"End, {dayLabel}, segment {place}")" aria-invalid="@(this.unreadable.Contains((segment, false)) ? "true" : null)"
+                   value="@WorkPatternRules.TimeText(segment.End)" @onchange="@(change => SetTime(segment, change.Value, start: false))" />
+            <RadzenButton Icon="close" ButtonStyle="ButtonStyle.Base" Size="ButtonSize.Small" Variant="Variant.Text"
+                          aria-label="@($"Remove {TimesOf(segment)} on {dayLabel}")" title="Remove these hours" Click="@(() => Remove(segment))" />
+        </div>
+    };
+
+    private void Add(int day)
+    {
+        if (!Editable)
+        {
+            return;
+        }
+
+        var (start, end) = NextFreeHours(SegmentsOn(day));
+        Values.Add(new WorkPatternSegment { DayIndex = day, Start = start, End = end });
+        DialogContext!.NotifyEdited();
+    }
+
+    private static (TimeOnly Start, TimeOnly End) NextFreeHours(IReadOnlyList<WorkPatternSegment> taken)
+    {
+        var lastMinute = new TimeOnly(23, 59);
+        if (taken.Count == 0)
+        {
+            return (new TimeOnly(8, 0), new TimeOnly(16, 0));
+        }
+
+        var after = taken.Max(segment => segment.End);
+        if (after < lastMinute)
+        {
+            return (after, after.Hour >= 23 ? lastMinute : after.AddHours(1));
+        }
+
+        var free = TimeOnly.MinValue;
+        foreach (var segment in taken.Where(segment => segment.Start < segment.End).OrderBy(segment => segment.Start))
+        {
+            if (segment.Start > free)
+            {
+                return (free, free.AddHours(1) < segment.Start && free.Hour < 23 ? free.AddHours(1) : segment.Start);
+            }
+
+            free = segment.End > free ? segment.End : free;
+        }
+
+        return (lastMinute, lastMinute);
+    }
+
+    private void Remove(WorkPatternSegment segment)
+    {
+        if (!Editable)
+        {
+            return;
+        }
+
+        Values.Remove(segment);
+        this.unreadable.RemoveWhere(input => input.Segment == segment);
+        DialogContext!.NotifyEdited();
+    }
+
+    private void SetTime(WorkPatternSegment segment, object? value, bool start)
+    {
+        if (!Editable)
+        {
+            return;
+        }
+
+        if (value is not string text || !TimeOnly.TryParseExact(text, ["HH:mm", "HH:mm:ss"], CultureInfo.InvariantCulture, DateTimeStyles.None, out var time))
+        {
+            this.unreadable.Add((segment, start));
+            return;
+        }
+
+        this.unreadable.Remove((segment, start));
+
+        if (start)
+        {
+            segment.Start = time;
+        }
+        else
+        {
+            segment.End = time;
+        }
+
+        DialogContext!.NotifyEdited();
+    }
+}

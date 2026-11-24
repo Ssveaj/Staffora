@@ -1,0 +1,174 @@
+@typeparam TDay
+@using System.Globalization
+@using System.Linq.Expressions
+@using Microsoft.AspNetCore.Components.Forms
+@using Staffora.Blazor.Components.Common.Dialogs.StateEntity
+@using Staffora.Core.Workflow.FieldAccess
+
+@if (this.dayVisible || this.timeVisible)
+{
+    <StateFieldFrame Label="@Label" Component="@(this.dayVisible ? this.dayName : this.timeName)" Helper="@Helper" Field="@this.dayField"
+                     IsRequired="@(this.dayRequired || this.timeRequired)" IsReadOnly="@(!this.dayEditable && !this.timeEditable)">
+        <div class="state-field-day-time" data-time-field="@this.timeField">
+            <div class="state-field-day-time__row">
+                @if (this.dayVisible)
+                {
+                    <div class="state-field-day-time__day">
+                        <RadzenDatePicker TValue="TDay" Name="@this.dayName" Value="@Day" ValueChanged="@((TDay day) => DayChangedAsync(day))" ValueExpression="@(DayExpression!)"
+                                          ReadOnly="@(!this.dayEditable)" AllowClear="@(this.dayEditable && !this.dayRequired)" DateFormat="@DateFormat"
+                                          InputAttributes="@DayAttributes" PopupRenderMode="PopupRenderMode.OnDemand" Style="width: 100%;" />
+                    </div>
+                }
+                @if (this.timeVisible)
+                {
+                    <div class="@TimeCssClass">
+                        <input type="time" class="@TimeInputCssClass" id="@this.timeName" name="@this.timeName" value="@TimeText" readonly="@(!this.timeEditable)"
+                               aria-label="@TimeLabel" aria-invalid="@(this.unreadable ? "true" : null)" @onchange="TimeChangedAsync" @attributes="TimeAttributes" />
+                        @if (Time is null)
+                        {
+                            <span class="state-field-day-time__placeholder" id="@PlaceholderId" aria-hidden="true">All day</span>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+    </StateFieldFrame>
+}
+
+@code {
+    private string dayField = string.Empty;
+    private string timeField = string.Empty;
+    private string dayName = string.Empty;
+    private string timeName = string.Empty;
+    private bool dayVisible;
+    private bool dayEditable;
+    private bool dayRequired;
+    private bool timeVisible;
+    private bool timeEditable;
+    private bool timeRequired;
+    private bool unreadable;
+
+    [CascadingParameter] public StateEntityDialogContext? DialogContext { get; set; }
+
+    [CascadingParameter] public EditContext? EditContext { get; set; }
+
+    [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired] public string TimeLabel { get; set; } = string.Empty;
+
+    [Parameter] public TDay Day { get; set; } = default!;
+
+    [Parameter] public EventCallback<TDay> DayChanged { get; set; }
+
+    [Parameter] public Expression<Func<TDay>>? DayExpression { get; set; }
+
+    [Parameter] public TimeOnly? Time { get; set; }
+
+    [Parameter] public EventCallback<TimeOnly?> TimeChanged { get; set; }
+
+    [Parameter] public Expression<Func<TimeOnly?>>? TimeExpression { get; set; }
+
+    [Parameter] public string? Name { get; set; }
+
+    [Parameter] public string? TimeName { get; set; }
+
+    [Parameter] public string? Helper { get; set; }
+
+    [Parameter] public string DateFormat { get; set; } = "yyyy-MM-dd";
+
+    private string? HelperId => string.IsNullOrWhiteSpace(Helper) ? null : StateFieldFrame.HelperIdOf(this.dayVisible ? this.dayName : this.timeName);
+
+    private string PlaceholderId => $"{this.timeName}-placeholder";
+
+    private string TimeText => Time is { } time ? time.ToString("HH':'mm", CultureInfo.InvariantCulture) : string.Empty;
+
+    private string TimeCssClass => $"state-field-day-time__time{(this.dayVisible ? null : " state-field-day-time__time--alone")}{(!this.timeEditable && this.dayEditable ? " state-field-day-time__time--read-only" : null)}";
+
+    private string TimeInputCssClass => $"rz-textbox state-field-day-time__time-input{(Time is null ? " state-field-day-time__time-input--empty" : null)}";
+
+    private IReadOnlyDictionary<string, object> DayAttributes => Attributes(this.dayRequired, HelperId);
+
+    private IReadOnlyDictionary<string, object> TimeAttributes =>
+        Attributes(this.timeRequired, string.Join(' ', new[] { HelperId, Time is null ? PlaceholderId : null }.OfType<string>()));
+
+    private static IReadOnlyDictionary<string, object> Attributes(bool required, string? describedBy)
+    {
+        var attributes = new Dictionary<string, object>();
+        if (required)
+        {
+            attributes["aria-required"] = "true";
+        }
+
+        if (!string.IsNullOrEmpty(describedBy))
+        {
+            attributes["aria-describedby"] = describedBy;
+        }
+
+        return attributes;
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (DialogContext is null)
+        {
+            throw new InvalidOperationException($"{GetType().Name} is a field of a state-entity dialog's body; its layout cascades the dialog's context.");
+        }
+
+        if (DayExpression is null || TimeExpression is null)
+        {
+            throw new InvalidOperationException($"{GetType().Name} '{Label}' is bound with @bind-Day and @bind-Time to two properties of the dialog's entity.");
+        }
+
+        var day = FieldIdentifier.Create(DayExpression);
+        var time = FieldIdentifier.Create(TimeExpression);
+        foreach (var field in new[] { day, time })
+        {
+            if (!ReferenceEquals(field.Model, DialogContext.EntityObject))
+            {
+                throw new InvalidOperationException($"{GetType().Name} '{Label}' binds {field.Model.GetType().Name}.{field.FieldName}; a StateField binds a property of the dialog's own {DialogContext.EntityType.Name}, whose workflow decides its access.");
+            }
+        }
+
+        var entity = StateFieldBase<TDay>.Kebab(DialogContext.EntityType.Name);
+        this.dayField = day.FieldName;
+        this.timeField = time.FieldName;
+        this.dayName = Name ?? $"{entity}-{StateFieldBase<TDay>.Kebab(this.dayField)}";
+        this.timeName = TimeName ?? $"{entity}-{StateFieldBase<TDay>.Kebab(this.timeField)}";
+        (this.dayVisible, this.dayEditable, this.dayRequired) = AccessOf(DialogContext.FieldAccessOf(this.dayField));
+        (this.timeVisible, this.timeEditable, this.timeRequired) = AccessOf(DialogContext.FieldAccessOf(this.timeField));
+    }
+
+    private static (bool Visible, bool Editable, bool Required) AccessOf(FieldAccessFlags access)
+    {
+        var visible = access.HasFlag(FieldAccessFlags.Visible);
+        var editable = visible && access.HasFlag(FieldAccessFlags.Editable);
+        return (visible, editable, editable && access.HasFlag(FieldAccessFlags.Mandatory));
+    }
+
+    private Task DayChangedAsync(TDay day) => this.dayEditable ? DayChanged.InvokeAsync(day) : Task.CompletedTask;
+
+    private async Task TimeChangedAsync(ChangeEventArgs change)
+    {
+        if (!this.timeEditable || TimeExpression is null)
+        {
+            return;
+        }
+
+        var text = change.Value as string;
+        TimeOnly? time = null;
+        if (!string.IsNullOrWhiteSpace(text))
+        {
+            if (!TimeOnly.TryParseExact(text, ["HH:mm", "HH:mm:ss"], CultureInfo.InvariantCulture, DateTimeStyles.None, out var read))
+            {
+                this.unreadable = true;
+                return;
+            }
+
+            time = read;
+        }
+
+        this.unreadable = false;
+        await TimeChanged.InvokeAsync(time);
+        EditContext?.NotifyFieldChanged(FieldIdentifier.Create(TimeExpression));
+    }
+}

@@ -1,0 +1,17 @@
+@inject DialogService DialogService
+
+<DialogNotice Message="@Message" Icon="@Icon" Tone="@Tone">
+    <Buttons>
+        <RadzenButton Text="@OkText" ButtonStyle="ButtonStyle.Primary" Click="@(() => DialogService.Close(true))" />
+    </Buttons>
+</DialogNotice>
+
+@code {
+    [Parameter, EditorRequired] public string Message { get; set; } = string.Empty;
+
+    [Parameter] public string OkText { get; set; } = "OK";
+
+    [Parameter] public string Icon { get; set; } = "check_circle";
+
+    [Parameter] public DialogTone Tone { get; set; } = DialogTone.Success;
+}

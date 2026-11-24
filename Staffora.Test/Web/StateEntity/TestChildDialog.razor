@@ -1,0 +1,20 @@
+@using Staffora.Blazor.Components.Common.Dialogs.StateEntity
+@using Staffora.Blazor.Components.Common.WorkflowFields
+@using Staffora.Blazor.Helper
+@using Staffora.Test.Integration.Infrastructure
+@using Radzen
+@using Radzen.Blazor
+@implements IStateEntityDialog<TestChildDialogContext>
+
+<div class="test-child-dialog" style="display: flex; flex-direction: column; gap: var(--space-3);">
+    <StateFieldTextBox @bind-Value="Context.Entity!.Name" Label="Name" MaxLength="200" />
+    <StateFieldDropDown TValue="Guid" TItem="TestParent" @bind-Value="Context.Entity!.ParentId" Data="@Context.Parents" TextProperty="@nameof(TestParent.Name)" Label="Parent" />
+    <StateFieldSwitch @bind-Value="Context.Entity!.IsPinned" Label="Pinned" />
+</div>
+
+@code {
+    [Parameter, EditorRequired] public TestChildDialogContext Context { get; set; } = null!;
+
+    public static Task<StateEntityDialogResult> OpenAsync(DialogService dialogService, TestChildDialogService service, Guid childId, StateEntityDialogOptions? options = null) =>
+        dialogService.OpenStateEntityDialogAsync<TestChildDialog, TestChildDialogContext>(new TestChildDialogContext(service, childId) { DefaultTitle = "Child", EntityIcon = "description" }, options);
+}

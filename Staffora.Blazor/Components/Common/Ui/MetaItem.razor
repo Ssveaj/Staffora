@@ -1,0 +1,10 @@
+<span class="meta-item">
+    <MaterialSymbol Name="@Icon" Class="material-symbol--sm" />
+    <span class="meta-item__text">@ChildContent</span>
+</span>
+
+@code {
+    [Parameter, EditorRequired] public string Icon { get; set; } = string.Empty;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

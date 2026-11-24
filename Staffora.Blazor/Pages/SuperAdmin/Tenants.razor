@@ -1,0 +1,80 @@
+@page "/superadmin/tenants"
+@layout SuperAdminLayout
+@inject DialogService DialogService
+@inject TenantService TenantService
+@inject PlatformConsoleService PlatformConsole
+
+<PageScaffold>
+    <Header>
+        <PageHeader Title="Tenants"
+                    Description="Every company on the platform. Open one to see its console."
+                    Icon="apartment"
+                    RootText="Platform"
+                    RootPath="/superadmin/overview">
+            <Actions>
+                <IconTextButton Text="New Tenant"
+                                Icon="add_business"
+                                ButtonStyle="ButtonStyle.Primary"
+                                Click="CreateNewTenantAsync" />
+            </Actions>
+        </PageHeader>
+    </Header>
+    <Main>
+        <PageSection>
+            <ListView @ref="this.list"
+                      TItem="PlatformTenantRow"
+                      Id="tenants"
+                      Label="Tenants"
+                      ItemName="tenant"
+                      ItemsName="tenants"
+                      Definition="PlatformTenantList.Definition"
+                      Load="PlatformConsole.QueryTenantsAsync"
+                      RowKey="tenant => tenant.Id"
+                      RowLabel="tenant => tenant.Name"
+                      RowState="tenant => ListRowState.Of(tenant.State)"
+                      StateTitle="State"
+                      RowLink="@(tenant => ConsolePath(tenant.Id))"
+                      SearchPlaceholder="Name or description"
+                      EmptyIcon="apartment"
+                      EmptyText="No tenants have been onboarded yet.">
+                <Columns>
+                    <ListColumn TItem="PlatformTenantRow" Title="Name" Primary="true">
+                        <span class="tenant-name" data-kind="company"><span class="tenant-kind tenant-kind--company" aria-hidden="true"></span>@context.Name</span>
+                    </ListColumn>
+                    <ListColumn TItem="PlatformTenantRow" Title="Users">
+                        @context.UserCount
+                    </ListColumn>
+                    <ListColumn TItem="PlatformTenantRow" Title="Managed customers">
+                        @ManagedCustomersText(context)
+                    </ListColumn>
+                    <ListColumn TItem="PlatformTenantRow" Title="Created">
+                        @context.Created.ToString("yyyy-MM-dd")
+                    </ListColumn>
+                </Columns>
+            </ListView>
+        </PageSection>
+    </Main>
+</PageScaffold>
+
+@code {
+    private ListView<PlatformTenantRow>? list;
+
+    internal static string ConsolePath(Guid tenantId) => $"/superadmin/tenants/{tenantId}";
+
+    private static string ManagedCustomersText(PlatformTenantRow tenant) =>
+        tenant.ManagedCustomers.Count == 0 ? "None" : string.Join(", ", tenant.ManagedCustomers);
+
+    private async Task CreateNewTenantAsync()
+    {
+        var created = await TenantOnboardingDialog.OpenAsync(DialogService);
+        if (created is { } tenantId)
+        {
+            await TenantDialog.OpenAsync(DialogService, TenantService, tenantId);
+        }
+
+        if (this.list is not null)
+        {
+            await this.list.ReloadAsync();
+        }
+    }
+}

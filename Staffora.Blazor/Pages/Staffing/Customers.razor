@@ -1,0 +1,100 @@
+@page "/staffing/customers"
+@attribute [Authorize]
+@using Staffora.Services.Customers
+@inject CustomerService CustomerService
+@inject DialogService DialogService
+
+<PermissionView AnyOf="readers">
+    <Loading>
+        <PageScaffold>
+            <Main>
+                <LoadingState Text="Loading customers…" />
+            </Main>
+        </PageScaffold>
+    </Loading>
+    <Authorized>
+        <PageScaffold>
+            <Header>
+                <PageHeader Title="Customers"
+                            Count="@(this.count)"
+                            Description="The businesses and organizations you staff jobs for, with the people there you deal with."
+                            Icon="storefront"
+                            RootText="Staffing">
+                    <Actions>
+                        <PermissionView Permission="RolePermission.CustomersManage">
+                            <Authorized>
+                                <IconTextButton Text="New customer"
+                                                Icon="add_business"
+                                                ButtonStyle="ButtonStyle.Primary"
+                                                Click="CreateCustomerAsync" />
+                            </Authorized>
+                        </PermissionView>
+                    </Actions>
+                </PageHeader>
+            </Header>
+            <Main>
+                <PageSection>
+                    <ListView @ref="this.list"
+                              TItem="CustomerListItem"
+                              TotalChanged="@(total => this.count = total)"
+                              Id="customers"
+                              Label="Customers"
+                              ItemName="customer"
+                              ItemsName="customers"
+                              Definition="CustomerList.Definition"
+                              Load="LoadAsync"
+                              RowKey="customer => customer.Id"
+                              RowLabel="customer => customer.Name"
+                              RowState="customer => ListRowState.Of(customer.State)"
+                              OnOpen="OpenCustomerAsync"
+                              QuickFilter="@CustomerList.Status"
+                              SearchPlaceholder="Name or description"
+                              EmptyIcon="storefront"
+                              EmptyText="No customer yet. Add the businesses and organizations you staff jobs for.">
+                        <Columns>
+                            <ListColumn TItem="CustomerListItem" Title="Name" Primary="true" Subtitle="customer => customer.Description">
+                                @context.Name
+                            </ListColumn>
+                            <ListColumn TItem="CustomerListItem" Title="Contacts">
+                                @context.ContactsLabel
+                            </ListColumn>
+                        </Columns>
+                    </ListView>
+                </PageSection>
+            </Main>
+        </PageScaffold>
+    </Authorized>
+    <NotAuthorized>
+        <PageScaffold>
+            <Header>
+                <PageHeader Title="Customers" Icon="storefront" RootText="Staffing" />
+            </Header>
+            <Main>
+                <PageSection>
+                    <EmptyState Icon="lock" Title="Access denied" Text="You do not have permission to view customers." Tone="UiTone.Warning" Role="alert" />
+                </PageSection>
+            </Main>
+        </PageScaffold>
+    </NotAuthorized>
+</PermissionView>
+
+@code {
+    private static readonly RolePermission[] readers = [RolePermission.CustomersView, RolePermission.CustomersManage];
+
+    private ListView<CustomerListItem>? list;
+
+    private int? count;
+
+    private Task<Result<ListPage<CustomerListItem>>> LoadAsync(ListQuery query) => CustomerService.QueryCustomersAsync(query);
+
+    private async Task CreateCustomerAsync()
+    {
+        var result = await CustomerDialog.OpenCreateAsync(DialogService, CustomerService);
+        if (result.EntityId is not null && this.list is not null)
+        {
+            await this.list.ReloadAsync();
+        }
+    }
+
+    private Task OpenCustomerAsync(CustomerListItem customer) => CustomerDialog.OpenAsync(DialogService, CustomerService, customer.Id);
+}

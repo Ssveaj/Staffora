@@ -1,0 +1,41 @@
+@page "/superadmin/settings"
+@layout SuperAdminLayout
+@using Staffora.Blazor.Components.EntityAttributes
+@inject PermissionService PermissionService
+
+<PageScaffold>
+    <Header>
+        <PageHeader Title="Platform settings"
+                    Description="The custom fields of users, organization units and jobs: global ones every tenant's records carry, and fields made for one tenant. A field reaches the tenants once it is activated, and they see it read-only."
+                    Icon="tune"
+                    RootText="Platform"
+                    RootPath="/superadmin/overview">
+            <Actions>
+                @if (this.canCreate)
+                {
+                    <IconTextButton Text="New Field"
+                                    Icon="add_circle_outline"
+                                    ButtonStyle="ButtonStyle.Primary"
+                                    Click="CreateAsync" />
+                }
+            </Actions>
+        </PageHeader>
+    </Header>
+    <Main>
+        <PageSection>
+            <CustomFieldsPanel @ref="this.panel" />
+        </PageSection>
+    </Main>
+</PageScaffold>
+
+@code {
+    private CustomFieldsPanel? panel;
+    private bool canCreate;
+
+    protected override async Task OnInitializedAsync()
+    {
+        this.canCreate = await PermissionService.HasPermissionAsync(RolePermission.SettingsEdit);
+    }
+
+    private Task CreateAsync() => this.panel?.CreateAsync() ?? Task.CompletedTask;
+}

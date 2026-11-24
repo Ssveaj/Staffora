@@ -1,0 +1,86 @@
+@typeparam TValue
+@typeparam TItem
+@inherits StateFieldBase<TValue>
+@using System.Reflection
+
+@if (IsVisible)
+{
+    <StateFieldFrame Label="@Label" Component="@InputName" Helper="@Helper" Field="@FieldName" IsRequired="@IsRequired" IsReadOnly="@(!IsEditable)">
+        @if (IsEditable)
+        {
+            <RadzenDropDown TValue="TValue" Name="@InputName" Data="@Data" TextProperty="@TextProperty" ValueProperty="@ValueProperty"
+                            Value="@Value" ValueChanged="@((TValue chosen) => ChooseAsync(chosen))" ValueExpression="@(ValueExpression!)"
+                            AllowClear="@(AllowClear && !IsRequired)" AllowFiltering="@AllowFiltering"
+                            Placeholder="@Placeholder" InputAttributes="@FieldLabel.Of(Label)" aria-label="@Label" @attributes="InputAttributes" />
+        }
+        else
+        {
+            <RadzenTextBox Name="@InputName" Value="@ChosenText" ReadOnly="true" aria-label="@Label" @attributes="WithHelper(NoAttributes)" />
+        }
+    </StateFieldFrame>
+}
+
+@code {
+    [Parameter, EditorRequired] public IEnumerable<TItem>? Data { get; set; }
+
+    [Parameter, EditorRequired] public string TextProperty { get; set; } = string.Empty;
+
+    [Parameter] public string ValueProperty { get; set; } = "Id";
+
+    [Parameter] public bool AllowClear { get; set; }
+
+    [Parameter] public bool AllowFiltering { get; set; }
+
+    private static readonly IReadOnlyDictionary<string, object> NoAttributes = new Dictionary<string, object>();
+
+    private string ChosenText
+    {
+        get
+        {
+            var key = typeof(TItem).GetProperty(ValueProperty);
+            var text = typeof(TItem).GetProperty(TextProperty);
+            foreach (var item in Data ?? [])
+            {
+                if (item is not null && Equals(key?.GetValue(item), Value))
+                {
+                    return text?.GetValue(item)?.ToString() ?? string.Empty;
+                }
+            }
+
+            return Placeholder ?? "None";
+        }
+    }
+
+    private Task ChooseAsync(TValue chosen)
+    {
+        if (!IsEditable)
+        {
+            return Task.CompletedTask;
+        }
+
+        if (ReferenceOf(DialogContext!.EntityType, FieldName) is { } reference)
+        {
+            var key = typeof(TItem).GetProperty(ValueProperty);
+            object? row = null;
+            foreach (var item in Data ?? [])
+            {
+                if (item is not null && Equals(key?.GetValue(item), chosen))
+                {
+                    row = item;
+                    break;
+                }
+            }
+
+            reference.SetValue(DialogContext.EntityObject, row);
+        }
+
+        return SetAsync(chosen);
+    }
+
+    internal static PropertyInfo? ReferenceOf(Type entity, string field) =>
+        field.Length > 2 && field.EndsWith("Id", StringComparison.Ordinal)
+        && entity.GetProperty(field[..^2], BindingFlags.Public | BindingFlags.Instance) is { CanWrite: true } reference
+        && reference.PropertyType.IsAssignableFrom(typeof(TItem))
+            ? reference
+            : null;
+}

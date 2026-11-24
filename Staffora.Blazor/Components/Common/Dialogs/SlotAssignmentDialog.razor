@@ -1,0 +1,189 @@
+@using Staffora.Blazor.Components.Common.Dialogs.StateEntity
+@using Staffora.Core.Jobs
+@using Staffora.Core.Entities.Jobs
+@using Staffora.Core.Workflow.WorkflowAttributes
+@using Staffora.Services.Jobs
+@implements IStateEntityDialog<SlotAssignmentDialogContext>
+
+<div class="assignment-dialog" role="group" aria-label="About the assignment" tabindex="0">
+    @if (Context.ForStaff)
+    {
+        <div class="assignment-dialog__notice assignment-dialog__notice--own" role="note" data-assignment-status>
+            <span class="material-symbol assignment-dialog__notice-icon" aria-hidden="true">assignment_ind</span>
+            <div>
+                <p class="assignment-dialog__notice-title" data-status>@Context.Status</p>
+                @if (Context.StatusHint is { } hint)
+                {
+                    <p class="assignment-dialog__notice-text" data-status-hint>@hint</p>
+                }
+                @if (Context.AnswerBy is { } answerBy)
+                {
+                    <p class="assignment-dialog__notice-text assignment-dialog__answer-by" data-answer-by>@answerBy</p>
+                }
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="assignment-dialog__notice" role="note" data-assignment-notice>
+            <span class="material-symbol assignment-dialog__notice-icon" aria-hidden="true">info</span>
+            <div>
+                <p class="assignment-dialog__notice-title">Who answers, who picks</p>
+                <p class="assignment-dialog__notice-text">A staff member answers their own request here, yes or no, and may write a question to the coordinator first. A request may go to more staff members, and the coordinator picks who works among those who say yes.</p>
+            </div>
+        </div>
+    }
+
+    <section class="assignment-dialog__section" aria-labelledby="@($"{this.id}-what")">
+        <h3 class="assignment-dialog__heading" id="@($"{this.id}-what")"><span class="material-symbol" aria-hidden="true">work</span>What?</h3>
+        <div class="assignment-dialog__body">
+            <dl class="assignment-dialog__rows">
+                <div>
+                    <dt><span class="material-symbol" aria-hidden="true">work</span>Job</dt>
+                    <dd data-job>@Job?.Name</dd>
+                </div>
+                <div>
+                    <dt><span class="material-symbol" aria-hidden="true">storefront</span>Customer</dt>
+                    <dd data-customer>@Job?.Customer?.Name</dd>
+                </div>
+                <div>
+                    <dt><span class="material-symbol" aria-hidden="true">design_services</span>Service</dt>
+                    <dd data-service>@(Context.Service ?? "No service named")</dd>
+                </div>
+                <div>
+                    <dt><span class="material-symbol" aria-hidden="true">badge</span>Slot</dt>
+                    <dd data-slot>@Context.Entity!.Slot?.Name</dd>
+                </div>
+                <div>
+                    <dt><span class="material-symbol" aria-hidden="true">workspace_premium</span>Qualifications</dt>
+                    <dd data-qualifications>@(Context.Qualifications.Count > 0 ? string.Join(", ", Context.Qualifications) : "None asked for")</dd>
+                </div>
+            </dl>
+        </div>
+    </section>
+
+    <section class="assignment-dialog__section" aria-labelledby="@($"{this.id}-when")">
+        <h3 class="assignment-dialog__heading" id="@($"{this.id}-when")"><span class="material-symbol" aria-hidden="true">calendar_month</span>When?</h3>
+        <div class="assignment-dialog__body">
+            <p class="assignment-dialog__lead" data-period>@(Job is { } job ? JobRules.WhenText(JobTimes.Of(job)) : null)</p>
+            <p class="assignment-dialog__line">
+                <span class="material-symbol" aria-hidden="true">schedule</span>
+                <span><span class="visually-hidden">Weekly times: </span><span data-occurrences>@OccurrencesText</span></span>
+            </p>
+            <p class="assignment-dialog__help">Times are the organization's local time.</p>
+        </div>
+    </section>
+
+    <section class="assignment-dialog__section" aria-labelledby="@($"{this.id}-where")">
+        <h3 class="assignment-dialog__heading" id="@($"{this.id}-where")"><span class="material-symbol" aria-hidden="true">location_on</span>Where?</h3>
+        <div class="assignment-dialog__body">
+            <dl class="assignment-dialog__rows">
+                <div>
+                    <dt><span class="material-symbol" aria-hidden="true">pin_drop</span>Place</dt>
+                    <dd data-place>@(Job is { } placed ? JobPlace.Of(placed).TextOrNone : JobPlace.NoPlaceText)</dd>
+                </div>
+                @if (!string.IsNullOrWhiteSpace(Job?.AccessNotes))
+                {
+                    <div>
+                        <dt><span class="material-symbol" aria-hidden="true">key</span>Access notes</dt>
+                        <dd data-access-notes>@Job!.AccessNotes</dd>
+                    </div>
+                }
+            </dl>
+        </div>
+    </section>
+
+    <section class="assignment-dialog__section" aria-labelledby="@($"{this.id}-who")">
+        <h3 class="assignment-dialog__heading" id="@($"{this.id}-who")"><span class="material-symbol" aria-hidden="true">group</span>Who?</h3>
+        <div class="assignment-dialog__body">
+            <dl class="assignment-dialog__rows">
+                @if (!Context.ForStaff)
+                {
+                    <div>
+                        <dt><span class="material-symbol" aria-hidden="true">person</span>Staff</dt>
+                        <dd data-staff>@StaffName</dd>
+                    </div>
+                }
+                @if (Context.Entity!.Round is { } round)
+                {
+                    <div>
+                        <dt><span class="material-symbol" aria-hidden="true">campaign</span>Request round</dt>
+                        <dd data-round-rule>@RequestRoundWorkflowAttribute.RuleOf(round.FirstToAccept)</dd>
+                    </div>
+                }
+                @if (!Context.ForStaff && Context.AnswerBy is { } deadline)
+                {
+                    <div>
+                        <dt><span class="material-symbol" aria-hidden="true">timer</span>Deadline</dt>
+                        <dd data-answer-by>@deadline</dd>
+                    </div>
+                }
+                <div>
+                    <dt><span class="material-symbol" aria-hidden="true">support_agent</span>Coordinator</dt>
+                    <dd data-coordinator>@(Job?.Coordinator is { } coordinator ? $"{coordinator.FirstName} {coordinator.LastName}".Trim() : "Not named yet")</dd>
+                </div>
+            </dl>
+        </div>
+    </section>
+
+    <section class="assignment-dialog__section" aria-labelledby="@($"{this.id}-about")">
+        <h3 class="assignment-dialog__heading" id="@($"{this.id}-about")"><span class="material-symbol" aria-hidden="true">description</span>About the job</h3>
+        <div class="assignment-dialog__body">
+            <p class="@(string.IsNullOrWhiteSpace(Job?.Description) ? "assignment-dialog__text assignment-dialog__text--none" : "assignment-dialog__text")" data-job-description>@(string.IsNullOrWhiteSpace(Job?.Description) ? "No description given." : Job!.Description)</p>
+            @if (Context.JobFields.Count > 0)
+            {
+                <div class="assignment-dialog__fields" data-job-fields>
+                    <h4 class="assignment-dialog__subheading">Job details</h4>
+                    <dl class="assignment-dialog__rows">
+                        @foreach (var field in Context.JobFields)
+                        {
+                            <div @key="field.Id" data-job-field="@field.Name">
+                                <dt><span class="material-symbol" aria-hidden="true">label</span>@field.Name</dt>
+                                <dd>
+                                    @field.Value
+                                    @if (field.Audience is { } audience)
+                                    {
+                                        <span class="assignment-dialog__audience"> (@audience)</span>
+                                    }
+                                </dd>
+                            </div>
+                        }
+                    </dl>
+                </div>
+            }
+        </div>
+    </section>
+</div>
+
+@code {
+    private int? shownVersion;
+
+    private readonly string id = $"assignment-{Guid.NewGuid():N}";
+
+    [Parameter, EditorRequired] public SlotAssignmentDialogContext Context { get; set; } = null!;
+
+    private Job? Job => Context.Entity!.Slot?.Job;
+
+    private string StaffName => Context.Entity!.Resource?.User is { } user && $"{user.FirstName} {user.LastName}".Trim() is { Length: > 0 } name ? name : "Unknown staff member";
+
+    private string OccurrencesText => Job is { Schedule: JobSchedule.Single } ? "Once, at the times above"
+        : Job is { } job && JobRules.OccurrencesOf(job).OrderBy(occurrence => occurrence.Weekday).ThenBy(occurrence => occurrence.Start).Select(occurrence => $"{occurrence.Weekday} {JobRules.Times(occurrence)}").ToList() is { Count: > 0 } occurrences
+        ? string.Join(", ", occurrences)
+        : "The job has no times yet.";
+
+    protected override void OnParametersSet()
+    {
+        if (this.shownVersion != Context.Version)
+        {
+            this.shownVersion = Context.Version;
+            var slot = Context.Entity!.Slot;
+            Context.DisplayName = slot?.Job is { } job ? $"{job.Name}: {slot.Name}" : null;
+        }
+    }
+
+    internal static SlotAssignmentDialogContext ContextFor(SlotAssignmentService service, Guid assignmentId) =>
+        new(service, assignmentId) { DefaultTitle = "Assignment", CreateTitle = "Assignment", EntityIcon = "assignment_ind" };
+
+    public static Task<StateEntityDialogResult> OpenAsync(DialogService dialogService, SlotAssignmentService service, Guid assignmentId, StateEntityDialogOptions? options = null) =>
+        dialogService.OpenStateEntityDialogAsync<SlotAssignmentDialog, SlotAssignmentDialogContext>(ContextFor(service, assignmentId), options);
+}

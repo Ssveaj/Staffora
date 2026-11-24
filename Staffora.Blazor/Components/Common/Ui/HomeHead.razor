@@ -1,0 +1,70 @@
+@using System.Globalization
+
+<PageTitle>@DocumentTitle</PageTitle>
+
+<header class="@(Hero ? "home-head home-head--hero" : "home-head")">
+    <div class="home-head__row">
+        <div class="home-head__titles">
+            @if (!string.IsNullOrWhiteSpace(Eyebrow))
+            {
+                <p class="home-head__eyebrow">@Eyebrow</p>
+            }
+            <div class="home-head__title-row">
+                <h1 class="home-head__title">@Title</h1>
+                @if (!string.IsNullOrWhiteSpace(Description))
+                {
+                    <span class="home-head__help" data-page-help>
+                        <button type="button" class="home-head__help-button" aria-label="About this page" aria-expanded="false" aria-controls="@PageHeader.HelpId" data-page-help-toggle>
+                            <MaterialSymbol Name="help" />
+                        </button>
+                        <span id="@PageHeader.HelpId" class="home-head__help-pop" role="note" hidden>@Description</span>
+                    </span>
+                }
+            </div>
+            @if (!string.IsNullOrWhiteSpace(Lead))
+            {
+                <p class="home-head__lead">@Lead</p>
+            }
+        </div>
+
+        @if (Now is not null || OnRefresh.HasDelegate || Actions is not null)
+        {
+            <div class="home-head__meta">
+                @if (Now is { } shown)
+                {
+                    <span class="home-head__date">@shown.ToString("dddd d MMMM", CultureInfo.InvariantCulture)</span>
+                    <span class="home-head__updated" role="status">Updated @shown.ToString("HH:mm", CultureInfo.InvariantCulture)</span>
+                }
+                @if (OnRefresh.HasDelegate)
+                {
+                    <button type="button" class="home-head__refresh" aria-label="Refresh" title="Refresh" disabled="@Busy" @onclick="OnRefresh" data-home-refresh>
+                        <MaterialSymbol Name="refresh" />
+                    </button>
+                }
+                @Actions
+            </div>
+        }
+    </div>
+</header>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+
+    [Parameter] public string? Eyebrow { get; set; }
+
+    [Parameter] public string? Description { get; set; }
+
+    [Parameter] public string? Lead { get; set; }
+
+    [Parameter] public DateTimeOffset? Now { get; set; }
+
+    [Parameter] public EventCallback OnRefresh { get; set; }
+
+    [Parameter] public bool Busy { get; set; }
+
+    [Parameter] public bool Hero { get; set; }
+
+    [Parameter] public RenderFragment? Actions { get; set; }
+
+    private string DocumentTitle => $"{Title} - Staffora";
+}

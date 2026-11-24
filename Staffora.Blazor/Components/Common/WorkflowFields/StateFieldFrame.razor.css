@@ -1,0 +1,29 @@
+.state-field {
+    min-width: 0;
+}
+
+.state-field__required-mark {
+    margin-inline-start: var(--space-1);
+    color: var(--color-danger);
+    font-weight: var(--font-weight-semibold);
+}
+
+.state-field--read-only ::deep .rz-form-field-content {
+    background-color: var(--color-surface-sunken);
+}
+
+.state-field--read-only {
+    --rz-input-placeholder-color: var(--color-text-muted);
+}
+
+.state-field--read-only ::deep .rz-form-field-label {
+    color: var(--color-text-muted);
+}
+
+.state-field--read-only ::deep input,
+.state-field--read-only ::deep textarea,
+.state-field--read-only ::deep .rz-dropdown,
+.state-field--read-only ::deep .rz-switch {
+    cursor: default;
+    color: var(--color-text);
+}

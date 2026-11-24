@@ -1,0 +1,287 @@
+@using Staffora.Blazor.Components.Common.Dialogs.StateEntity
+@using Staffora.Blazor.Helper.UrlState
+@using Staffora.Core
+@using Staffora.Core.Messaging
+@using Staffora.Services.Messaging
+@using System.Globalization
+@implements IDisposable
+@inject NoticeService Notices
+@inject DialogService Dialogs
+@inject NavigationManager Navigation
+@inject IServiceProvider Services
+@inject DialogRouteRegistry Routes
+@inject ILogger<NotificationBell> Log
+
+@if (this.interactive)
+{
+    <div class="notice-bell" data-notice-bell data-unread-count="@this.unread" @onkeydown="OnKeyDownAsync">
+        <button type="button" class="notice-bell__trigger" aria-label="@TriggerLabel" aria-expanded="@(this.open ? "true" : "false")" aria-controls="@PanelId" @onclick="ToggleAsync" @ref="this.trigger">
+            <MaterialSymbol Name="notifications" />
+            @if (this.unread > 0)
+            {
+                <span class="notice-bell__badge" aria-hidden="true">@BadgeText</span>
+            }
+        </button>
+        <span class="visually-hidden" role="status" aria-live="polite" data-notice-announcement>@this.announcement</span>
+
+        @if (this.open)
+        {
+            <section id="@PanelId" class="notice-panel" aria-labelledby="@($"{PanelId}-title")" data-notice-panel>
+                <div class="notice-panel__head">
+                    <div class="notice-panel__titles">
+                        <h2 id="@($"{PanelId}-title")" class="notice-panel__title" tabindex="-1" @ref="this.title">Notifications</h2>
+                        <p class="notice-panel__summary" data-notice-summary>@Summary</p>
+                    </div>
+                    <button type="button" class="notice-panel__close" aria-label="Close notifications" @onclick="CloseAsync">
+                        <MaterialSymbol Name="close" />
+                    </button>
+                </div>
+                <div class="notice-panel__tools">
+                    <div class="notice-panel__filters" role="group" aria-label="Show notices">
+                        <button type="button" class="notice-panel__filter" aria-pressed="@(this.filter == NoticeFilter.Unread ? "true" : "false")" @onclick="() => ShowAsync(NoticeFilter.Unread)">Unread</button>
+                        <button type="button" class="notice-panel__filter" aria-pressed="@(this.filter == NoticeFilter.All ? "true" : "false")" @onclick="() => ShowAsync(NoticeFilter.All)">All</button>
+                    </div>
+                    @if (Notices.MayMarkRead && this.unread > 0)
+                    {
+                        <button type="button" class="notice-panel__mark-all" @onclick="MarkAllReadAsync">Mark all read</button>
+                    }
+                </div>
+                @if (!Notices.MayMarkRead)
+                {
+                    <p class="notice-panel__note">@NoticeService.ImpersonatingRefusal</p>
+                }
+
+                <div class="notice-panel__body">
+                    @if (this.error is not null)
+                    {
+                        <p class="notice-panel__error" role="alert">@this.error</p>
+                    }
+                    else if (this.page is null)
+                    {
+                        <LoadingState Text="Loading…" Inline="true" />
+                    }
+                    else if (this.page.Notices.Count == 0)
+                    {
+                        <EmptyState Compact="true" Icon="@(this.filter == NoticeFilter.Unread ? "mark_email_read" : "notifications_none")" Title="@(this.filter == NoticeFilter.Unread ? "You have no unread notices." : "You have no notices yet.")" />
+                    }
+                    else
+                    {
+                        <ul class="notice-panel__list">
+                            @foreach (var notice in this.page.Notices)
+                            {
+                                <li>
+                                    <button type="button" class="@(notice.IsRead ? "notice-row" : "notice-row notice-row--unread")" data-notice="@notice.Id" @onclick="() => OpenAsync(notice)">
+                                        <span class="notice-row__icon"><MaterialSymbol Name="@notice.Category.GetIcon()" /></span>
+                                        <span class="notice-row__body">
+                                            <span class="notice-row__subject">
+                                                @notice.Subject
+                                                @if (!notice.IsRead)
+                                                {
+                                                    <span class="visually-hidden">(unread)</span>
+                                                }
+                                            </span>
+                                            <span class="notice-row__text">@notice.Text</span>
+                                            <time class="notice-row__time" datetime="@notice.At.ToString("o", CultureInfo.InvariantCulture)">@notice.At.ToString("d MMM yyyy, HH:mm", CultureInfo.InvariantCulture)</time>
+                                        </span>
+                                    </button>
+                                </li>
+                            }
+                        </ul>
+                    }
+                </div>
+            </section>
+        }
+    </div>
+}
+
+@code {
+    public const string PanelId = "notice-panel";
+
+    private bool interactive;
+    private bool open;
+    private int unread;
+    private NoticeFilter filter = NoticeFilter.Unread;
+    private NoticePage? page;
+    private string? error;
+    private string announcement = string.Empty;
+    private ElementReference trigger;
+    private ElementReference title;
+    private IDisposable? subscription;
+    private readonly CancellationTokenSource closing = new();
+
+    private string TriggerLabel => this.unread == 0 ? "Notifications" : $"Notifications, {this.unread} unread";
+
+    private string BadgeText => this.unread > 99 ? "99+" : this.unread.ToString(CultureInfo.InvariantCulture);
+
+    private string Summary => this.unread switch
+    {
+        0 => "All read",
+        1 => "1 unread",
+        _ => $"{this.unread.ToString(CultureInfo.InvariantCulture)} unread",
+    };
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        if (!Notices.HasNotices)
+        {
+            return;
+        }
+
+        this.interactive = true;
+        this.subscription = Notices.Subscribe(notice => InvokeAsync(() => OnNoticeArrivedAsync(notice)));
+        await RefreshCountAsync();
+        StateHasChanged();
+    }
+
+    private async Task OnNoticeArrivedAsync(NoticeArrived notice)
+    {
+        try
+        {
+            await RefreshCountAsync();
+            if (this.open)
+            {
+                await LoadAsync();
+            }
+
+            if (!notice.MarkedRead)
+            {
+                this.announcement = this.unread == 1 ? "New notice. 1 unread." : $"New notice. {this.unread} unread.";
+            }
+
+            StateHasChanged();
+        }
+        catch (Exception) when (this.closing.IsCancellationRequested)
+        {
+        }
+    }
+
+    private async Task RefreshCountAsync()
+    {
+        var count = await Notices.GetUnreadCountAsync(this.closing.Token);
+        if (count.IsSuccess)
+        {
+            this.unread = count.Value;
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        var page = await Notices.GetNoticesAsync(this.filter, this.closing.Token);
+        if (page.IsSuccess && page.Value is not null)
+        {
+            (this.page, this.error) = (page.Value, null);
+            this.unread = page.Value.UnreadCount;
+        }
+        else
+        {
+            (this.page, this.error) = (null, page.Error ?? "Your notices could not be read.");
+        }
+    }
+
+    private async Task ToggleAsync()
+    {
+        this.open = !this.open;
+        if (this.open)
+        {
+            this.page = null;
+            await LoadAsync();
+        }
+    }
+
+    private async Task ShowAsync(NoticeFilter filter)
+    {
+        this.filter = filter;
+        await LoadAsync();
+    }
+
+    private async Task MarkAllReadAsync()
+    {
+        var marked = await Notices.MarkAllReadAsync(this.closing.Token);
+        if (!marked.IsSuccess)
+        {
+            this.error = marked.Error;
+            return;
+        }
+
+        await LoadAsync();
+
+        StateHasChanged();
+        await this.title.FocusAsync();
+    }
+
+    private async Task CloseAsync()
+    {
+        this.open = false;
+        await this.trigger.FocusAsync();
+    }
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs args)
+    {
+        if (args.Key == "Escape" && this.open)
+        {
+            this.open = false;
+            await this.trigger.FocusAsync();
+        }
+    }
+
+    private async Task OpenAsync(Notice notice)
+    {
+        this.open = false;
+        if (!notice.IsRead && Notices.MayMarkRead)
+        {
+            await Notices.MarkReadAsync(notice.Id, this.closing.Token);
+            await RefreshCountAsync();
+        }
+
+        if (notice.Link is not { } link || !MessageCatalogue.IsLocalLink(link))
+        {
+            await this.trigger.FocusAsync();
+            return;
+        }
+
+        if (!link.StartsWith("?dlg=", StringComparison.Ordinal))
+        {
+            Navigation.NavigateTo(link);
+            return;
+        }
+
+        OpenDialog(link);
+    }
+
+    private void OpenDialog(string link)
+    {
+        var value = link["?dlg=".Length..].Split('&')[0];
+        if (DialogStackSegment.ParseChain(Uri.UnescapeDataString(value)) is not [var segment, ..]
+            || segment.GuidId is not { } id
+            || Routes.Find(segment.Token) is not { } route)
+        {
+            Log.LogWarning("A notice links to {Link}, which names no dialog a link opens.", link);
+            return;
+        }
+
+        _ = ObserveAsync(() => route.InvokeOpenerAsync(Dialogs, Services, id, new StateEntityDialogOptions()), route.Token);
+    }
+
+    private async Task ObserveAsync(Func<Task<StateEntityDialogResult>> open, string token)
+    {
+        try
+        {
+            await open();
+        }
+        catch (Exception exception)
+        {
+            Log.LogWarning(exception, "The {Token} dialog a notice opened failed.", token);
+        }
+    }
+
+    public void Dispose()
+    {
+        this.subscription?.Dispose();
+        this.closing.Cancel();
+    }
+}

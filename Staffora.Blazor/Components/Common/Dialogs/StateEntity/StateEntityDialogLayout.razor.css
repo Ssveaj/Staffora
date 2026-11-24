@@ -1,0 +1,77 @@
+.state-entity-dialog {
+    --dialog-state-color: var(--color-accent);
+    --dialog-header-fill: var(--color-accent);
+    --dialog-header-text: var(--color-on-accent);
+    --dialog-pill-fill: var(--color-accent-strong);
+    --dialog-pill-text: var(--color-on-accent);
+    --dialog-state-text: var(--color-accent);
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    max-height: calc(100vh - 4rem);
+    min-height: 0;
+    min-width: 0;
+    --dialog-frame-width: 5px;
+    padding-bottom: var(--dialog-frame-width);
+    border-left: var(--dialog-frame-width) solid var(--dialog-header-fill);
+    border-radius: var(--radius-sm);
+    background:
+        linear-gradient(var(--dialog-header-fill), var(--dialog-header-fill)) left bottom / 30% var(--dialog-frame-width) no-repeat,
+        var(--color-surface);
+    container-type: inline-size;
+    transition: border-color 160ms ease;
+}
+
+.state-entity-dialog__main {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+    min-width: 0;
+}
+
+.state-entity-dialog__body {
+    flex: 1 1 auto;
+    min-height: 8rem;
+    min-width: 0;
+    overflow-y: auto;
+    padding: var(--space-5) var(--space-6);
+}
+
+.state-entity-dialog__main--with-side ::deep .state-entity-dialog-side {
+    flex: 0 0 22rem;
+    overflow-y: auto;
+}
+
+.state-entity-dialog__could-not-open {
+    padding: var(--space-4) 0;
+}
+
+@media (max-width: 640px) {
+    .state-entity-dialog {
+        max-height: 100dvh;
+        --dialog-frame-width: 4px;
+        border-radius: 0;
+    }
+
+    .state-entity-dialog__body {
+        padding: var(--space-5) var(--space-4) var(--space-4);
+    }
+}
+
+@container (max-width: 56rem) {
+    .state-entity-dialog__main--with-side {
+        flex-direction: column;
+        overflow-y: auto;
+    }
+
+    .state-entity-dialog__main--with-side .state-entity-dialog__body {
+        flex: 0 0 auto;
+        overflow-y: visible;
+    }
+
+    .state-entity-dialog__main--with-side ::deep .state-entity-dialog-side {
+        flex: 0 0 auto;
+        max-height: 32rem;
+        overflow-y: auto;
+    }
+}

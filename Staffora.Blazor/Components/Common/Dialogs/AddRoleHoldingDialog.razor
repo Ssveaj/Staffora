@@ -1,0 +1,121 @@
+@using Staffora.Core.Models
+@inject DialogService DialogService
+@inject RoleHoldingService RoleHoldingService
+
+<FormDialogFrame OnSave="AddAsync" SaveText="@SaveText" SaveIcon="add" SaveDisabled="@(this.userId is null || this.roleId is null || this.unitId is null)" IsBusy="@this.adding">
+    @if (UserId is null)
+    {
+        <RadzenFormField Text="Person" Component="role-holding-person" Style="width: 100%;">
+            <RadzenDropDown Name="role-holding-person" InputAttributes="@FieldLabel.Of("Person")" @bind-Value="this.userId"
+                            Data="@Choices.People" TextProperty="Name" ValueProperty="Id" TValue="Guid?"
+                            AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
+                            Placeholder="Select a person" Style="width: 100%;" />
+        </RadzenFormField>
+    }
+    @if (RoleId is null)
+    {
+        <RadzenFormField Text="Role" Component="user-role-role" Style="width: 100%;">
+            <RadzenDropDown Name="user-role-role" InputAttributes="@FieldLabel.Of("Role")" @bind-Value="this.roleId"
+                            Data="@Choices.Roles" TextProperty="Name" ValueProperty="Id" TValue="Guid?"
+                            Placeholder="Select a role" Style="width: 100%;" />
+        </RadzenFormField>
+    }
+    @if (UnitId is null)
+    {
+        <RadzenFormField Text="Unit" Component="user-role-unit" Style="width: 100%;">
+            <RadzenDropDown Name="user-role-unit" InputAttributes="@FieldLabel.Of("Unit")" @bind-Value="this.unitId"
+                            Data="@Choices.Units" TextProperty="Name" ValueProperty="Id" TValue="Guid?"
+                            AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
+                            Placeholder="Select a unit" Style="width: 100%;" />
+        </RadzenFormField>
+    }
+    <RadzenText TextStyle="TextStyle.Body2" class="text-muted">The role's permissions apply across the whole company. The unit records where the person works.</RadzenText>
+
+    @if (!string.IsNullOrEmpty(this.error))
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Danger" Variant="Variant.Flat" Shade="Shade.Lighter" ShowIcon="true" AllowClose="false">@this.error</RadzenAlert>
+    }
+</FormDialogFrame>
+
+@code {
+    private Guid? userId;
+    private Guid? roleId;
+    private Guid? unitId;
+    private bool adding;
+    private string? error;
+
+    [Parameter] public Guid? UserId { get; set; }
+
+    [Parameter] public Guid? RoleId { get; set; }
+
+    [Parameter] public Guid? UnitId { get; set; }
+
+    [Parameter, EditorRequired] public Guid TenantId { get; set; }
+
+    [Parameter, EditorRequired] public RoleHoldingChoices Choices { get; set; } = RoleHoldingChoices.None;
+
+    [Parameter] public string SaveText { get; set; } = "Add role";
+
+    protected override void OnInitialized()
+    {
+        this.userId = UserId;
+        this.roleId = RoleId;
+
+        this.unitId = UnitId ?? Choices.Units.FirstOrDefault()?.Id;
+    }
+
+    private async Task AddAsync()
+    {
+        if (this.userId is not { } userId || this.roleId is not { } roleId || this.unitId is not { } unitId)
+        {
+            return;
+        }
+
+        this.error = null;
+        this.adding = true;
+        var added = await RoleHoldingService.AssignUserToRoleAsync(userId, unitId, roleId, TenantId);
+        this.adding = false;
+        if (added.IsSuccess)
+        {
+            DialogService.Close(true);
+        }
+        else
+        {
+            this.error = added.Error ?? "The role could not be given.";
+        }
+    }
+
+    public static Task<bool> OpenAsync(DialogService dialogService, Guid userId, Guid tenantId, string? userName, RoleHoldingChoices choices) =>
+        dialogService.OpenFormDialogAsync<AddRoleHoldingDialog>(
+            string.IsNullOrWhiteSpace(userName) ? "Add role" : $"Add a role to {userName}",
+            parameters => parameters.Set(dialog => dialog.UserId, userId).Set(dialog => dialog.TenantId, tenantId).Set(dialog => dialog.Choices, choices),
+            new FormDialogOptions { Width = "440px" });
+
+    public static Task<bool> OpenForRoleAsync(DialogService dialogService, Guid roleId, Guid tenantId, string? roleName, RoleHoldingChoices choices) =>
+        dialogService.OpenFormDialogAsync<AddRoleHoldingDialog>(
+            string.IsNullOrWhiteSpace(roleName) ? "Add holder" : $"Give {roleName} to someone",
+            parameters => parameters.Set(dialog => dialog.RoleId, roleId).Set(dialog => dialog.TenantId, tenantId).Set(dialog => dialog.Choices, choices),
+            new FormDialogOptions { Width = "440px" });
+
+    public static Task<bool> OpenForNewStaffAsync(DialogService dialogService, Guid tenantId, RoleHoldingChoices choices)
+    {
+        var staffChoices = choices.ForNewStaff();
+        return dialogService.OpenFormDialogAsync<AddRoleHoldingDialog>(
+            "New staff member",
+            parameters =>
+            {
+                parameters.Set(dialog => dialog.TenantId, tenantId).Set(dialog => dialog.Choices, staffChoices).Set(dialog => dialog.SaveText, "Make staff member");
+                if (staffChoices.Roles is [var only])
+                {
+                    parameters.Set(dialog => dialog.RoleId, only.Id);
+                }
+            },
+            new FormDialogOptions { Width = "440px" });
+    }
+
+    public static Task<bool> OpenForUnitAsync(DialogService dialogService, Guid unitId, Guid tenantId, string? unitName, RoleHoldingChoices choices) =>
+        dialogService.OpenFormDialogAsync<AddRoleHoldingDialog>(
+            string.IsNullOrWhiteSpace(unitName) ? "Add role holding" : $"Give a role on {unitName}",
+            parameters => parameters.Set(dialog => dialog.UnitId, unitId).Set(dialog => dialog.TenantId, tenantId).Set(dialog => dialog.Choices, choices),
+            new FormDialogOptions { Width = "440px" });
+}

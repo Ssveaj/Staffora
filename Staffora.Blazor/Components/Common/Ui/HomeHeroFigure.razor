@@ -1,0 +1,22 @@
+<div class="home-hero-figure" data-figure="@Key" data-tone="@HomeToneClass.Of(Tone)">
+    <dt>@Label<span class="visually-hidden">@HomeToneClass.Text(Tone)</span></dt>
+    <dd class="@(Text ? "home-hero-figure__value home-hero-figure__value--text" : "home-hero-figure__value")">@Value</dd>
+    @if (!string.IsNullOrWhiteSpace(Note))
+    {
+        <dd class="home-hero-figure__note">@Note</dd>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Key { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired] public string Value { get; set; } = string.Empty;
+
+    [Parameter] public string? Note { get; set; }
+
+    [Parameter] public HomeTone Tone { get; set; }
+
+    [Parameter] public bool Text { get; set; }
+}

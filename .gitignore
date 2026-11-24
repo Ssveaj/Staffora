@@ -1,0 +1,32 @@
+# Build output
+bin/
+obj/
+*.user
+*.Backup.tmp
+
+# IDE
+.vs/
+.vscode/
+.idea/
+
+# Test and tool output
+TestResults/
+output/
+coverage*/
+.e2e/
+test-results/
+playwright-report/
+*.trx
+*.dmp
+*.log
+node_modules/
+
+# Local agent notes and settings (never committed)
+CLAUDE.local.md
+.claude/local/
+.claude/settings.local.json
+.claude/scheduled_tasks.lock
+
+# Operating system files
+.DS_Store
+Thumbs.db

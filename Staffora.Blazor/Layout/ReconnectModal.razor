@@ -1,0 +1,26 @@
+﻿<script type="module" src="@Assets["Layout/ReconnectModal.razor.js"]"></script>
+
+<div id="components-reconnect-modal" class="reconnect-banner" role="status" aria-live="polite" data-nosnippet>
+    <span class="reconnect-banner__spinner ui-spinner ui-spinner--sm" aria-hidden="true"></span>
+    <p class="reconnect-banner__text components-reconnect-first-attempt-visible">
+        Connection lost. Reconnecting…
+    </p>
+    <p class="reconnect-banner__text components-reconnect-repeated-attempt-visible">
+        Connection lost. Trying again in <span id="components-seconds-to-next-attempt"></span> s…
+    </p>
+    <p class="reconnect-banner__text components-reconnect-failed-visible">
+        Could not reconnect.
+    </p>
+    <button type="button" id="components-reconnect-button" class="reconnect-banner__button components-reconnect-failed-visible">
+        Retry
+    </button>
+    <p class="reconnect-banner__text components-pause-visible">
+        The server paused this session.
+    </p>
+    <p class="reconnect-banner__text components-resume-failed-visible">
+        The session could not be resumed.
+    </p>
+    <button type="button" id="components-resume-button" class="reconnect-banner__button components-pause-visible components-resume-failed-visible">
+        Resume
+    </button>
+</div>

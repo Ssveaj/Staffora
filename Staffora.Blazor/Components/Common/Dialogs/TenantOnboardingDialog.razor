@@ -1,0 +1,124 @@
+@using Staffora.Core.Entities.Tenancy
+@inject TenantOnboardingService OnboardingService
+@inject DialogService DialogService
+
+<FormDialogFrame OnSave="OnboardAsync" SaveText="Create tenant" SaveIcon="add_business" SaveDisabled="@(!this.ready)" IsBusy="@this.busy" Footer="@(this.onboarded is null ? null : DoneFooter)">
+    @if (this.onboarded is null)
+    {
+        <RadzenFormField Text="Tenant name" Component="tenant-onboarding-name" Style="width: 100%;">
+            <RadzenTextBox Name="tenant-onboarding-name" @bind-Value="this.name" @bind-Value:after="Judge" MaxLength="@TenantOnboardingService.TenantNameMaxLength" />
+        </RadzenFormField>
+        <RadzenFormField Text="Description" Component="tenant-onboarding-description" Style="width: 100%;">
+            <RadzenTextArea Name="tenant-onboarding-description" @bind-Value="this.description" MaxLength="@TenantOnboardingService.TenantDescriptionMaxLength" Rows="2" />
+        </RadzenFormField>
+
+        <fieldset class="tenant-onboarding__owner">
+            <legend class="tenant-onboarding__legend">First system owner</legend>
+            <p class="tenant-onboarding__note">The system owner finishes the tenant's setup: they sign in while it is in setup, and can do everything in it except their own work.</p>
+            <div class="tenant-onboarding__pair">
+                <RadzenFormField Text="First name" Component="tenant-onboarding-owner-first-name" Style="width: 100%;">
+                    <RadzenTextBox Name="tenant-onboarding-owner-first-name" @bind-Value="this.firstName" @bind-Value:after="Judge" MaxLength="@TenantOnboardingService.NameMaxLength" />
+                </RadzenFormField>
+                <RadzenFormField Text="Last name" Component="tenant-onboarding-owner-last-name" Style="width: 100%;">
+                    <RadzenTextBox Name="tenant-onboarding-owner-last-name" @bind-Value="this.lastName" @bind-Value:after="Judge" MaxLength="@TenantOnboardingService.NameMaxLength" />
+                </RadzenFormField>
+            </div>
+            <RadzenFormField Text="Email" Component="tenant-onboarding-owner-email" Style="width: 100%;">
+                <RadzenTextBox Name="tenant-onboarding-owner-email" @bind-Value="this.email" @bind-Value:after="Judge" MaxLength="@TenantOnboardingService.EmailMaxLength" />
+            </RadzenFormField>
+        </fieldset>
+
+        @if (!string.IsNullOrEmpty(this.error))
+        {
+            <RadzenAlert AlertStyle="AlertStyle.Danger" Variant="Variant.Flat" Shade="Shade.Lighter" ShowIcon="true" AllowClose="false">@this.error</RadzenAlert>
+        }
+    }
+    else
+    {
+        <div class="tenant-onboarding__done" role="status">
+            <p>The tenant is created in setup, with @this.onboarded.OwnerEmail as its first system owner.</p>
+            <p>Their initial password, shown only this once: give it to them now.</p>
+            <p class="tenant-onboarding__password"><code>@this.onboarded.InitialPassword</code></p>
+        </div>
+        <div class="tenant-onboarding__copied">
+            <RadzenCheckBox TValue="bool" Name="tenant-onboarding-copied" InputAttributes="@FieldLabel.CheckBoxInput" aria-label="I have copied the password" @bind-Value="this.copied" />
+            <RadzenLabel Text="I have copied the password" Component="tenant-onboarding-copied" />
+        </div>
+    }
+</FormDialogFrame>
+
+@code {
+    private string? name;
+    private string? description;
+    private string? firstName;
+    private string? lastName;
+    private string? email;
+    private bool ready;
+    private bool busy;
+    private string? error;
+    private OnboardedTenant? onboarded;
+    private bool copied;
+
+    [Parameter] public CloseGuard? Guard { get; set; }
+
+    protected override void OnInitialized()
+    {
+        if (Guard is not null)
+        {
+            Guard.Ask = MayCloseAsync;
+        }
+    }
+
+    private void Judge() => this.ready = !string.IsNullOrWhiteSpace(this.name) && !string.IsNullOrWhiteSpace(this.firstName) && !string.IsNullOrWhiteSpace(this.lastName) && !string.IsNullOrWhiteSpace(this.email);
+
+    private async Task OnboardAsync()
+    {
+        this.error = null;
+        this.busy = true;
+        var onboarded = await OnboardingService.OnboardTenantAsync(new TenantOnboarding(this.name, this.description, this.firstName, this.lastName, this.email), CancellationToken.None);
+        this.busy = false;
+        if (onboarded.IsSuccess && onboarded.Value is { } tenant)
+        {
+            this.onboarded = tenant;
+        }
+        else
+        {
+            this.error = onboarded.Error ?? "The tenant could not be created.";
+        }
+    }
+
+    private RenderFragment DoneFooter => @<IconTextButton Text="Done" Icon="check" ButtonStyle="ButtonStyle.Primary" Click="DoneAsync" />;
+
+    private async Task DoneAsync()
+    {
+        if (await MayCloseAsync())
+        {
+            DialogService.Close(this.onboarded!.TenantId);
+        }
+    }
+
+    private async Task<bool> MayCloseAsync() =>
+        this.onboarded is null || this.copied
+        || await DialogService.ConfirmAsync(
+            "The initial password is shown only this once, and nobody can show it again. Close without it?",
+            "Close without the password?",
+            okText: "Close anyway",
+            cancelText: "Keep it open",
+            destructive: true);
+
+    public sealed class CloseGuard
+    {
+        internal Func<Task<bool>>? Ask { get; set; }
+
+        public Task<bool> MayCloseAsync() => Ask?.Invoke() ?? Task.FromResult(true);
+    }
+
+    public static Task<Guid?> OpenAsync(DialogService dialogService)
+    {
+        var guard = new CloseGuard();
+        return dialogService.OpenFormDialogAsync<TenantOnboardingDialog, Guid?>(
+            "New tenant",
+            parameters => parameters.Set(dialog => dialog.Guard, guard),
+            new FormDialogOptions { Width = "520px", CanClose = guard.MayCloseAsync });
+    }
+}

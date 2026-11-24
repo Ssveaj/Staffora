@@ -1,0 +1,39 @@
+@inject UserSessionService UserSessionService
+@inject Staffora.Blazor.Helper.UrlState.UrlStateService UrlState
+@implements IDisposable
+
+@if (UserSessionService.IsReady)
+{
+    <div class="session-ready" data-session="ready" hidden></div>
+    @ChildContent
+}
+else
+{
+    <div class="session-loader" role="status" aria-live="polite">
+        <span class="ui-spinner" aria-hidden="true"></span>
+        <span>Loading your session…</span>
+    </div>
+}
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        UserSessionService.OnChanged += OnSessionChanged;
+
+        await UserSessionService.InitializeFromClaimsAsync();
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender)
+        {
+            UrlState.MarkInteractive();
+        }
+    }
+
+    private void OnSessionChanged() => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose() => UserSessionService.OnChanged -= OnSessionChanged;
+}

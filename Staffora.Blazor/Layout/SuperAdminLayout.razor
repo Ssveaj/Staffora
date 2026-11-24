@@ -1,0 +1,27 @@
+@inherits LayoutComponentBase
+
+<Staffora.Blazor.Components.Account.SessionGate>
+    <AuthorizeView>
+        <Authorized>
+            <AppShell Title="Staffora" Icon="groups" Platform="true">@Body</AppShell>
+
+            <Staffora.Blazor.Components.Common.Dialogs.StateEntity.StateEntityDialogRestoreHost />
+        </Authorized>
+
+        <NotAuthorized>
+            <main class="anonymous-layout">
+                @Body
+            </main>
+        </NotAuthorized>
+    </AuthorizeView>
+</Staffora.Blazor.Components.Account.SessionGate>
+
+<RadzenDialog />
+<RadzenContextMenu />
+<RadzenTooltip />
+
+<div id="blazor-error-ui" data-nosnippet>
+    An unhandled error has occurred.
+    <a href="." class="reload">Reload</a>
+    <button type="button" class="dismiss" aria-label="Dismiss">🗙</button>
+</div>

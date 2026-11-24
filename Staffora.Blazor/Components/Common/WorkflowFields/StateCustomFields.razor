@@ -1,0 +1,82 @@
+@typeparam TValue where TValue : class, IEntityAttributeValue, new()
+@using Staffora.Blazor.Components.EntityAttributes
+@using Staffora.Core.Entities.EntityAttributes
+@using Staffora.Core.Workflow.FieldAccess
+
+@if (Visible && Definitions.Count > 0)
+{
+    <CustomFieldsFieldset TDefinition="IEntityAttributeDefinition" Definitions="@Definitions" NamePrefix="@NamePrefix" Leading="@Leading">
+        <Field Context="definition">
+            <AttributeValueField Definition="@definition" Value="@RowFor(definition)" NamePrefix="@NamePrefix" Changed="@(() => OnChanged(definition))" />
+        </Field>
+    </CustomFieldsFieldset>
+}
+else
+{
+    @Leading
+}
+
+@code {
+    private readonly Dictionary<Guid, TValue> rows = [];
+    private ICollection<TValue>? rowsOf;
+
+    [CascadingParameter] public StateEntityDialogContext? DialogContext { get; set; }
+
+    [Parameter, EditorRequired] public ICollection<TValue> Values { get; set; } = null!;
+
+    [Parameter, EditorRequired] public string NamePrefix { get; set; } = "attribute";
+
+    [Parameter] public RenderFragment? Leading { get; set; }
+
+    private IReadOnlyList<IEntityAttributeDefinition> Definitions { get; set; } = [];
+
+    private bool Visible { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        var context = DialogContext ?? throw new InvalidOperationException("StateCustomFields is part of a state-entity dialog's body; its layout cascades the dialog's context.");
+        Visible = context.AreaAccessOf(WorkflowAreas.Attributes).HasFlag(FieldAccessFlags.Visible);
+        var table = CustomFieldCollection.DefinitionTypeOf(typeof(TValue));
+        Definitions = [.. (context.CustomFields ?? []).Where(definition => table is not null && table.IsInstanceOfType(definition))];
+
+        if (!ReferenceEquals(this.rowsOf, Values))
+        {
+            this.rowsOf = Values;
+            this.rows.Clear();
+        }
+    }
+
+    private TValue RowFor(IEntityAttributeDefinition definition)
+    {
+        if (Values.FirstOrDefault(value => value.EntityAttributeDefinitionId == definition.Id) is { } held)
+        {
+            this.rows[definition.Id] = held;
+            return held;
+        }
+
+        if (!this.rows.TryGetValue(definition.Id, out var row))
+        {
+            row = new TValue { EntityAttributeDefinitionId = definition.Id };
+            this.rows[definition.Id] = row;
+        }
+
+        return row;
+    }
+
+    private void OnChanged(IEntityAttributeDefinition definition)
+    {
+        var row = RowFor(definition);
+        AttributeValues.Normalize(row);
+        var held = Values.Contains(row);
+        if (AttributeValues.IsBlank(row) && held)
+        {
+            Values.Remove(row);
+        }
+        else if (!AttributeValues.IsBlank(row) && !held)
+        {
+            Values.Add(row);
+        }
+
+        DialogContext!.NotifyEdited();
+    }
+}

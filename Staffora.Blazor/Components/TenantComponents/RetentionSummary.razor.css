@@ -1,0 +1,15 @@
+.retention-summary__when {
+    margin: 0 0 var(--space-4);
+    color: var(--color-text);
+    font-size: var(--font-size-sm);
+}
+
+.retention-summary__tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+    gap: var(--space-3);
+}
+
+.retention-summary__when:last-child {
+    margin-bottom: 0;
+}

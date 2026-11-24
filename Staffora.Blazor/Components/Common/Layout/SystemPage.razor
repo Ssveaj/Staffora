@@ -1,0 +1,48 @@
+<PageTitle>@Title - Staffora</PageTitle>
+
+<section class="system-page" aria-labelledby="system-page-title">
+    <div class="system-page__card @UiToneClass.Of(Tone)">
+        <div class="system-page__visual" aria-hidden="true">
+            <span class="system-page__mark">
+                <MaterialSymbol Name="@Icon" />
+            </span>
+        </div>
+        <div class="system-page__text">
+            @if (!string.IsNullOrWhiteSpace(Eyebrow))
+            {
+                <p class="system-page__eyebrow">@Eyebrow</p>
+            }
+            <h1 id="system-page-title" class="system-page__title">@Title</h1>
+            @if (!string.IsNullOrWhiteSpace(Message))
+            {
+                <p class="system-page__message">@Message</p>
+            }
+            @if (ChildContent is not null)
+            {
+                <div class="system-page__body">@ChildContent</div>
+            }
+            @if (!string.IsNullOrWhiteSpace(LinkPath))
+            {
+                <a class="system-page__link" href="@LinkPath">@LinkText</a>
+            }
+        </div>
+    </div>
+</section>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+
+    [Parameter] public string? Message { get; set; }
+
+    [Parameter] public string? Eyebrow { get; set; }
+
+    [Parameter, EditorRequired] public string Icon { get; set; } = string.Empty;
+
+    [Parameter] public UiTone Tone { get; set; } = UiTone.Neutral;
+
+    [Parameter] public string? LinkPath { get; set; } = "/";
+
+    [Parameter] public string LinkText { get; set; } = "Go to the start page";
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

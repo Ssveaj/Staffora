@@ -1,0 +1,153 @@
+.settings-shell {
+    display: grid;
+    grid-template-columns: 15rem minmax(0, 1fr);
+    align-items: start;
+    gap: var(--space-6);
+    min-width: 0;
+}
+
+.settings-shell__nav {
+    min-width: 0;
+}
+
+.settings-shell__picker {
+    display: none;
+    align-items: center;
+    gap: var(--space-3);
+    width: 100%;
+    height: var(--control-height-lg);
+    padding: 0 var(--space-3);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+    color: var(--color-text);
+    font: inherit;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    text-align: start;
+    cursor: pointer;
+}
+
+.settings-shell__picker-text {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.settings-shell__picker:focus-visible {
+    outline: none;
+    border-color: var(--color-accent);
+    box-shadow: var(--focus-ring);
+}
+
+.settings-shell__group {
+    margin: var(--space-5) 0 var(--space-2);
+    padding: 0 var(--space-3);
+    color: var(--color-text-subtle);
+    font-size: 0.72rem;
+    font-weight: var(--font-weight-bold);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.settings-shell__group:first-child {
+    margin-top: var(--space-1);
+}
+
+.settings-shell__panels {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.settings-shell__panel {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    min-height: 2.5rem;
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-lg);
+    color: var(--color-text);
+    font-size: var(--font-size-sm);
+    text-decoration: none;
+}
+
+.settings-shell__panel ::deep .material-symbol {
+    color: var(--color-text-muted);
+    font-size: 1.25rem;
+}
+
+.settings-shell__panel:hover {
+    background: var(--color-surface-hover);
+}
+
+.settings-shell__panel:focus-visible {
+    outline: none;
+    box-shadow: var(--focus-ring);
+}
+
+.settings-shell__panel--current,
+.settings-shell__panel--current:hover {
+    background: var(--color-accent-soft);
+    color: var(--color-accent);
+    font-weight: var(--font-weight-semibold);
+}
+
+.settings-shell__panel--current ::deep .material-symbol {
+    color: var(--color-accent);
+}
+
+.settings-shell ::deep .settings-shell__content {
+    min-width: 0;
+    margin-bottom: 0;
+    padding: var(--space-6);
+    border-radius: var(--radius-xl);
+    min-height: calc(100dvh - var(--app-header-height) - 8rem);
+}
+
+.settings-shell ::deep .settings-shell__content .page-section__heading {
+    margin-bottom: var(--space-5);
+}
+
+.settings-shell ::deep .settings-shell__content .page-section__title {
+    font-size: var(--font-size-xl);
+    font-weight: var(--font-weight-bold);
+}
+
+.settings-shell ::deep .settings-shell__content .page-section__description {
+    color: var(--color-text-subtle);
+}
+
+@media (max-width: 768px) {
+    .settings-shell {
+        grid-template-columns: minmax(0, 1fr);
+        gap: var(--space-4);
+    }
+
+    .settings-shell__picker {
+        display: flex;
+    }
+
+    .settings-shell__groups {
+        display: none;
+        margin-top: var(--space-2);
+        padding: var(--space-2);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-lg);
+        background: var(--color-surface);
+    }
+
+    .settings-shell__groups--open {
+        display: block;
+    }
+
+    .settings-shell ::deep .settings-shell__content {
+        min-height: 0;
+        padding: var(--space-4);
+    }
+}

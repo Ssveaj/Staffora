@@ -1,0 +1,3 @@
+.person-schedule-dialog ::deep .person-schedule__scroll {
+    max-height: max(14rem, calc(100dvh - 23rem));
+}

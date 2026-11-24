@@ -1,0 +1,114 @@
+@implements IAsyncDisposable
+@inject DialogService DialogService
+@inject IJSRuntime JS
+
+<div class="state-entity-dialog-header" inert="@Context.IsHeldByMove">
+    <MaterialSymbol Name="@Context.EntityIcon" Class="state-entity-dialog-header__icon" />
+    <h2 class="state-entity-dialog-header__title" id="@TitleId" tabindex="-1" @ref="this.title">@Context.Title</h2>
+    @if (Context.LoadState == StateEntityDialogLoadState.Loaded)
+    {
+        <StateEntityDialogStatePill Context="@Context" />
+    }
+    @if (Context.HasChanges)
+    {
+        <span class="state-entity-dialog-header__unsaved">Unsaved changes</span>
+    }
+    <span class="state-entity-dialog-header__actions">
+        @if (Context.LoadState == StateEntityDialogLoadState.Loaded && Context.State is not null && Context.EntityId is not null && Context.MayReadHistory)
+        {
+            <span @ref="this.historyHost" class="state-entity-dialog-header__history-host">
+                <RadzenButton Icon="history"
+                              aria-label="History"
+                              title="History"
+                              ButtonStyle="ButtonStyle.Base"
+                              Variant="Variant.Text"
+                              Size="ButtonSize.Small"
+                              class="state-entity-dialog-header__button state-entity-dialog-header__history"
+                              Click="@OpenHistoryAsync" />
+            </span>
+        }
+        <RadzenButton Icon="close"
+                      aria-label="Close"
+                      title="Close"
+                      ButtonStyle="ButtonStyle.Base"
+                      Variant="Variant.Text"
+                      Size="ButtonSize.Small"
+                      Disabled="@Context.IsBusy"
+                      class="state-entity-dialog-header__button state-entity-dialog-header__close"
+                      Click="@CloseAsync" />
+    </span>
+</div>
+
+@code {
+    internal const string ModulePath = "./scripts/state-entity-dialog.js";
+
+    private static int headers;
+    private ElementReference title;
+    private ElementReference historyHost;
+    private IJSObjectReference? module;
+
+    public string TitleId { get; } = $"state-entity-dialog-title-{Interlocked.Increment(ref headers)}";
+
+    [Parameter, EditorRequired] public StateEntityDialogContext Context { get; set; } = null!;
+
+    protected override void OnInitialized() => Context.Edited += OnEdited;
+
+    private void OnEdited() => _ = InvokeAsync(StateHasChanged);
+
+    private Task CloseAsync() => DialogService.TryCloseAsync(null);
+
+    private async Task OpenHistoryAsync()
+    {
+        await StateHistoryDialog.OpenAsync(DialogService, Context);
+        try
+        {
+            if (this.module is not null)
+            {
+                await this.module.InvokeVoidAsync("returnFocusWithin", this.historyHost);
+            }
+        }
+        catch (Exception exception) when (exception is JSException or JSDisconnectedException or TaskCanceledException or ObjectDisposedException)
+        {
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        try
+        {
+            this.module = await JS.InvokeAsync<IJSObjectReference>("import", ModulePath);
+            await this.module.InvokeVoidAsync("nameDialog", this.title);
+        }
+        catch (Exception exception) when (exception is JSException or JSDisconnectedException or TaskCanceledException or ObjectDisposedException or InvalidOperationException)
+        {
+        }
+        finally
+        {
+            Context.MarkShown();
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        Context.Edited -= OnEdited;
+        Context.MarkShown();
+
+        var handedOff = Context.TakeHandOff();
+        try
+        {
+            if (this.module is not null)
+            {
+                await this.module.InvokeVoidAsync(handedOff ? "handOffDialog" : "releaseDialog", TitleId);
+                await this.module.DisposeAsync();
+            }
+        }
+        catch (Exception exception) when (exception is JSException or JSDisconnectedException or TaskCanceledException or ObjectDisposedException)
+        {
+        }
+    }
+}

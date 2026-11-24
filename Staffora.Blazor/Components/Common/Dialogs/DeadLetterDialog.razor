@@ -1,0 +1,28 @@
+@using Staffora.Core.Models
+
+<FormDialogFrame ReadOnly="true">
+    <dl class="dead-letter-facts">
+        <dt>Kind</dt>
+        <dd><code>@Letter.Kind</code></dd>
+        <dt>Direction</dt>
+        <dd>@TenantConsoleDeadLetters.DirectionText(Letter)</dd>
+        <dt>Attempts</dt>
+        <dd>@Letter.Attempts</dd>
+        <dt>Given up</dt>
+        <dd>@TenantConsoleDeadLetters.TimeText(Letter.GivenUp)</dd>
+        <dt>Last failure</dt>
+        <dd>@(Letter.LastFailure ?? "Not recorded")</dd>
+        <dt>Correlation</dt>
+        <dd><code>@Letter.CorrelationId</code></dd>
+        <dt>Place in the sender's order</dt>
+        <dd>@Letter.Sequence</dd>
+        <dt>Written</dt>
+        <dd>@TenantConsoleDeadLetters.TimeText(Letter.Written)</dd>
+        <dt>Message</dt>
+        <dd><code>@Letter.Id</code></dd>
+    </dl>
+</FormDialogFrame>
+
+@code {
+    [Parameter, EditorRequired] public PlatformDeadLetterRow Letter { get; set; } = null!;
+}

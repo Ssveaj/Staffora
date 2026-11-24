@@ -1,0 +1,13 @@
+<span class="ui-icon-chip @UiToneClass.Of(Tone) @SizeClass" aria-hidden="true">
+    <MaterialSymbol Name="@Icon" />
+</span>
+
+@code {
+    [Parameter, EditorRequired] public string Icon { get; set; } = string.Empty;
+
+    [Parameter] public UiTone Tone { get; set; } = UiTone.Accent;
+
+    [Parameter] public bool Large { get; set; }
+
+    private string? SizeClass => Large ? "ui-icon-chip--lg" : null;
+}

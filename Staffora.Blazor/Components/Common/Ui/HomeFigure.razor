@@ -1,0 +1,40 @@
+<li class="home-figures__item">
+    @if (!string.IsNullOrWhiteSpace(Href))
+    {
+        <a class="@CssClass" href="@Href" @attributes="AdditionalAttributes">
+            <span class="home-figure__value">@Value</span>@(" ")
+            <span class="home-figure__label">@Label</span>
+        </a>
+    }
+    else
+    {
+        <span class="@CssClass" @attributes="AdditionalAttributes">
+            <span class="home-figure__value">@Value</span>@(" ")
+            <span class="home-figure__label">@Label</span>
+        </span>
+    }
+</li>
+
+@code {
+    [Parameter, EditorRequired] public string Value { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
+
+    [Parameter] public bool Lead { get; set; }
+
+    [Parameter] public bool Zero { get; set; }
+
+    [Parameter] public string? Href { get; set; }
+
+    [Parameter] public string? Class { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)] public IReadOnlyDictionary<string, object>? AdditionalAttributes { get; set; }
+
+    private string CssClass => string.Join(' ', new[]
+    {
+        "home-figure",
+        Lead ? "home-figure--lead" : null,
+        Zero ? "home-figure--zero" : null,
+        Class,
+    }.Where(part => !string.IsNullOrWhiteSpace(part)));
+}

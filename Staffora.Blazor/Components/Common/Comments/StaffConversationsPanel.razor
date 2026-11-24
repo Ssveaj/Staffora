@@ -1,0 +1,153 @@
+@using Staffora.Blazor.Components.Common.Dialogs.StateEntity
+@using Staffora.Blazor.Components.Common.Ui
+@using Staffora.Blazor.Helper
+@using Staffora.Core.Jobs
+@using Staffora.Core.Models
+
+@if (Context.ConversationsError is { } error)
+{
+    <EmptyState Icon="forum" Title="The conversations could not be shown" Text="@error" Tone="UiTone.Danger" Role="alert" />
+}
+else if (Context.OpenConversationId is { } open)
+{
+    var row = Context.Conversations?.FirstOrDefault(conversation => conversation.AssignmentId == open);
+    <div class="staff-talk__open" data-conversation="@open">
+        <button type="button" class="staff-talk__back" @ref="this.back" @onclick="Back">
+            <MaterialSymbol Name="arrow_back" />
+            <span>All staff members</span>
+        </button>
+        @if (row is not null)
+        {
+            <div class="staff-talk__who">
+                <span class="staff-talk__name">@row.Staff</span>
+                <span class="staff-talk__detail">@row.Slot · @EnumDisplayHelper.GetDisplayName(row.State)</span>
+                @if (Context.OpenConversationThread is { RequiresAttention: true } waiting)
+                {
+                    <span class="staff-talk__flag" data-attention-text>@waiting.AttentionText</span>
+                }
+            </div>
+        }
+        @if (Context.OpenConversationError is { } openError)
+        {
+            <p class="staff-talk__note" role="alert">@openError</p>
+        }
+        else if (Context.OpenConversationThread is { } thread)
+        {
+            <CommentBubbleList @key="open"
+                               Comments="@thread.Comments"
+                               TotalCount="@thread.TotalCount"
+                               Label="@($"Conversation with {row?.Staff ?? "the staff member"}")"
+                               InputName="@($"comment-conversation-{open:N}")"
+                               CanPost="@thread.CanPost"
+                               TimeZoneId="@thread.TimeZoneId"
+                               MarkedCommentId="@thread.FirstMarkedCommentId"
+                               MarkerLabel="@thread.Turn?.MarkerLabel"
+                               EmptyText="No messages yet. What you write here, the staff member reads."
+                               Placeholder="Write to the staff member"
+                               Draft="@Context.DraftOf(StateEntityDialogContext.ConversationDraftKey(open))"
+                               DraftChanged="@(draft => Context.KeepDraft(StateEntityDialogContext.ConversationDraftKey(open), draft))"
+                               OnPost="Context.SendConversationCommentAsync" />
+        }
+        else
+        {
+            <p class="staff-talk__note" role="status">Reading the conversation…</p>
+        }
+    </div>
+}
+else
+{
+    var rows = Context.Conversations ?? [];
+    <div class="staff-talk__head">
+        <span class="staff-talk__title">@Context.ConversationsLabel</span>
+    </div>
+    <p class="staff-talk__intro">The conversation with each staff member asked for or assigned to the job. The staff member and the coordinators read it, no other staff member.</p>
+    @if (rows.Count == 0)
+    {
+        <p class="staff-talk__note">Nobody is asked yet.</p>
+    }
+    else
+    {
+        <ul class="staff-talk__list" aria-label="@($"Conversations with {Context.ConversationsLabel.ToLowerInvariant()}")">
+            @foreach (var row in rows)
+            {
+                var conversation = row;
+                <li>
+                    <button type="button"
+                            class="@(conversation.AwaitsReply ? "staff-talk__row staff-talk__row--waiting" : "staff-talk__row")"
+                            data-assignment="@conversation.AssignmentId"
+                            data-attention="@(conversation.AwaitsReply ? "true" : "false")"
+                            @ref="this.rows[conversation.AssignmentId]"
+                            @onclick="@(() => OpenAsync(conversation.AssignmentId))">
+                        <span class="staff-talk__avatar"><MaterialSymbol Name="person" /></span>
+                        <span class="staff-talk__main">
+                            <span class="staff-talk__line">
+                                <span class="staff-talk__name">@conversation.Staff</span>
+                                @if (conversation.LastAt is { } at)
+                                {
+                                    <time class="staff-talk__time" datetime="@at.ToString("o", System.Globalization.CultureInfo.InvariantCulture)">@CommentDays.FullLabel(at)</time>
+                                }
+                            </span>
+                            <span class="staff-talk__detail">@conversation.Slot · @EnumDisplayHelper.GetDisplayName(conversation.State)</span>
+                            <span class="staff-talk__last">@(conversation.LastText is { } text ? $"{conversation.LastAuthor}: {text}" : "No messages yet")</span>
+                            @if (conversation.AwaitsReply)
+                            {
+                                <span class="visually-hidden">, awaits your reply</span>
+                            }
+                        </span>
+                        @if (conversation.AwaitsReply)
+                        {
+                            <MaterialSymbol Name="mark_chat_unread" Class="staff-talk__unread" />
+                        }
+                        <MaterialSymbol Name="chevron_right" Class="staff-talk__chevron" />
+                    </button>
+                </li>
+            }
+        </ul>
+    }
+}
+
+@code {
+    private readonly Dictionary<Guid, ElementReference> rows = [];
+    private ElementReference back;
+    private bool focusBack;
+    private Guid? focusRow;
+
+    [Parameter, EditorRequired] public StateEntityDialogContext Context { get; set; } = null!;
+
+    private Task OpenAsync(Guid conversationId)
+    {
+        this.focusBack = true;
+        return Context.OpenConversationAsync(conversationId);
+    }
+
+    private void Back()
+    {
+        this.focusRow = Context.OpenConversationId;
+        Context.CloseConversation();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (this.focusBack && Context.OpenConversationId is not null)
+        {
+            this.focusBack = false;
+            await FocusAsync(this.back);
+        }
+        else if (this.focusRow is { } row && Context.OpenConversationId is null && this.rows.TryGetValue(row, out var element))
+        {
+            this.focusRow = null;
+            await FocusAsync(element);
+        }
+    }
+
+    private static async Task FocusAsync(ElementReference element)
+    {
+        try
+        {
+            await element.FocusAsync();
+        }
+        catch (Exception exception) when (exception is Microsoft.JSInterop.JSException or Microsoft.JSInterop.JSDisconnectedException or TaskCanceledException or ObjectDisposedException or InvalidOperationException)
+        {
+        }
+    }
+}

@@ -1,0 +1,61 @@
+@using Staffora.Blazor.Components.Common.Dialogs.StateEntity
+@using Staffora.Core.Models
+@inject DialogService DialogService
+@inject RoleHoldingService RoleHoldingService
+
+<FormDialogFrame OnSave="RemoveAsync" SaveText="Remove role" SaveIcon="person_remove" IsBusy="@this.removing" ReadOnly="@(!CanRemove)">
+    <dl class="role-holding">
+        @if (Holding.Person is { } person)
+        {
+            <dt>Person</dt>
+            <dd>@person</dd>
+        }
+        <dt>Role</dt>
+        <dd>@Holding.Role</dd>
+        <dt>Unit</dt>
+        <dd>@Holding.UnitLabel</dd>
+    </dl>
+    @if (!Holding.UnitInUse)
+    {
+        <RadzenText TextStyle="TextStyle.Body2" class="text-muted">The unit is not in use, so this role grants nothing until the unit is active again.</RadzenText>
+    }
+
+    @if (!string.IsNullOrEmpty(this.error))
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Danger" Variant="Variant.Flat" Shade="Shade.Lighter" ShowIcon="true" AllowClose="false">@this.error</RadzenAlert>
+    }
+</FormDialogFrame>
+
+@code {
+    private bool removing;
+    private string? error;
+
+    [Parameter, EditorRequired] public UserRoleHoldingRow Holding { get; set; } = null!;
+
+    [Parameter] public bool CanRemove { get; set; }
+
+    private async Task RemoveAsync()
+    {
+        this.error = null;
+        this.removing = true;
+        var removed = await RoleHoldingService.RemoveUserFromRoleAsync(Holding.Id);
+        this.removing = false;
+        if (removed.IsSuccess)
+        {
+            DialogService.Close(true);
+        }
+        else
+        {
+            this.error = removed.Error ?? "The role could not be removed.";
+        }
+    }
+
+    public static async Task<StateEntityDialogResult> OpenAsync(DialogService dialogService, UserRoleHoldingRow holding, bool canRemove)
+    {
+        var removed = await dialogService.OpenFormDialogAsync<RoleHoldingDialog>(
+            holding.Person is { } person ? $"{person}: {holding.Role} on {holding.Unit}" : $"{holding.Role} on {holding.Unit}",
+            parameters => parameters.Set(dialog => dialog.Holding, holding).Set(dialog => dialog.CanRemove, canRemove),
+            new FormDialogOptions { Width = "440px" });
+        return new StateEntityDialogResult(removed, false, null);
+    }
+}

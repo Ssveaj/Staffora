@@ -1,0 +1,80 @@
+@using Staffora.Blazor.Components.Common.Comments
+@using Staffora.Blazor.Components.Common.Ui
+@using Staffora.Blazor.Helper
+@using Staffora.Core.Entities.Comments
+
+@if (Context.HasSideColumn)
+{
+    var thread = Context.SelectedCommentThread;
+    <section class="state-entity-dialog-side" aria-labelledby="@HeadingId" inert="@Context.IsBusy">
+        <h3 class="visually-hidden" id="@HeadingId">Comments</h3>
+        @if (Context.CommentThreadsError is { } error)
+        {
+            <EmptyState Icon="forum" Title="The comments could not be shown" Text="@error" Tone="UiTone.Danger" Role="alert" />
+        }
+        else if (thread is not null || Context.ConversationsShown)
+        {
+            <DialogSideTabs Context="@Context" />
+            @if (thread is not null)
+            {
+                <div class="state-entity-dialog-side__panel"
+                     role="tabpanel"
+                     id="@DialogSideTabs.PanelId(Context)"
+                     aria-labelledby="@DialogSideTabs.TabId(Context, thread)"
+                     data-thread="@thread.Audience.ToString().ToLowerInvariant()">
+                    <div class="state-entity-dialog-side__head">
+                        <MaterialSymbol Name="@thread.Audience.GetIcon()" Class="state-entity-dialog-side__head-icon" />
+                        <span class="state-entity-dialog-side__title">@(thread.Title ?? EnumDisplayHelper.GetDisplayName(thread.Audience))</span>
+                        @if (thread.TotalCount > 0)
+                        {
+                            <span class="state-entity-dialog-side__count" data-thread-count="@thread.TotalCount">@thread.TotalCount.ToString(System.Globalization.CultureInfo.InvariantCulture)<span class="visually-hidden"> comments</span></span>
+                        }
+                        @if (thread.RequiresAttention)
+                        {
+                            <span class="state-entity-dialog-side__flag" data-attention-text>@thread.AttentionText</span>
+                        }
+                    </div>
+                    <p class="state-entity-dialog-side__audience">@(thread.Readers ?? EnumDisplayHelper.GetDescription(thread.Audience))</p>
+                    <CommentBubbleList @key="thread.Audience"
+                                       Comments="@thread.Comments"
+                                       TotalCount="@thread.TotalCount"
+                                       Label="@($"{thread.Title ?? EnumDisplayHelper.GetDisplayName(thread.Audience)} comments")"
+                                       InputName="@($"comment-{thread.Audience.ToString().ToLowerInvariant()}")"
+                                       CanPost="@thread.CanPost"
+                                       AsNotes="@(thread.Audience == CommentAudience.Internal)"
+                                       TimeZoneId="@thread.TimeZoneId"
+                                       MarkedCommentId="@thread.FirstMarkedCommentId"
+                                       MarkerLabel="@thread.Turn?.MarkerLabel"
+                                       EmptyText="@(thread.Audience == CommentAudience.Internal ? "No notes yet." : "No comments yet.")"
+                                       Placeholder="@(thread.Audience == CommentAudience.Internal ? "Write a note" : "Write a comment")"
+                                       Draft="@Context.DraftOf(StateEntityDialogContext.ThreadDraftKey(thread.Audience))"
+                                       DraftChanged="@(draft => Context.KeepDraft(StateEntityDialogContext.ThreadDraftKey(thread.Audience), draft))"
+                                       OnPost="@(text => Context.SendCommentAsync(thread.Audience, text))" />
+                    @if (!thread.CanPost && thread.ClosedReason is { } closedReason)
+                    {
+                        <p class="state-entity-dialog-side__closed" data-thread-closed>
+                            <MaterialSymbol Name="lock" Class="state-entity-dialog-side__closed-icon" />
+                            <span>@closedReason</span>
+                        </p>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="state-entity-dialog-side__panel"
+                     role="tabpanel"
+                     id="@DialogSideTabs.PanelId(Context)"
+                     aria-labelledby="@DialogSideTabs.ConversationsTabId(Context)"
+                     data-thread="conversations">
+                    <StaffConversationsPanel Context="@Context" />
+                </div>
+            }
+        }
+    </section>
+}
+
+@code {
+    [Parameter, EditorRequired] public StateEntityDialogContext Context { get; set; } = null!;
+
+    private string HeadingId => $"{Context.DomId}-side-heading";
+}

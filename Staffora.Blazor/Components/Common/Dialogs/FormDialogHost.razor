@@ -1,0 +1,74 @@
+@implements IAsyncDisposable
+@inject UrlStateService UrlState
+@inject IJSRuntime JS
+
+<CascadingValue Value="DialogScope.Instance" IsFixed="true">
+    <div class="form-dialog" id="@RootId" data-form-dialog="@ContentType.Name" @ref="this.root">
+        <FormDialogHeader Title="@Title" Icon="@Icon" />
+        <DynamicComponent Type="@ContentType" Parameters="@ContentParameters" />
+    </div>
+</CascadingValue>
+
+@code {
+    internal const string ModulePath = "./scripts/dialog-focus.js";
+
+    private static int hosts;
+    private IDisposable? stackEntry;
+    private ElementReference root;
+    private IJSObjectReference? module;
+
+    private string RootId { get; } = $"form-dialog-{Interlocked.Increment(ref hosts)}";
+
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+
+    [Parameter] public string? Icon { get; set; }
+
+    [Parameter, EditorRequired] public Type ContentType { get; set; } = null!;
+
+    [Parameter] public IDictionary<string, object> ContentParameters { get; set; } = new Dictionary<string, object>();
+
+    [Parameter] public DialogStackSegment? UrlSegment { get; set; }
+
+    [Parameter] public bool CloseOnEsc { get; set; } = true;
+
+    protected override void OnInitialized()
+    {
+        if (UrlSegment is { } segment)
+        {
+            this.stackEntry = UrlState.PushDialog(segment);
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        try
+        {
+            this.module = await JS.InvokeAsync<IJSObjectReference>("import", ModulePath);
+            await this.module.InvokeVoidAsync("trackDialog", this.root, CloseOnEsc);
+        }
+        catch (Exception exception) when (exception is JSException or JSDisconnectedException or TaskCanceledException or ObjectDisposedException or InvalidOperationException)
+        {
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        this.stackEntry?.Dispose();
+        try
+        {
+            if (this.module is not null)
+            {
+                await this.module.InvokeVoidAsync("releaseDialog", RootId);
+                await this.module.DisposeAsync();
+            }
+        }
+        catch (Exception exception) when (exception is JSException or JSDisconnectedException or TaskCanceledException or ObjectDisposedException)
+        {
+        }
+    }
+}

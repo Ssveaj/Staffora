@@ -1,0 +1,69 @@
+@implements IDisposable
+@inject DialogService DialogService
+@inject OpenStateEntityDialogs OpenDialogs
+
+<NavigationLock OnBeforeInternalNavigation="OnBeforeInternalNavigationAsync" ConfirmExternalNavigation="@HoldsTheApp" />
+
+@code {
+    private IDisposable? registration;
+
+    [Parameter, EditorRequired] public StateEntityDialogSession Session { get; set; } = null!;
+
+    private bool HoldsTheApp => Session.IsSwapping || Session.Targets.Any(target => target.Context.IsBusy || target.Context.HasChanges);
+
+    protected override void OnInitialized()
+    {
+        this.registration = OpenDialogs.Register(Session);
+        Session.Changed += OnChanged;
+        foreach (var context in Session.AllContexts)
+        {
+            context.Changed += OnChanged;
+            context.Edited += OnChanged;
+        }
+    }
+
+    private void OnChanged() => _ = InvokeAsync(StateHasChanged);
+
+    private async Task OnBeforeInternalNavigationAsync(LocationChangingContext navigation)
+    {
+        if (!ReferenceEquals(OpenDialogs.TopSession, Session))
+        {
+            return;
+        }
+
+        var moving = OpenDialogs.Sessions.Where(session => session.IsSwapping).ToList();
+        var busy = OpenDialogs.All.Where(context => context.IsBusy && !moving.Any(session => session.Holds(context))).ToList();
+        if (moving.Count > 0 || busy.Count > 0)
+        {
+            navigation.PreventNavigation();
+            foreach (var session in moving.Where(session => session.IsPreloading))
+            {
+                session.Current.Context.ReportStatus(StateEntityDialogSession.NavigationHeldWhileMoving);
+            }
+
+            foreach (var running in busy)
+            {
+                running.ReportStatus(StateEntityDialogContext.NavigationHeldWhileBusy);
+            }
+
+            return;
+        }
+
+        var edited = OpenDialogs.All.Where(context => context.HasChanges).ToList();
+        if (edited.Count > 0 && !await DialogService.ConfirmDiscardChangesAsync(edited))
+        {
+            navigation.PreventNavigation();
+        }
+    }
+
+    public void Dispose()
+    {
+        this.registration?.Dispose();
+        Session.Changed -= OnChanged;
+        foreach (var context in Session.AllContexts)
+        {
+            context.Changed -= OnChanged;
+            context.Edited -= OnChanged;
+        }
+    }
+}

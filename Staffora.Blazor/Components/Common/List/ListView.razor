@@ -1,0 +1,903 @@
+@typeparam TItem
+@implements IAsyncDisposable
+@inject UrlStateService UrlState
+@inject IJSRuntime JS
+@inject NavigationManager Navigation
+
+<CascadingValue Value="this" IsFixed="true">
+    @Columns
+    <ListDeferred>
+        <div class="list-view" id="@Id" @ref="this.root">
+            <div class="list-view__toolbar" role="search" aria-label="@($"Find {ItemsName}")">
+                @if (QuickFilterDefinition is { } quick)
+                {
+                    var chosen = this.query.Filter(quick.Key);
+                    <div class="list-quick" role="group" aria-label="@quick.Label" data-quick="@quick.Key">
+                        @QuickOption(quick, null, quick.AllLabel, chosen is null)
+                        @foreach (var option in quick.Options)
+                        {
+                            @QuickOption(quick, option.Value, option.Label, chosen == option.Value)
+                        }
+                    </div>
+                }
+                <div class="list-search">
+                    <label class="visually-hidden" for="@($"{Id}-search")">@SearchLabel</label>
+                    <MaterialSymbol Name="search" Class="list-search__icon" />
+                    <input id="@($"{Id}-search")"
+                           name="@($"{Id}-search")"
+                           type="search"
+                           class="list-search__input"
+                           maxlength="@ListDefinition.MaxSearchLength"
+                           placeholder="@(SearchPlaceholder ?? SearchLabel)"
+                           value="@this.searchText"
+                           @onchange="OnSearchChangedAsync" />
+                </div>
+                <button type="button"
+                        class="list-filters-toggle"
+                        aria-expanded="@(this.filtersOpen ? "true" : "false")"
+                        aria-controls="@($"{Id}-filters")"
+                        @onclick="@(() => this.filtersOpen = !this.filtersOpen)">
+                    <MaterialSymbol Name="tune" />
+                    <span class="list-filters-toggle__text">@FiltersText</span>
+                    <MaterialSymbol Name="@(this.filtersOpen ? "expand_less" : "expand_more")" />
+                </button>
+                <div class="@(this.filtersOpen ? "list-view__filters list-view__filters--open" : "list-view__filters")" id="@($"{Id}-filters")">
+                    @foreach (var filter in Definition.Filters.Where(filter => filter.Key != QuickFilter))
+                    {
+                        var current = this.query.Filter(filter.Key);
+                        var chosenLabel = current is null ? filter.AllLabel : filter.Options.FirstOrDefault(option => option.Value == current)?.Label ?? filter.AllLabel;
+                        @Popover($"filter-{filter.Key}",
+                                 $"{Id}-filter-{filter.Key}",
+                                 filter.Label,
+                                 current ?? string.Empty,
+                                 current is null ? "list-chip" : "list-chip list-chip--on",
+                                 ChipFace(filter.Label, chosenLabel),
+                                 [new PopOption(null, filter.AllLabel), .. filter.Options.Select(option => new PopOption(option.Value, option.Label))],
+                                 current,
+                                 value => SetFilterAsync(filter.Key, value),
+                                 current is null ? null : () => ClearFilterAsync(filter.Key))
+                    }
+                    @foreach (var toggle in Definition.Toggles)
+                    {
+                        var on = this.query.IsOn(toggle.Key);
+                        <button type="button" class="@(on ? "list-toggle list-toggle--on" : "list-toggle")" aria-pressed="@(on ? "true" : "false")" @onclick="@(() => SetToggleAsync(toggle.Key, !on))">
+                            <MaterialSymbol Name="@(on ? "visibility" : "visibility_off")" />
+                            <span>@toggle.Label</span>
+                        </button>
+                    }
+                    <span class="list-view__spacer" aria-hidden="true"></span>
+                    @if (Definition.Groups.Count > 0)
+                    {
+                        var groupLabel = this.query.Group is { } group ? Definition.Groups.FirstOrDefault(option => option.Value == group)?.Label ?? group : NoGroupLabel;
+                        @Popover("group",
+                                 $"{Id}-group",
+                                 "Group",
+                                 this.query.Group ?? string.Empty,
+                                 "list-tool-host",
+                                 ToolFace("view_agenda", "Group", groupLabel, null),
+                                 [new PopOption(null, NoGroupLabel), .. Definition.Groups.Select(option => new PopOption(option.Value, option.Label))],
+                                 this.query.Group,
+                                 SetGroupAsync,
+                                 null)
+                    }
+                    @{
+                        var sortLabel = Definition.Sorts.FirstOrDefault(option => option.Value == this.query.Sort)?.Label ?? this.query.Sort;
+                        var sortValue = (this.query.Descending ? "-" : string.Empty) + this.query.Sort;
+                    }
+                    @Popover("sort",
+                             $"{Id}-sort",
+                             "Sort",
+                             sortValue,
+                             "list-tool-host",
+                             ToolFace("swap_vert", "Sort", sortLabel, this.query.Descending ? "descending" : "ascending"),
+                             [.. Definition.Sorts.SelectMany(option => new[] { new PopOption(option.Value, option.Label, "arrow_upward", ", ascending"), new PopOption("-" + option.Value, option.Label, "arrow_downward", ", descending") })],
+                             sortValue,
+                             SetSortAsync,
+                             null)
+                </div>
+            </div>
+
+            @foreach (var toggle in Definition.Toggles.Where(toggle => !this.query.IsOn(toggle.Key)))
+            {
+                var hidden = this.page?.HiddenCounts.GetValueOrDefault(toggle.Key) ?? 0;
+                if (hidden > 0)
+                {
+                    <p class="list-view__hidden">
+                        <MaterialSymbol Name="visibility_off" />
+                        <span>@(hidden == 1 ? toggle.HiddenOne : string.Format(System.Globalization.CultureInfo.InvariantCulture, toggle.HiddenMany, hidden))</span>
+                        <button type="button" class="list-link" @onclick="@(() => SetToggleAsync(toggle.Key, true))">@toggle.Label</button>
+                    </p>
+                }
+            }
+
+            @if (this.page is null)
+            {
+                @if (this.error is not null)
+                {
+                    <EmptyState Icon="error" Title="@($"The {ItemsName} could not be loaded")" Text="@this.error" Tone="UiTone.Danger" Role="alert" />
+                }
+                else
+                {
+                    <div class="list-view__loading">
+                        <LoadingState Inline Text="@($"Loading {ItemsName}…")" />
+                    </div>
+                }
+            }
+            else
+            {
+                @if (this.error is not null)
+                {
+                    <p class="list-view__error" role="alert">@this.error</p>
+                }
+                @if (this.page.TotalCount == 0)
+                {
+                    @if (IsNarrowed)
+                    {
+                        <EmptyState Icon="search_off" Title="@($"No {ItemsName} match")" Text="Change the search or the filters to see more.">
+                            <button type="button" class="list-link" @onclick="ClearAsync">Clear search and filters</button>
+                        </EmptyState>
+                    }
+                    else
+                    {
+                        <EmptyState Icon="@EmptyIcon" Title="@(EmptyTitle ?? $"No {ItemsName} yet")" Text="@EmptyText" />
+                    }
+                }
+                else if (Cards is not null)
+                {
+                    <div class="list-view__frame list-view__frame--cards" aria-busy="@(this.loading ? "true" : "false")">
+                        @foreach (var section in this.page.Sections)
+                        {
+                            var collapsed = section.Key is not null && this.collapsed.Contains(section.Key);
+                            <div class="list-section" data-section="@section.Key">
+                                @if (section.Key is not null)
+                                {
+                                    <div class="list-heading list-heading--cards">
+                                        @SectionToggle(section.Key, section.Label, section.TotalCount, collapsed)
+                                    </div>
+                                }
+                                @if (!collapsed)
+                                {
+                                    <ul class="list-cards" tabindex="-1" aria-label="@(section.Label ?? Label)" aria-describedby="@($"{Id}-summary")">
+                                        @foreach (var item in section.Rows)
+                                        {
+                                            @CardRow(item)
+                                        }
+                                    </ul>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="list-view__frame" aria-busy="@(this.loading ? "true" : "false")">
+                        @if (this.loading)
+                        {
+                            <div class="list-view__busy" aria-hidden="true"></div>
+                        }
+                        <table class="list-table" role="table" tabindex="-1" aria-label="@Label" aria-describedby="@($"{Id}-summary")">
+                            <thead role="rowgroup">
+                                <tr role="row">
+                                    @foreach (var column in VisibleColumns)
+                                    {
+                                        <th role="columnheader" scope="col" class="@column.Class">@column.Title</th>
+                                    }
+                                    @if (RowState is not null)
+                                    {
+                                        <th role="columnheader" scope="col" class="list-table__state">@StateTitle</th>
+                                    }
+                                </tr>
+                            </thead>
+                            @foreach (var section in this.page.Sections)
+                            {
+                                var collapsed = section.Key is not null && this.collapsed.Contains(section.Key);
+                                <tbody class="list-section" role="rowgroup" data-section="@section.Key">
+                                    @if (section.Key is not null)
+                                    {
+                                        <tr class="list-heading" role="row">
+                                            <th role="rowheader" scope="rowgroup" colspan="@ColumnCount">
+                                                @SectionToggle(section.Key, section.Label, section.TotalCount, collapsed)
+                                            </th>
+                                        </tr>
+                                    }
+                                    @if (!collapsed)
+                                    {
+                                        @foreach (var item in section.Rows)
+                                        {
+                                            var key = RowKey(item);
+                                            var label = RowLabel(item);
+                                            var state = RowState?.Invoke(item);
+                                            <tr class="@RowClass(state)" role="row" data-row="@key" @key="key" @onclick="@(() => OpenAsync(item))">
+                                                @foreach (var column in VisibleColumns)
+                                                {
+                                                    <td class="@column.Class" role="cell" data-label="@column.Title">
+                                                        <span class="list-cell__label" aria-hidden="true">@column.Title</span>
+                                                        @if (column.Avatar || column.Subtitle is not null)
+                                                        {
+                                                            var subtitle = column.Subtitle?.Invoke(item);
+                                                            <span class="list-name">
+                                                                @if (column.Avatar)
+                                                                {
+                                                                    <span class="list-name__avatar" aria-hidden="true">@Initials(label)</span>
+                                                                }
+                                                                <span class="list-name__lines">
+                                                                    @Cell(column, item)
+                                                                    @if (!string.IsNullOrWhiteSpace(subtitle))
+                                                                    {
+                                                                        <span class="list-name__sub">@subtitle</span>
+                                                                    }
+                                                                </span>
+                                                            </span>
+                                                        }
+                                                        else
+                                                        {
+                                                            @Cell(column, item)
+                                                        }
+                                                    </td>
+                                                }
+                                                @if (state is { } shown)
+                                                {
+                                                    <td class="list-table__state" role="cell" data-label="@StateTitle">
+                                                        <span class="list-cell__label" aria-hidden="true">@StateTitle</span>
+                                                        <span class="list-state"><span class="list-state__dot" aria-hidden="true"></span>@shown.Label</span>
+                                                    </td>
+                                                }
+                                            </tr>
+                                        }
+                                    }
+                                </tbody>
+                            }
+                        </table>
+                    </div>
+                }
+                <div class="@(this.page.TotalCount == 0 ? "list-view__footer list-view__footer--empty" : "list-view__footer")">
+                    <p class="@(this.page.TotalCount == 0 ? "list-view__summary visually-hidden" : "list-view__summary")" id="@($"{Id}-summary")" role="status" tabindex="-1">@SummaryText</p>
+                    @if (this.page.PageCount > 1)
+                    {
+                        <nav class="list-pager" aria-label="@($"Pages of {ItemsName}")">
+                            <button type="button" class="list-pager__step" aria-label="Previous page" title="Previous page" disabled="@(this.page.Page <= 1)" @onclick="@(() => GoToPageAsync(this.page.Page - 1))">
+                                <MaterialSymbol Name="chevron_left" />
+                            </button>
+                            @foreach (var number in PagerItems(this.page.Page, this.page.PageCount))
+                            {
+                                if (number is { } shown)
+                                {
+                                    <button type="button" class="list-pager__page" aria-current="@(shown == this.page.Page ? "page" : null)" aria-label="@($"Page {shown}")" @onclick="@(() => GoToPageAsync(shown))">@shown</button>
+                                }
+                                else
+                                {
+                                    <span class="list-pager__gap" aria-hidden="true">…</span>
+                                }
+                            }
+                            <button type="button" class="list-pager__step" aria-label="Next page" title="Next page" disabled="@(this.page.Page >= this.page.PageCount)" @onclick="@(() => GoToPageAsync(this.page.Page + 1))">
+                                <MaterialSymbol Name="chevron_right" />
+                            </button>
+                        </nav>
+                    }
+                </div>
+            }
+        </div>
+    </ListDeferred>
+</CascadingValue>
+
+@code {
+    public const string ModulePath = "./scripts/list-view.js";
+
+    public const string NoGroupLabel = "None";
+
+    private static int unnamedLists;
+
+    [Parameter, EditorRequired] public ListDefinition Definition { get; set; } = null!;
+
+    [Parameter, EditorRequired] public Func<ListQuery, Task<Result<ListPage<TItem>>>> Load { get; set; } = null!;
+
+    [Parameter, EditorRequired] public Func<TItem, Guid> RowKey { get; set; } = null!;
+
+    [Parameter, EditorRequired] public Func<TItem, string> RowLabel { get; set; } = null!;
+
+    [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
+
+    [Parameter] public Func<TItem, Task>? OnOpen { get; set; }
+
+    [Parameter] public Func<TItem, string>? RowLink { get; set; }
+
+    [Parameter] public Func<TItem, ListRowState>? RowState { get; set; }
+
+    [Parameter] public string StateTitle { get; set; } = "Status";
+
+    [Parameter] public RenderFragment? Columns { get; set; }
+
+    [Parameter] public Func<TItem, ListCard>? Cards { get; set; }
+
+    [Parameter] public string? QuickFilter { get; set; }
+
+    [Parameter] public EventCallback<int> TotalChanged { get; set; }
+
+    [Parameter] public string? Id { get; set; }
+
+    [Parameter] public string ItemName { get; set; } = "row";
+
+    [Parameter] public string ItemsName { get; set; } = "rows";
+
+    [Parameter] public string SearchLabel { get; set; } = "Search";
+
+    [Parameter] public string? SearchPlaceholder { get; set; }
+
+    [Parameter] public string? EmptyTitle { get; set; }
+
+    [Parameter] public string? EmptyText { get; set; }
+
+    [Parameter] public string EmptyIcon { get; set; } = "inbox";
+
+    [Parameter] public bool? BindAddress { get; set; }
+
+    [Parameter] public string? AddressPrefix { get; set; }
+
+    [CascadingParameter] public DialogScope? Dialog { get; set; }
+
+    private readonly record struct PopOption(string? Value, string Label, string? Icon = null, string? Hidden = null);
+
+    private readonly List<ListColumn<TItem>> columns = [];
+    private readonly Dictionary<string, UrlStateValue<string>> bindings = new(StringComparer.Ordinal);
+    private readonly HashSet<string> collapsed = new(StringComparer.Ordinal);
+    private ListQuery query = null!;
+    private ListPage<TItem>? page;
+    private string searchText = string.Empty;
+    private string? error;
+    private bool loading;
+    private bool opening;
+    private bool filtersOpen;
+    private int loadVersion;
+    private ElementReference root;
+    private IJSObjectReference? module;
+    private DotNetObjectReference<ListView<TItem>>? self;
+
+    private Guid? refocusRow;
+
+    private string? openPopover;
+
+    private string? popoverOpened;
+
+    private int? toldTotal;
+
+    private string? focusAfterRender;
+
+    public ListQuery Query => this.query;
+
+    public bool IsBoundToAddress => BindAddress ?? Dialog is null;
+
+    private ListFilterDefinition? QuickFilterDefinition => QuickFilter is null ? null : Definition.Filters.FirstOrDefault(filter => filter.Key == QuickFilter);
+
+    protected override void OnInitialized()
+    {
+        ArgumentNullException.ThrowIfNull(Definition);
+        Id ??= AddressPrefix is { } prefix ? $"{prefix}-list" : $"list-{Interlocked.Increment(ref unnamedLists)}";
+        if (IsBoundToAddress)
+        {
+            foreach (var key in Definition.AddressKeys)
+            {
+                var binding = UrlState.Bind(new UrlStateKey<string>(ListDefinition.AddressName(AddressPrefix, key), string.Empty, text => (true, text), value => value), exclusive: true);
+                binding.Changed += OnAddressChanged;
+                this.bindings[key] = binding;
+            }
+
+            this.query = Definition.Read(ReadAddress);
+            WriteAddress();
+        }
+        else
+        {
+            this.query = Definition.Default;
+        }
+
+        this.searchText = this.query.Search;
+    }
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (this.popoverOpened is null && this.focusAfterRender is null && this.refocusRow is null)
+        {
+            return;
+        }
+
+        var opened = this.popoverOpened;
+        var focus = this.focusAfterRender;
+        var row = this.refocusRow;
+        this.popoverOpened = null;
+        this.focusAfterRender = null;
+        this.refocusRow = null;
+        try
+        {
+            this.module ??= await JS.InvokeAsync<IJSObjectReference>("import", ModulePath);
+            if (this.module is null)
+            {
+                return;
+            }
+
+            if (opened is not null)
+            {
+                this.self ??= DotNetObjectReference.Create(this);
+                await this.module.InvokeVoidAsync("attachPopovers", this.root, this.self);
+                await this.module.InvokeVoidAsync("openPopover", this.root, opened);
+            }
+
+            if (focus is not null)
+            {
+                await this.module.InvokeVoidAsync("focusControl", this.root, focus);
+            }
+
+            if (row is { } key)
+            {
+                await this.module.InvokeVoidAsync("focusRow", this.root, key.ToString());
+            }
+        }
+        catch (Exception exception) when (exception is JSException or JSDisconnectedException or TaskCanceledException or ObjectDisposedException)
+        {
+        }
+    }
+
+    public async Task ReloadAsync()
+    {
+        await LoadAsync();
+        StateHasChanged();
+    }
+
+    [JSInvokable]
+    public Task ClosePopover() => InvokeAsync(() =>
+    {
+        if (this.openPopover is not null)
+        {
+            this.openPopover = null;
+            StateHasChanged();
+        }
+    });
+
+    internal void AddColumn(ListColumn<TItem> column)
+    {
+        if (!this.columns.Contains(column))
+        {
+            this.columns.Add(column);
+        }
+    }
+
+    internal void RemoveColumn(ListColumn<TItem> column) => this.columns.Remove(column);
+
+    private int ColumnCount => VisibleColumns.Count + (RowState is null ? 0 : 1);
+
+    private List<ListColumn<TItem>> VisibleColumns => [.. this.columns.Where(column => column.HiddenWhenGroupedBy is null || column.HiddenWhenGroupedBy != this.query.Group)];
+
+    private bool IsNarrowed => this.query.Search.Length > 0 || this.query.Filters.Count > 0 || this.query.Toggles.Count > 0;
+
+    private int ActiveChoices =>
+        this.query.Filters.Keys.Count(key => key != QuickFilter)
+        + this.query.Toggles.Count
+        + (this.query.Group != Definition.DefaultGroup ? 1 : 0)
+        + (this.query.Sort != Definition.DefaultSort || this.query.Descending != Definition.DefaultDescending ? 1 : 0);
+
+    private string FiltersText => ActiveChoices == 0 ? "Filters" : $"Filters ({ActiveChoices})";
+
+    private string CountText(int count) => $"{count} {(count == 1 ? ItemName : ItemsName)}";
+
+    private string SummaryText
+    {
+        get
+        {
+            if (this.page is null || this.page.TotalCount == 0)
+            {
+                return $"No {ItemsName}";
+            }
+
+            var first = ((this.page.Page - 1) * this.page.PageSize) + 1;
+            var last = Math.Min(this.page.Page * this.page.PageSize, this.page.TotalCount);
+            return $"{first}–{last} of {CountText(this.page.TotalCount)}";
+        }
+    }
+
+    private string RowClass(ListRowState? state) =>
+        state is { } shown ? $"list-row {UiToneClass.Of(shown.Tone)}" : "list-row";
+
+    internal static string Initials(string name)
+    {
+        var words = name.Split([' ', '.', '@', '-', '_'], StringSplitOptions.RemoveEmptyEntries);
+        return string.Concat(words.Take(2).Select(word => char.ToUpperInvariant(word[0])));
+    }
+
+    internal static List<int?> PagerItems(int page, int count)
+    {
+        var shown = new SortedSet<int> { 1, count, page - 1, page, page + 1 };
+        if (page <= 3)
+        {
+            shown.UnionWith([2, 3]);
+        }
+
+        if (page >= count - 2)
+        {
+            shown.UnionWith([count - 1, count - 2]);
+        }
+
+        var items = new List<int?>();
+        var previous = 0;
+        foreach (var number in shown.Where(number => number >= 1 && number <= count))
+        {
+            if (number - previous == 2)
+            {
+                items.Add(number - 1);
+            }
+            else if (number - previous > 2)
+            {
+                items.Add(null);
+            }
+
+            items.Add(number);
+            previous = number;
+        }
+
+        return items;
+    }
+
+    private string? ReadAddress(string key) =>
+        this.bindings.TryGetValue(key, out var binding) && binding.Value is { Length: > 0 } value ? value : null;
+
+    private void WriteAddress()
+    {
+        if (this.bindings.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var (key, value) in Definition.Write(this.query))
+        {
+            if (this.bindings.TryGetValue(key, out var binding) && binding.Value != (value ?? string.Empty))
+            {
+                binding.Value = value ?? string.Empty;
+            }
+        }
+    }
+
+    private void OnAddressChanged() => _ = InvokeAsync(ApplyAddressAsync);
+
+    private async Task ApplyAddressAsync()
+    {
+        var query = Definition.Read(ReadAddress);
+        if (query != this.query)
+        {
+            this.query = query;
+            this.searchText = query.Search;
+            WriteAddress();
+            await LoadAsync();
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task LoadAsync()
+    {
+        var version = ++this.loadVersion;
+        this.loading = true;
+        Result<ListPage<TItem>> result;
+        try
+        {
+            result = await Load(this.query);
+        }
+        catch (OperationCanceledException)
+        {
+            if (version == this.loadVersion)
+            {
+                this.loading = false;
+            }
+
+            return;
+        }
+
+        if (version != this.loadVersion)
+        {
+            return;
+        }
+
+        this.loading = false;
+        if (!result.IsSuccess || result.Value is null)
+        {
+            this.error = result.Error ?? $"The {ItemsName} could not be loaded.";
+            this.page = null;
+            return;
+        }
+
+        this.error = null;
+        this.page = result.Value;
+        if (this.page.Page != this.query.Page)
+        {
+            this.query = this.query with { Page = this.page.Page };
+        }
+
+        WriteAddress();
+
+        if (TotalChanged.HasDelegate && this.toldTotal != this.page.TotalCount)
+        {
+            this.toldTotal = this.page.TotalCount;
+            await TotalChanged.InvokeAsync(this.page.TotalCount);
+        }
+    }
+
+    private async Task ChangeAsync(ListQuery query)
+    {
+        var normalized = Definition.Normalize(query);
+        if (normalized == this.query)
+        {
+            return;
+        }
+
+        this.query = normalized;
+        this.searchText = normalized.Search;
+        WriteAddress();
+        await LoadAsync();
+    }
+
+    private Task OnSearchChangedAsync(ChangeEventArgs args)
+    {
+        this.searchText = args.Value as string ?? string.Empty;
+        return ChangeAsync(this.query with { Search = this.searchText, Page = 1 });
+    }
+
+    private Task SetFilterAsync(string key, string? value) => ChangeAsync(this.query.WithFilter(key, value) with { Page = 1 });
+
+    private Task ClearFilterAsync(string key)
+    {
+        this.openPopover = null;
+        this.focusAfterRender = $"{Id}-filter-{key}";
+        return SetFilterAsync(key, null);
+    }
+
+    private Task SetToggleAsync(string key, bool on) => ChangeAsync(this.query.WithToggle(key, on) with { Page = 1 });
+
+    private Task SetGroupAsync(string? group) => ChangeAsync(this.query with { Group = string.IsNullOrEmpty(group) ? null : group, Page = 1 });
+
+    private Task SetSortAsync(string? text) =>
+        Definition.ParseSort(text) is { } sort ? ChangeAsync(this.query with { Sort = sort.Key, Descending = sort.Descending, Page = 1 }) : Task.CompletedTask;
+
+    private Task GoToPageAsync(int page) => ChangeAsync(this.query with { Page = page });
+
+    private Task ClearAsync() => ChangeAsync(Definition.Default with { Group = this.query.Group, Sort = this.query.Sort, Descending = this.query.Descending });
+
+    private void TogglePopover(string key)
+    {
+        this.openPopover = this.openPopover == key ? null : key;
+        this.popoverOpened = this.openPopover is null ? null : $"{Id}-{key}-options";
+    }
+
+    private Task ChooseAsync(string triggerId, Func<Task> apply)
+    {
+        this.openPopover = null;
+        this.focusAfterRender = triggerId;
+        return apply();
+    }
+
+    private void ToggleGroup(string key)
+    {
+        if (!this.collapsed.Remove(key))
+        {
+            this.collapsed.Add(key);
+        }
+    }
+
+    private async Task OpenAsync(TItem item)
+    {
+        if (RowLink is not null)
+        {
+            Navigation.NavigateTo(RowLink(item));
+            return;
+        }
+
+        if (OnOpen is null || this.opening)
+        {
+            return;
+        }
+
+        this.opening = true;
+        try
+        {
+            await OnOpen(item);
+        }
+        finally
+        {
+            this.opening = false;
+        }
+
+        await LoadAsync();
+        this.refocusRow = RowKey(item);
+    }
+
+    private RenderFragment Cell(ListColumn<TItem> column, TItem item) => __builder =>
+    {
+        if (column.Primary && RowLink is not null)
+        {
+            <a class="list-row__open" href="@RowLink(item)" @onclick:stopPropagation="true">@column.ChildContent(item)</a>
+        }
+        else if (column.Primary && OnOpen is not null)
+        {
+            <button type="button" class="list-row__open" @onclick="@(() => OpenAsync(item))" @onclick:stopPropagation="true">@column.ChildContent(item)</button>
+        }
+        else
+        {
+            @column.ChildContent(item)
+        }
+    };
+
+    private RenderFragment SectionToggle(string key, string? label, int count, bool collapsed) => __builder =>
+    {
+        <button type="button" class="list-heading__toggle" aria-expanded="@(collapsed ? "false" : "true")" @onclick="@(() => ToggleGroup(key))">
+            <MaterialSymbol Name="@(collapsed ? "chevron_right" : "expand_more")" />
+            <span class="list-heading__label">@label</span>
+            <span class="list-heading__count">@CountText(count)</span>
+        </button>
+    };
+
+    private RenderFragment QuickOption(ListFilterDefinition filter, string? value, string label, bool on) => __builder =>
+    {
+        <button type="button"
+                class="@(on ? "list-quick__option list-quick__option--on" : "list-quick__option")"
+                aria-pressed="@(on ? "true" : "false")"
+                data-value="@(value ?? string.Empty)"
+                @onclick="@(() => SetFilterAsync(filter.Key, value))">
+            <span>@label</span>
+            @if (on && this.page is not null)
+            {
+                <span class="list-quick__count">@this.page.TotalCount.ToString(System.Globalization.CultureInfo.InvariantCulture)</span>
+            }
+        </button>
+    };
+
+    private static RenderFragment ChipFace(string label, string value) => __builder =>
+    {
+        <span class="list-chip__label">@label:</span> <span class="list-chip__value">@value</span><MaterialSymbol Name="expand_more" Class="list-chip__chevron" />
+    };
+
+    private static RenderFragment ToolFace(string icon, string label, string value, string? hidden) => __builder =>
+    {
+        <MaterialSymbol Name="@icon" Class="list-tool__icon" />
+        <span class="list-tool__label">@label:</span>
+        <b class="list-tool__value">@value</b>
+        @if (hidden is not null)
+        {
+            <span class="visually-hidden">, @hidden</span>
+        }
+        <MaterialSymbol Name="expand_more" Class="list-tool__chevron" />
+    };
+
+    private RenderFragment Popover(string popKey, string triggerId, string label, string value, string hostClass, RenderFragment face, IReadOnlyList<PopOption> options, string? selected, Func<string?, Task> choose, Func<Task>? clear) => __builder =>
+    {
+        var open = this.openPopover == popKey;
+        var popId = $"{Id}-{popKey}-options";
+        <span class="@hostClass" data-pop-host="@popKey">
+            <button type="button"
+                    id="@triggerId"
+                    class="@(hostClass.StartsWith("list-chip", StringComparison.Ordinal) ? "list-chip__button" : "list-tool")"
+                    value="@value"
+                    aria-haspopup="listbox"
+                    aria-expanded="@(open ? "true" : "false")"
+                    aria-controls="@(open ? popId : null)"
+                    @onclick="@(() => TogglePopover(popKey))">@face</button>
+            @if (clear is not null)
+            {
+                <button type="button" class="list-chip__clear" aria-label="@($"Clear {label}")" title="@($"Clear {label}")" @onclick="clear">
+                    <MaterialSymbol Name="close" />
+                </button>
+            }
+            @if (open)
+            {
+                <div class="list-pop" id="@popId" role="listbox" aria-label="@label" data-pop="@popKey">
+                    @foreach (var option in options)
+                    {
+                        var chosen = option.Value == selected;
+                        <button type="button"
+                                role="option"
+                                class="list-pop__option"
+                                tabindex="-1"
+                                aria-selected="@(chosen ? "true" : "false")"
+                                data-value="@(option.Value ?? string.Empty)"
+                                @onclick="@(() => ChooseAsync(triggerId, () => choose(option.Value)))">
+                            <MaterialSymbol Name="check" Class="list-pop__check" />
+                            <span>@option.Label</span>
+                            @if (option.Icon is { } icon)
+                            {
+                                <MaterialSymbol Name="@icon" Class="list-pop__icon" />
+                            }
+                            @if (option.Hidden is { } hidden)
+                            {
+                                <span class="visually-hidden">@hidden</span>
+                            }
+                        </button>
+                    }
+                </div>
+            }
+        </span>
+    };
+
+    private RenderFragment CardRow(TItem item) => __builder =>
+    {
+        var key = RowKey(item);
+        var card = Cards!(item);
+        var state = RowState?.Invoke(item);
+        <li class="@($"{RowClass(state)} list-card")" data-row="@key" @key="key" style="@(card.EdgeColor is { } edge ? $"--list-card-edge: {edge};" : null)" @onclick="@(() => OpenAsync(item))">
+            @if (card.Date is { } date)
+            {
+                <span class="list-card__date">
+                    <span class="list-card__weekday">@date.ToString("ddd", System.Globalization.CultureInfo.InvariantCulture)</span>
+                    <span class="list-card__day">@date.Day.ToString(System.Globalization.CultureInfo.InvariantCulture)</span>
+                    <span class="list-card__month">@date.ToString("MMM", System.Globalization.CultureInfo.InvariantCulture)</span>
+                </span>
+            }
+            <span class="list-card__body">
+                <span class="list-card__head">
+                    @if (RowLink is not null)
+                    {
+                        <a class="list-row__open list-card__title" href="@RowLink(item)" @onclick:stopPropagation="true">@card.Title</a>
+                    }
+                    else if (OnOpen is not null)
+                    {
+                        <button type="button" class="list-row__open list-card__title" @onclick="@(() => OpenAsync(item))" @onclick:stopPropagation="true">@card.Title</button>
+                    }
+                    else
+                    {
+                        <span class="list-card__title">@card.Title</span>
+                    }
+                    @if (card.Badge is { } badge)
+                    {
+                        <span class="@($"list-card__badge {UiToneClass.Of(card.BadgeTone)}")" data-badge="@card.BadgeKey">
+                            @if (card.BadgeIcon is { } badgeIcon)
+                            {
+                                <MaterialSymbol Name="@badgeIcon" />
+                            }
+                            <span>@badge</span>
+                        </span>
+                    }
+                </span>
+                @if (card.Facts.Count > 0)
+                {
+                    <span class="list-card__facts">
+                        @foreach (var fact in card.Facts)
+                        {
+                            <span class="list-card__fact"><MaterialSymbol Name="@fact.Icon" /><span>@fact.Text</span></span>
+                        }
+                    </span>
+                }
+                @if (!string.IsNullOrWhiteSpace(card.Hint))
+                {
+                    <span class="list-card__hint">@card.Hint</span>
+                }
+            </span>
+            @if (state is { } shown)
+            {
+                <span class="list-card__state"><span class="list-state"><span class="list-state__dot" aria-hidden="true"></span>@shown.Label</span></span>
+            }
+            <MaterialSymbol Name="chevron_right" Class="list-card__chevron" />
+        </li>
+    };
+
+    public async ValueTask DisposeAsync()
+    {
+        foreach (var binding in this.bindings.Values)
+        {
+            binding.Changed -= OnAddressChanged;
+            binding.Dispose();
+        }
+
+        try
+        {
+            if (this.module is not null)
+            {
+                if (this.self is not null)
+                {
+                    await this.module.InvokeVoidAsync("detachPopovers", this.root);
+                }
+
+                await this.module.DisposeAsync();
+            }
+        }
+        catch (Exception exception) when (exception is JSException or JSDisconnectedException or ObjectDisposedException or TaskCanceledException)
+        {
+        }
+
+        this.self?.Dispose();
+    }
+}

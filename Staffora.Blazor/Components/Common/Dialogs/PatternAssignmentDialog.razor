@@ -1,0 +1,54 @@
+@using Staffora.Blazor.Components.Common.Dialogs.StateEntity
+@using Staffora.Blazor.Components.Common.WorkflowFields
+@using Staffora.Core.Entities.Scheduling
+@using Staffora.Core.Scheduling
+@using Staffora.Services.Scheduling
+@implements IStateEntityDialog<PatternAssignmentDialogContext>
+
+<div class="pattern-assignment-dialog">
+    <p class="pattern-assignment-dialog__staff" data-staff>
+        <span>Staff:</span>
+        <strong>@Context.Staff</strong>
+    </p>
+    <StateFieldDropDown TValue="Guid" TItem="WorkPattern" @bind-Value="Context.Entity!.WorkPatternId" Data="@Context.Patterns"
+                        TextProperty="Name" Label="Work pattern" Name="assignment-pattern" Placeholder="Choose a published pattern" />
+    @if (Context.PatternNote is { } note)
+    {
+        <p class="pattern-assignment-dialog__note" data-pattern-note>@note</p>
+    }
+    <div class="field-row">
+        <StateFieldDatePicker TValue="DateOnly" @bind-Value="Context.Entity!.EffectiveFrom" Label="From" Name="assignment-from" />
+        <StateFieldDatePicker TValue="DateOnly?" @bind-Value="Context.Entity!.EffectiveTo" Label="To (empty: until further notice)" Name="assignment-to" />
+    </div>
+    <StateFieldDatePicker TValue="DateOnly" @bind-Value="Context.Entity!.CycleAnchor" Label="Cycle starts (a Monday)" Name="assignment-anchor" />
+    <p class="pattern-assignment-dialog__help">
+        A staff member works by one pattern on any date. To change their pattern, give the current assignment an end date, then
+        activate a new one from the day after.
+    </p>
+</div>
+
+@code {
+    private int? shownVersion;
+
+    [Parameter, EditorRequired] public PatternAssignmentDialogContext Context { get; set; } = null!;
+
+    protected override void OnParametersSet()
+    {
+        if (this.shownVersion != Context.Version)
+        {
+            this.shownVersion = Context.Version;
+            Context.DisplayName = Context.Entity!.WorkPattern is { Name: { Length: > 0 } name }
+                ? $"{name} from {ScheduleRules.DateText(Context.Entity.EffectiveFrom)}"
+                : null;
+        }
+    }
+
+    internal static PatternAssignmentDialogContext ContextFor(PatternAssignmentService service, Guid? assignmentId, Guid? userId = null) =>
+        new(service, assignmentId) { UserId = userId, DefaultTitle = "Work pattern assignment", CreateTitle = "Assign work pattern", EntityIcon = "event_repeat" };
+
+    public static Task<StateEntityDialogResult> OpenAsync(DialogService dialogService, PatternAssignmentService service, Guid assignmentId, StateEntityDialogOptions? options = null) =>
+        dialogService.OpenStateEntityDialogAsync<PatternAssignmentDialog, PatternAssignmentDialogContext>(ContextFor(service, assignmentId), options);
+
+    public static Task<StateEntityDialogResult> OpenCreateAsync(DialogService dialogService, PatternAssignmentService service, Guid userId) =>
+        dialogService.OpenStateEntityDialogAsync<PatternAssignmentDialog, PatternAssignmentDialogContext>(ContextFor(service, null, userId));
+}

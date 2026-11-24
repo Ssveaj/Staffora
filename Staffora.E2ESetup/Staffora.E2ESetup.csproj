@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Respawn" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Staffora.Core\Staffora.Core.csproj" />
+    <ProjectReference Include="..\Staffora.Data\Staffora.Data.csproj" />
+    <ProjectReference Include="..\Staffora.Services\Staffora.Services.csproj" />
+  </ItemGroup>
+
+</Project>

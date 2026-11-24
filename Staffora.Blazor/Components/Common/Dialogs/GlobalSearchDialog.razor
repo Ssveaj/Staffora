@@ -1,0 +1,292 @@
+@using Staffora.Services.Search
+@implements IAsyncDisposable
+@inject GlobalSearchService Search
+@inject DialogService DialogService
+@inject TimeProvider Clock
+@inject IJSRuntime JS
+
+<div class="global-search" data-search-dialog @onkeydown="OnKeyDown">
+    <FormDialogFrame>
+        <ChildContent>
+            <label class="global-search__field" for="@InputId">
+                <MaterialSymbol Name="search" Class="global-search__field-icon" />
+                <span class="visually-hidden">@Placeholder</span>
+                <input id="@InputId"
+                       type="text"
+                       name="global-search"
+                       role="combobox"
+                       aria-autocomplete="list"
+                       aria-expanded="@(HasHits ? "true" : "false")"
+                       aria-controls="@(HasHits ? ListId : null)"
+                       aria-activedescendant="@ActiveOptionId"
+                       autocomplete="off"
+                       spellcheck="false"
+                       maxlength="@SearchText.MaxLength"
+                       placeholder="@Placeholder"
+                       data-dialog-autofocus
+                       @oninput="OnInputAsync"
+                       @ref="this.input" />
+            </label>
+            <p class="visually-hidden" role="status" aria-live="polite" data-search-status>@Announcement</p>
+
+            <div class="global-search__results" data-busy="@(this.searching && this.answer is not null ? "true" : null)">
+                @if (this.error is not null)
+                {
+                    <p class="global-search__error" role="alert">@this.error</p>
+                }
+                else if (this.answer is null)
+                {
+                    @if (this.searching)
+                    {
+                        <LoadingState Text="Searching…" Inline="true" />
+                    }
+                    else
+                    {
+                        <EmptyState Compact="true" Icon="search" Title="@Hint" />
+                    }
+                }
+                else if (!HasHits)
+                {
+                    <EmptyState Compact="true" Icon="search_off" Title="@($"Nothing matches “{this.answer.Text}”.")" />
+                }
+                else
+                {
+                    var index = 0;
+                    <div id="@ListId" class="global-search__list" role="listbox" aria-label="Search results">
+                        @foreach (var group in this.answer.Groups)
+                        {
+                            var groupId = $"{ListId}-{group.Kind}";
+                            <div class="global-search__group" role="group" aria-labelledby="@groupId" data-search-group="@group.Kind">
+                                <div class="global-search__group-label" id="@groupId" role="presentation">@LabelOf(group)</div>
+                                @foreach (var hit in group.Hits)
+                                {
+                                    var at = index++;
+                                    <div id="@OptionId(at)"
+                                         class="global-search__hit"
+                                         role="option"
+                                         aria-selected="@(at == this.active ? "true" : "false")"
+                                         data-search-hit="@hit.Opens"
+                                         data-hit-id="@hit.Id"
+                                         @onmousedown:preventDefault
+                                         @onclick="() => Choose(hit)">
+                                        <span class="global-search__hit-icon"><MaterialSymbol Name="@IconOf(group.Kind)" /></span>
+                                        <span class="global-search__hit-text">
+                                            <span class="global-search__hit-title">@hit.Title</span>
+                                            @if (!string.IsNullOrWhiteSpace(hit.Subtitle))
+                                            {
+                                                <span class="global-search__hit-subtitle">@hit.Subtitle</span>
+                                            }
+                                        </span>
+                                        @if (hit.State is { } state)
+                                        {
+                                            <span class="global-search__hit-state">@EnumDisplayHelper.GetDisplayName(state)</span>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </ChildContent>
+        <Footer>
+            <p class="global-search__keys">
+                <kbd>↑</kbd> <kbd>↓</kbd> move, <kbd>Enter</kbd> opens, <kbd>Esc</kbd> closes
+            </p>
+        </Footer>
+    </FormDialogFrame>
+</div>
+
+@code {
+    public const string Title = "Search";
+
+    internal static readonly TimeSpan Debounce = TimeSpan.FromMilliseconds(200);
+
+    private const string ModulePath = "./scripts/global-search.js";
+
+    private static int dialogs;
+
+    private readonly string listId = $"global-search-{Interlocked.Increment(ref dialogs)}";
+    private ElementReference input;
+    private IJSObjectReference? module;
+    private CancellationTokenSource? pending;
+    private SearchAnswer? answer;
+    private string? error;
+    private bool searching;
+    private int? active;
+    private bool reveal;
+    private bool closed;
+
+    [Parameter] public IReadOnlyList<SearchKind> Kinds { get; set; } = [];
+
+    private string ListId => this.listId;
+
+    private string InputId => $"{this.listId}-input";
+
+    private string OptionId(int at) => $"{this.listId}-option-{at}";
+
+    private IReadOnlyList<SearchHit> Hits => this.answer?.Hits ?? [];
+
+    private bool HasHits => Hits.Count > 0;
+
+    private string? ActiveOptionId => HasHits && this.active is { } at ? OptionId(at) : null;
+
+    private string Placeholder => $"Search {Joined(Kinds.Select(NameOf))}";
+
+    private string Hint => $"Type at least {SearchText.MinLength} letters to find {Joined(Kinds.Select(NameOf))} by name.";
+
+    private string Announcement => this.answer is null || this.searching
+        ? string.Empty
+        : Hits.Count switch
+        {
+            0 => "No matches",
+            1 => "1 match",
+            var count => $"{count} matches",
+        };
+
+    internal static string IconOf(SearchKind kind) => kind switch
+    {
+        SearchKind.StaffMembers => "badge",
+        SearchKind.Jobs => "work",
+        SearchKind.Customers => "storefront",
+        _ => "apartment",
+    };
+
+    internal static string LabelOf(SearchGroup group) => group.Kind switch
+    {
+        SearchKind.StaffMembers => "Staff members",
+        SearchKind.Jobs when group.Hits.All(hit => hit.Opens == SearchOpens.Assignment) => "My assignments",
+        SearchKind.Jobs => "Jobs",
+        SearchKind.Customers => "Customers",
+        _ => "Tenants",
+    };
+
+    private static string NameOf(SearchKind kind) => kind switch
+    {
+        SearchKind.StaffMembers => "staff members",
+        SearchKind.Jobs => "jobs",
+        SearchKind.Customers => "customers",
+        _ => "tenants",
+    };
+
+    private static string Joined(IEnumerable<string> names)
+    {
+        var all = names.ToList();
+        return all.Count <= 1 ? string.Concat(all) : $"{string.Join(", ", all.Take(all.Count - 1))} and {all[^1]}";
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        try
+        {
+            if (firstRender)
+            {
+                this.module = await JS.InvokeAsync<IJSObjectReference>("import", ModulePath);
+                await this.module.InvokeVoidAsync("holdCaret", this.input);
+            }
+
+            if (this.reveal && this.module is not null && ActiveOptionId is { } option)
+            {
+                this.reveal = false;
+                await this.module.InvokeVoidAsync("reveal", option);
+            }
+        }
+        catch (Exception exception) when (exception is JSException or JSDisconnectedException or TaskCanceledException or ObjectDisposedException or InvalidOperationException)
+        {
+        }
+    }
+
+    private async Task OnInputAsync(ChangeEventArgs args)
+    {
+        this.pending?.Cancel();
+        this.pending = null;
+        var phrase = SearchText.Normalize(args.Value?.ToString());
+        if (phrase is null)
+        {
+            (this.answer, this.error, this.active, this.searching) = (null, null, null, false);
+            return;
+        }
+
+        var pending = this.pending = new CancellationTokenSource();
+        this.searching = true;
+        try
+        {
+            await Task.Delay(Debounce, Clock, pending.Token);
+            var found = await Search.SearchAsync(phrase, pending.Token);
+            if (pending.IsCancellationRequested)
+            {
+                return;
+            }
+
+            this.answer = found.IsSuccess ? found.Value : null;
+            this.error = found.IsSuccess ? null : found.Error;
+            this.active = HasHits ? 0 : null;
+            this.reveal = HasHits;
+            this.searching = false;
+        }
+        catch (OperationCanceledException) when (pending.IsCancellationRequested)
+        {
+        }
+    }
+
+    private void OnKeyDown(KeyboardEventArgs args)
+    {
+        switch (args.Key)
+        {
+            case "Escape":
+                Close(null);
+                break;
+            case "ArrowDown":
+                Move(1);
+                break;
+            case "ArrowUp":
+                Move(-1);
+                break;
+            case "Enter" when HasHits && this.active is { } at:
+                Choose(Hits[at]);
+                break;
+        }
+    }
+
+    private void Move(int step)
+    {
+        if (!HasHits)
+        {
+            return;
+        }
+
+        var count = Hits.Count;
+        this.active = this.active is { } at ? (at + step + count) % count : (step > 0 ? 0 : count - 1);
+        this.reveal = true;
+    }
+
+    private void Choose(SearchHit hit) => Close(hit);
+
+    private void Close(SearchHit? hit)
+    {
+        if (this.closed)
+        {
+            return;
+        }
+
+        this.closed = true;
+        this.pending?.Cancel();
+        DialogService.Close(hit);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        this.pending?.Cancel();
+        this.pending?.Dispose();
+        try
+        {
+            if (this.module is not null)
+            {
+                await this.module.DisposeAsync();
+            }
+        }
+        catch (Exception exception) when (exception is JSException or JSDisconnectedException or TaskCanceledException or ObjectDisposedException)
+        {
+        }
+    }
+}

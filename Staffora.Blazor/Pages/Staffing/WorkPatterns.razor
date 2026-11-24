@@ -1,0 +1,105 @@
+@page "/staffing/work-patterns"
+@attribute [Authorize]
+@inject WorkPatternService WorkPatternService
+@inject DialogService DialogService
+
+<PermissionView AnyOf="readers">
+    <Loading>
+        <PageScaffold>
+            <Main>
+                <LoadingState Text="Loading work patterns…" />
+            </Main>
+        </PageScaffold>
+    </Loading>
+    <Authorized>
+        <PageScaffold>
+            <Header>
+                <PageHeader Title="Work patterns"
+                            Count="@(this.count)"
+                            Description="The hours staff work, week by week: edited as drafts, given to staff members once published."
+                            Icon="calendar_month"
+                            RootText="Staffing">
+                    <Actions>
+                        <PermissionView Permission="RolePermission.ManageWorkPatterns">
+                            <Authorized>
+                                <IconTextButton Text="New pattern"
+                                                Icon="edit_calendar"
+                                                ButtonStyle="ButtonStyle.Primary"
+                                                Click="CreatePatternAsync" />
+                            </Authorized>
+                        </PermissionView>
+                    </Actions>
+                </PageHeader>
+            </Header>
+            <Main>
+                <PageSection>
+                    <ListView @ref="this.list"
+                              TItem="WorkPatternListItem"
+                              TotalChanged="@(total => this.count = total)"
+                              Id="work-patterns"
+                              Label="Work patterns"
+                              ItemName="work pattern"
+                              ItemsName="work patterns"
+                              Definition="WorkPatternList.Definition"
+                              Load="LoadAsync"
+                              RowKey="pattern => pattern.Id"
+                              RowLabel="pattern => pattern.Name"
+                              RowState="pattern => ListRowState.Of(pattern.State)"
+                              OnOpen="OpenPatternAsync"
+                              QuickFilter="@WorkPatternList.Status"
+                              SearchPlaceholder="Name or description"
+                              EmptyIcon="calendar_month"
+                              EmptyText="No work pattern yet. Make one for the hours your staff work.">
+                        <Columns>
+                            <ListColumn TItem="WorkPatternListItem" Title="Name" Primary="true" Subtitle="pattern => pattern.Description">
+                                @context.Name
+                            </ListColumn>
+                            <ListColumn TItem="WorkPatternListItem" Title="Cycle">
+                                @context.CycleLabel
+                            </ListColumn>
+                            <ListColumn TItem="WorkPatternListItem" Title="Working hours">
+                                @context.HoursLabel
+                            </ListColumn>
+                            <ListColumn TItem="WorkPatternListItem" Title="Staff">
+                                <span data-pattern-staff="@context.StaffToday">@context.StaffLabel</span>
+                            </ListColumn>
+                        </Columns>
+                    </ListView>
+                </PageSection>
+            </Main>
+        </PageScaffold>
+    </Authorized>
+    <NotAuthorized>
+        <PageScaffold>
+            <Header>
+                <PageHeader Title="Work patterns" Icon="calendar_month" RootText="Staffing" />
+            </Header>
+            <Main>
+                <PageSection>
+                    <EmptyState Icon="lock" Title="Access denied" Text="You do not have permission to view work patterns." Tone="UiTone.Warning" Role="alert" />
+                </PageSection>
+            </Main>
+        </PageScaffold>
+    </NotAuthorized>
+</PermissionView>
+
+@code {
+    private static readonly RolePermission[] readers = [RolePermission.ManageWorkPatterns, RolePermission.AssignWorkPatterns];
+
+    private ListView<WorkPatternListItem>? list;
+
+    private int? count;
+
+    private Task<Result<ListPage<WorkPatternListItem>>> LoadAsync(ListQuery query) => WorkPatternService.QueryWorkPatternsAsync(query);
+
+    private async Task CreatePatternAsync()
+    {
+        var result = await WorkPatternDialog.OpenCreateAsync(DialogService, WorkPatternService);
+        if (result.EntityId is not null && this.list is not null)
+        {
+            await this.list.ReloadAsync();
+        }
+    }
+
+    private Task OpenPatternAsync(WorkPatternListItem pattern) => WorkPatternDialog.OpenAsync(DialogService, WorkPatternService, pattern.Id);
+}

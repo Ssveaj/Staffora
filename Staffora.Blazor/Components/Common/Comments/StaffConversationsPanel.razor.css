@@ -1,0 +1,195 @@
+.staff-talk__head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.staff-talk__title {
+    color: var(--color-text);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+}
+
+.staff-talk__intro,
+.staff-talk__note {
+    margin: 0;
+    color: var(--color-text-muted);
+    font-size: var(--font-size-xs);
+    line-height: 1.4;
+}
+
+.staff-talk__list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin: 0;
+    padding: 0;
+    overflow-y: auto;
+    list-style: none;
+}
+
+.staff-talk__row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    width: 100%;
+    min-height: 3.5rem;
+    padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
+    border: 1px solid color-mix(in srgb, var(--dialog-state-color, var(--color-accent)) 22%, var(--color-border));
+    border-radius: var(--radius-lg);
+    background: var(--color-surface);
+    color: var(--color-text);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+    .staff-talk__row:hover {
+        border-color: var(--dialog-state-color, var(--color-accent));
+    }
+
+    .staff-talk__row:focus-visible {
+        outline: 2px solid var(--dialog-state-color, var(--color-accent));
+        outline-offset: 1px;
+    }
+
+.staff-talk__row--waiting {
+    border-color: var(--color-warning-border);
+    box-shadow: inset 3px 0 0 var(--color-warning);
+}
+
+.staff-talk__avatar {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: var(--radius-full);
+    background: color-mix(in srgb, var(--dialog-state-color, var(--color-accent)) 16%, var(--color-surface));
+    color: color-mix(in srgb, var(--dialog-state-color, var(--color-accent)) 70%, black);
+}
+
+.staff-talk__main {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 0.1rem;
+    min-width: 0;
+}
+
+.staff-talk__line {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-2);
+}
+
+.staff-talk__name {
+    overflow: hidden;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.staff-talk__time,
+.staff-talk__detail,
+.staff-talk__last {
+    color: var(--color-text-muted);
+    font-size: var(--font-size-xs);
+}
+
+.staff-talk__time {
+    flex: none;
+    white-space: nowrap;
+}
+
+.staff-talk__last {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.staff-talk__row ::deep .staff-talk__unread {
+    flex: none;
+    color: var(--color-warning-strong);
+    font-size: 20px;
+}
+
+.staff-talk__row ::deep .staff-talk__chevron {
+    flex: none;
+    color: var(--color-text-muted);
+}
+
+.staff-talk__open {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: var(--space-2);
+    min-height: 0;
+}
+
+.staff-talk__back {
+    display: inline-flex;
+    align-self: flex-start;
+    align-items: center;
+    gap: var(--space-1);
+    min-height: 2.25rem;
+    padding: 0 var(--space-2);
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: none;
+    color: var(--color-text);
+    font: inherit;
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    cursor: pointer;
+}
+
+    .staff-talk__back ::deep .material-symbol {
+        color: var(--color-accent-strong);
+    }
+
+    .staff-talk__back:hover {
+        background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+    }
+
+    .staff-talk__back:focus-visible {
+        outline: none;
+        box-shadow: var(--focus-ring);
+    }
+
+.staff-talk__who {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-1) var(--space-2);
+}
+
+.staff-talk__flag {
+    padding: 0 var(--space-2);
+    border: 1px solid var(--color-warning-border);
+    border-radius: var(--radius-full);
+    background: var(--color-warning-soft);
+    color: var(--color-warning-strong);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-semibold);
+    line-height: 1.5rem;
+}
+
+.staff-talk__open ::deep .comment-bubbles {
+    flex: 1 1 auto;
+}
+
+.staff-talk__open ::deep .comment-bubbles__scroller {
+    flex: 1 1 auto;
+    min-height: 8rem;
+    max-height: none;
+}
+
+@media (max-width: 768px) {
+    .staff-talk__open ::deep .comment-bubbles__scroller {
+        max-height: 50vh;
+    }
+}

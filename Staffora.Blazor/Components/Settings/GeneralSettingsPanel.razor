@@ -1,0 +1,351 @@
+@using System.Globalization
+@using Staffora.Core.Scheduling
+@using Staffora.Core.Settings
+@using Staffora.Core.Staffing
+@using Staffora.Services.Settings
+
+@inject TenantSettingsService SettingsService
+@inject TimeProvider Clock
+
+<div class="general-settings">
+    @if (this.loading)
+    {
+        <LoadingState Text="Loading settings…" Inline="true" />
+    }
+    else if (this.snapshot is null || this.state is null)
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Danger" Variant="Variant.Flat" Shade="Shade.Lighter" ShowIcon="true" AllowClose="false">
+            @(this.error ?? "The settings could not be loaded.")
+        </RadzenAlert>
+    }
+    else
+    {
+        @if (!this.snapshot.CanEdit)
+        {
+            <p class="general-settings__note">You can view the settings but not change them.</p>
+        }
+
+        @if (FallbackNotice() is { } notice)
+        {
+            <RadzenAlert AlertStyle="AlertStyle.Warning" Variant="Variant.Flat" Shade="Shade.Lighter" ShowIcon="true" AllowClose="false" class="general-settings__fallback">
+                @notice
+            </RadzenAlert>
+        }
+
+        <section class="setting-row" aria-labelledby="setting-time-zone">
+            <div class="setting-row__intro">
+                <span class="setting-row__icon" aria-hidden="true"><MaterialSymbol Name="schedule" /></span>
+                <div>
+                    <h3 class="setting-row__title" id="setting-time-zone">@TimeZone.DisplayName</h3>
+                    <p class="general-settings__help">@TimeZone.Description</p>
+                </div>
+            </div>
+            <div class="setting-row__control">
+                <RadzenFormField Text="@TimeZone.DisplayName" Component="settings-time-zone" Style="width: 100%;">
+                    <RadzenDropDown @key="this.pickerGeneration"
+                                    Name="settings-time-zone"
+                                    InputAttributes="@FieldLabel.Of(TimeZone.DisplayName)"
+                                    TValue="string"
+                                    Value="@this.timeZone"
+                                    ValueChanged="@((string zone) => OnZoneChanged(zone))"
+                                    Data="@this.zones"
+                                    TextProperty="@nameof(ZoneOption.Label)"
+                                    ValueProperty="@nameof(ZoneOption.Id)"
+                                    AllowFiltering="true"
+                                    FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
+                                    FilterOperator="StringFilterOperator.Contains"
+                                    FilterPlaceholder="Search by city or region"
+                                    SearchAriaLabel="Search time zones"
+                                    ResetSelectedIndexOnFilter="true"
+                                    ClearSearchAfterSelection="true"
+                                    Disabled="@(!this.snapshot.CanEdit || this.saving)" />
+                </RadzenFormField>
+                <dl class="general-settings__facts">
+                    <div class="general-settings__fact">
+                        <dt>Time now in this zone</dt>
+                        <dd>@LocalTimeIn(this.timeZone)</dd>
+                    </div>
+                    <div class="general-settings__fact">
+                        <dt>Platform's time zone</dt>
+                        <dd>@LabelOf(this.state.DefaultValue)</dd>
+                    </div>
+                </dl>
+                @if (this.snapshot.CanEdit)
+                {
+                    <div class="general-settings__actions">
+                        @if (this.state.StoredValue != this.state.DefaultValue)
+                        {
+                            <IconTextButton Text="@($"Use the platform's time zone ({NameOf(this.state.DefaultValue)})")" Icon="restart_alt" ButtonStyle="ButtonStyle.Light" Click="UsePlatformZoneAsync" Disabled="@this.saving" class="general-settings__platform-zone" />
+                        }
+                        <IconTextButton Text="Save" Icon="save" ButtonStyle="ButtonStyle.Primary" Click="SaveAsync" Disabled="@(this.saving || this.timeZone is null || this.timeZone == this.state.StoredValue)" IsBusy="@this.saving" />
+                    </div>
+                }
+            </div>
+        </section>
+
+        <section class="setting-row" aria-labelledby="setting-respond-within" data-setting-respond-within>
+            <div class="setting-row__intro">
+                <span class="setting-row__icon" aria-hidden="true"><MaterialSymbol Name="timer" /></span>
+                <div>
+                    <h3 class="setting-row__title" id="setting-respond-within">@RespondWithin.DisplayName</h3>
+                    <p class="general-settings__help">@RespondWithin.Description</p>
+                </div>
+            </div>
+            <div class="setting-row__control">
+                <RadzenFormField Text="Hours to answer" Component="settings-respond-within" Style="width: 100%;">
+                    <RadzenNumeric TValue="int?"
+                                   Name="settings-respond-within"
+                                   Value="@this.respondHours"
+                                   ValueChanged="@((int? hours) => OnHoursChanged(hours))"
+                                   Min="1"
+                                   Max="@ResponseWindow.MaxHours"
+                                   Placeholder="No deadline"
+                                   Disabled="@(!this.snapshot.CanEdit || this.saving)" />
+                </RadzenFormField>
+                <dl class="general-settings__facts">
+                    <div class="general-settings__fact">
+                        <dt>A request sent now expires</dt>
+                        <dd data-respond-within-now>@WindowLabel(this.respondHours)</dd>
+                    </div>
+                    <div class="general-settings__fact">
+                        <dt>Without a saved value</dt>
+                        <dd>@ResponseWindow.Default.Label</dd>
+                    </div>
+                </dl>
+                @if (this.snapshot.CanEdit)
+                {
+                    <div class="general-settings__actions">
+                        <IconTextButton Text="Save time to answer" Icon="save" ButtonStyle="ButtonStyle.Primary" Click="SaveRespondWithinAsync" Disabled="@(this.saving || HoursText == this.respondState?.Value)" IsBusy="@this.saving" />
+                    </div>
+                }
+            </div>
+        </section>
+
+        <section class="setting-row" aria-labelledby="setting-public-holidays" data-setting-public-holidays>
+            <div class="setting-row__intro">
+                <span class="setting-row__icon" aria-hidden="true"><MaterialSymbol Name="celebration" /></span>
+                <div>
+                    <h3 class="setting-row__title" id="setting-public-holidays">@PublicHolidays.DisplayName</h3>
+                    <p class="general-settings__help">@PublicHolidays.Description</p>
+                </div>
+            </div>
+            <div class="setting-row__control">
+                <RadzenFormField Text="Calendar" Component="settings-public-holidays" Style="width: 100%;">
+                    <RadzenDropDown Name="settings-public-holidays"
+                                    InputAttributes="@FieldLabel.Of("Calendar")"
+                                    TValue="string"
+                                    Value="@this.holidayCalendar"
+                                    ValueChanged="@((string code) => OnHolidayCalendarChanged(code))"
+                                    Data="@HolidayCalendar.Offered"
+                                    TextProperty="@nameof(HolidayCalendar.Name)"
+                                    ValueProperty="@nameof(HolidayCalendar.Code)"
+                                    Disabled="@(!this.snapshot.CanEdit || this.saving)" />
+                </RadzenFormField>
+                <div class="general-settings__switch" data-closed-on-holidays>
+                    <RadzenSwitch Name="settings-closed-on-holidays" Value="@this.closedOnHolidays" ValueChanged="@((bool on) => OnClosedOnHolidaysChanged(on))" Disabled="@(!this.snapshot.CanEdit || this.saving)" />
+                    <RadzenLabel Text="@ClosedOnPublicHolidays.DisplayName" Component="settings-closed-on-holidays" />
+                </div>
+                <p class="general-settings__help">@ClosedOnPublicHolidays.Description</p>
+                <dl class="general-settings__facts">
+                    <div class="general-settings__fact">
+                        <dt>Next public holiday</dt>
+                        <dd data-next-holiday>@NextHolidayText</dd>
+                    </div>
+                </dl>
+                @if (this.snapshot.CanEdit)
+                {
+                    <div class="general-settings__actions">
+                        <IconTextButton Text="Save public holidays" Icon="save" ButtonStyle="ButtonStyle.Primary" Click="SavePublicHolidaysAsync" Disabled="@(this.saving || !HolidaysChanged)" IsBusy="@this.saving" data-save-public-holidays />
+                    </div>
+                }
+            </div>
+        </section>
+        <p class="general-settings__status" role="status">@this.saved</p>
+
+        @if (!string.IsNullOrEmpty(this.error))
+        {
+            <RadzenAlert AlertStyle="AlertStyle.Danger" Variant="Variant.Flat" Shade="Shade.Lighter" ShowIcon="true" AllowClose="false">
+                @this.error
+            </RadzenAlert>
+        }
+    }
+</div>
+
+@code {
+    private static TenantSettingDefinition<TimeZoneInfo> TimeZone => TenantSettingDefinitions.TimeZone;
+
+    private static TenantSettingDefinition<ResponseWindow> RespondWithin => TenantSettingDefinitions.RespondWithin;
+
+    private static TenantSettingDefinition<HolidayCalendar> PublicHolidays => TenantSettingDefinitions.PublicHolidays;
+
+    private static TenantSettingDefinition<bool> ClosedOnPublicHolidays => TenantSettingDefinitions.ClosedOnPublicHolidays;
+
+    private TenantSettingsSnapshot? snapshot;
+    private TenantSettingState? holidayState;
+    private TenantSettingState? closedState;
+    private string holidayCalendar = HolidayCalendar.Default.Code;
+    private bool closedOnHolidays;
+    private TenantSettingState? state;
+    private TenantSettingState? respondState;
+    private int? respondHours;
+    private List<ZoneOption> zones = [];
+    private string? timeZone;
+    private string? error;
+    private string? saved;
+    private bool loading = true;
+    private bool saving;
+
+    private int pickerGeneration;
+
+    protected override async Task OnInitializedAsync()
+    {
+        this.zones = [.. IanaTimeZones.Options(Clock.GetUtcNow()).Select(option => new ZoneOption(option.Id, option.Label))];
+        await LoadAsync();
+        this.loading = false;
+    }
+
+    private async Task LoadAsync()
+    {
+        var loaded = await SettingsService.LoadAsync();
+        if (!loaded.IsSuccess || loaded.Value is null)
+        {
+            this.snapshot = null;
+            this.state = null;
+            this.error = loaded.Error ?? "The settings could not be loaded.";
+            return;
+        }
+
+        this.snapshot = loaded.Value;
+        this.state = this.snapshot.Of(TimeZone);
+        this.timeZone = this.state.Value;
+        this.respondState = this.snapshot.Of(RespondWithin);
+        this.respondHours = RespondWithin.TryParse(this.respondState.Value, out var window) ? window.Hours : ResponseWindow.DefaultHours;
+        this.holidayState = this.snapshot.Of(PublicHolidays);
+        this.holidayCalendar = PublicHolidays.TryParse(this.holidayState.Value, out var calendar) ? calendar.Code : HolidayCalendar.Default.Code;
+        this.closedState = this.snapshot.Of(ClosedOnPublicHolidays);
+        this.closedOnHolidays = ClosedOnPublicHolidays.TryParse(this.closedState.Value, out var closed) && closed;
+        this.pickerGeneration++;
+    }
+
+    private string HoursText => this.respondHours is { } hours ? ResponseWindow.OfHours(Math.Clamp(hours, 1, ResponseWindow.MaxHours)).Format() : string.Empty;
+
+    private static string WindowLabel(int? hours) =>
+        hours is { } chosen ? $"{ResponseWindow.OfHours(Math.Clamp(chosen, 1, ResponseWindow.MaxHours)).Label} after it is sent" : "Never, there is no deadline";
+
+    private void OnHoursChanged(int? hours)
+    {
+        this.respondHours = hours;
+        this.saved = null;
+        this.error = null;
+    }
+
+    private Task SaveRespondWithinAsync() =>
+        SaveAsync(RespondWithin, this.respondState!, HoursText, this.respondHours is null
+            ? "Saved: requests now have no deadline to answer."
+            : $"Saved: a request now expires {WindowLabel(this.respondHours)}.");
+
+    private bool HolidaysChanged =>
+        this.holidayCalendar != this.holidayState?.Value || TenantSettingDefinitions.FormatSwitch(this.closedOnHolidays) != this.closedState?.Value;
+
+    private string NextHolidayText
+    {
+        get
+        {
+            var calendar = HolidayCalendar.TryParse(this.holidayCalendar, out var chosen) ? chosen : HolidayCalendar.None;
+            var today = IanaTimeZones.TryFind(this.state?.Value, out var zone)
+                ? DateOnly.FromDateTime(TenantClock.ToLocal(Clock.GetUtcNow(), zone).DateTime)
+                : DateOnly.FromDateTime(Clock.GetUtcNow().UtcDateTime);
+            var next = new TenantHolidays(calendar, false).Between(today, today.AddDays(366)).FirstOrDefault();
+            return next is null ? "None, no calendar is chosen" : $"{next.Name}, {next.Date.ToString("dddd d MMMM yyyy", CultureInfo.InvariantCulture)}";
+        }
+    }
+
+    private void OnHolidayCalendarChanged(string? code)
+    {
+        this.holidayCalendar = code ?? string.Empty;
+        this.saved = null;
+        this.error = null;
+    }
+
+    private void OnClosedOnHolidaysChanged(bool on)
+    {
+        this.closedOnHolidays = on;
+        this.saved = null;
+        this.error = null;
+    }
+
+    private async Task SavePublicHolidaysAsync()
+    {
+        var calendar = this.holidayCalendar;
+        var closed = TenantSettingDefinitions.FormatSwitch(this.closedOnHolidays);
+        var done = HolidayCalendar.TryParse(calendar, out var chosen) && !chosen.IsNone
+            ? $"Saved: the public holidays of {chosen.Name} are marked{(this.closedOnHolidays ? " and block staffing" : ", and staffing goes on")}."
+            : "Saved: no public holidays are marked.";
+        if (calendar != this.holidayState!.Value)
+        {
+            await SaveAsync(PublicHolidays, this.holidayState, calendar, done);
+            if (this.error is not null)
+            {
+                return;
+            }
+        }
+
+        if (closed != this.closedState!.Value)
+        {
+            await SaveAsync(ClosedOnPublicHolidays, this.closedState, closed, done);
+        }
+    }
+
+    private string? FallbackNotice()
+    {
+        var platform = LabelOf(this.state!.DefaultValue);
+        var editor = this.snapshot!.CanEdit;
+        return this.state.Source switch
+        {
+            TenantSettingSource.NotAccepted => $"The company's saved time zone, {this.state.StoredValue}, is not known on this server{(editor ? ". Choose another" : string.Empty)}. Until then, times are shown in the platform's time zone, {platform}.",
+            TenantSettingSource.Missing => $"The company has no time zone of its own saved, so times are shown in the platform's time zone, {platform}.{(editor ? " Choose a time zone and save it." : string.Empty)}",
+            _ => null,
+        };
+    }
+
+    private void OnZoneChanged(string? zone)
+    {
+        this.timeZone = zone;
+        this.saved = null;
+        this.error = null;
+    }
+
+    private Task SaveAsync() => SaveAsync(TimeZone, this.state!, this.timeZone, $"Saved: the company's time zone is now {LabelOf(this.timeZone)}.");
+
+    private Task UsePlatformZoneAsync() => SaveAsync(TimeZone, this.state!, this.state!.DefaultValue, $"Saved: the company's time zone is now the platform's, {LabelOf(this.state.DefaultValue)}.");
+
+    private async Task SaveAsync(TenantSettingDefinition definition, TenantSettingState setting, string? value, string done)
+    {
+        this.saving = true;
+        this.saved = null;
+        this.error = null;
+        var saved = await SettingsService.SaveAsync(definition.Key, value, setting.Version);
+        if (saved.IsSuccess)
+        {
+            await LoadAsync();
+            this.saved = this.snapshot is null ? null : done;
+        }
+        else
+        {
+            this.error = saved.Error ?? "The setting was not saved.";
+        }
+
+        this.saving = false;
+    }
+
+    private string LabelOf(string? id) => this.zones.FirstOrDefault(zone => zone.Id == id)?.Label ?? id ?? string.Empty;
+
+    private static string NameOf(string id) => id.Replace('_', ' ');
+
+    private string LocalTimeIn(string? id) =>
+        IanaTimeZones.TryFind(id, out var zone)
+            ? TenantClock.ToLocal(Clock.GetUtcNow(), zone).ToString("dddd d MMMM yyyy, HH:mm", CultureInfo.InvariantCulture)
+            : string.Empty;
+
+    private sealed record ZoneOption(string Id, string Label);
+}

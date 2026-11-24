@@ -1,0 +1,70 @@
+{
+  "id": "tenant-administrator-changes-time-zone",
+  "title": "A tenant administrator changes the company's time zone",
+  "goal": "The tenant's administrator opens the settings, chooses another time zone for the company and finds it kept after a reload, sets it back to the platform's time zone, and reaches the company's custom fields in the same settings; a colleague who may only view settings sees them read-only.",
+  "actors": [
+    {
+      "id": "platform-owner",
+      "description": "Operates the platform and acts inside a tenant only by impersonating one of its users."
+    },
+    {
+      "id": "tenant-administrator",
+      "description": "Holds every permission of Company A, as the platform owner sees and acts while impersonating them."
+    },
+    {
+      "id": "tenant-viewer",
+      "description": "May view Company A's users, units and settings and change nothing, as the platform owner sees while impersonating them."
+    }
+  ],
+  "preconditions": [
+    "The end-to-end database was prepared in this run: Company A with Alex Morgan and Robin Lee, and its time zone pinned to the platform's, as every tenant's is when it is set up."
+  ],
+  "steps": [
+    {
+      "id": "impersonate-administrator",
+      "actor": "platform-owner",
+      "intent": "Sign in and impersonate Company A's administrator",
+      "outcome": "The platform owner sees Company A as its administrator does."
+    },
+    {
+      "id": "open-general-settings",
+      "actor": "tenant-administrator",
+      "intent": "Open the settings",
+      "outcome": "The General panel shows the company's time zone, the same as the platform's, which it names beside it."
+    },
+    {
+      "id": "change-time-zone",
+      "actor": "tenant-administrator",
+      "intent": "Search the time zones, choose another one from the keyboard and save",
+      "outcome": "The panel says the company's time zone is now the chosen one."
+    },
+    {
+      "id": "reload-keeps-time-zone",
+      "actor": "tenant-administrator",
+      "intent": "Reload the settings",
+      "outcome": "The panel shows the chosen time zone and offers the platform's back."
+    },
+    {
+      "id": "open-custom-fields-panel",
+      "actor": "tenant-administrator",
+      "intent": "Open the Custom fields panel of the settings",
+      "outcome": "The panel lists the company's own fields beside the global field."
+    },
+    {
+      "id": "return-to-platform-zone",
+      "actor": "tenant-administrator",
+      "intent": "Set the time zone back to the platform's",
+      "outcome": "The company's own time zone is the platform's again, kept through a reload."
+    },
+    {
+      "id": "viewer-sees-read-only",
+      "actor": "tenant-viewer",
+      "intent": "Open the settings as a colleague who may only view them",
+      "outcome": "The time zone shows and cannot be changed, and there is nothing to save."
+    }
+  ],
+  "completion": [
+    "Company A's time zone was changed by its administrator and kept through a reload, then set back to the platform's time zone as the company's own.",
+    "A user who may only view settings cannot change them."
+  ]
+}

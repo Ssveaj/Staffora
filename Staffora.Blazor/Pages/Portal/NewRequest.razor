@@ -1,0 +1,97 @@
+@page "/portal/orders/new"
+@inject OrderService OrderService
+@inject DialogService DialogService
+@inject NavigationManager Navigation
+@inject PermissionService Permissions
+
+<PermissionView Permission="RolePermission.OrdersCreate">
+    <Loading>
+        <PageScaffold Class="page-scaffold--column">
+            <Main>
+                <LoadingState Text="Loading…" />
+            </Main>
+        </PageScaffold>
+    </Loading>
+    <Authorized>
+        <PageScaffold Class="page-scaffold--column">
+            <Header>
+                <PageHeader Title="New order"
+                            Description="Ask your staffing company for staff members for a job."
+                            Icon="post_add"
+                            RootText="Portal"
+                            RootPath="/portal">
+                    <Actions>
+                        <IconTextButton Text="Write an order"
+                                        Icon="edit_note"
+                                        ButtonStyle="ButtonStyle.Primary"
+                                        Click="WriteAsync" />
+                    </Actions>
+                </PageHeader>
+            </Header>
+            <Main>
+                <PageSection Title="How an order goes" Description="From your draft to a staffed job.">
+                    <ol class="new-order__steps" data-new-order>
+                        <li class="new-order__step new-order__step--current">
+                            <span class="new-order__number" aria-hidden="true">1</span>
+                            <span class="new-order__text">
+                                <span class="new-order__name"><MaterialSymbol Name="edit_note" />Write it</span>
+                                <span class="new-order__line">The job, what its staff members should bring, and its period. Save it as a draft until it is complete.</span>
+                            </span>
+                        </li>
+                        <li class="new-order__step">
+                            <span class="new-order__number" aria-hidden="true">2</span>
+                            <span class="new-order__text">
+                                <span class="new-order__name"><MaterialSymbol Name="send" />Send it</span>
+                                <span class="new-order__line">To your staffing company, which receives it as a job. A sent order is no longer changed.</span>
+                            </span>
+                        </li>
+                        <li class="new-order__step">
+                            <span class="new-order__number" aria-hidden="true">3</span>
+                            <span class="new-order__text">
+                                <span class="new-order__name"><MaterialSymbol Name="track_changes" />Follow it</span>
+                                <span class="new-order__line">Under <a href="/portal/orders">My orders</a> while your staffing company staffs it.</span>
+                            </span>
+                        </li>
+                    </ol>
+                </PageSection>
+            </Main>
+        </PageScaffold>
+    </Authorized>
+    <NotAuthorized>
+        <PageScaffold Class="page-scaffold--column">
+            <Header>
+                <PageHeader Title="New order" Icon="post_add" RootText="Portal" RootPath="/portal" />
+            </Header>
+            <Main>
+                <PageSection>
+                    <EmptyState Icon="lock" Title="Access denied" Text="You do not have permission to write orders." Tone="UiTone.Warning" Role="alert" />
+                </PageSection>
+            </Main>
+        </PageScaffold>
+    </NotAuthorized>
+</PermissionView>
+
+@code {
+    private bool opened;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !this.opened)
+        {
+            this.opened = true;
+            if (await Permissions.HasPermissionAsync(RolePermission.OrdersCreate))
+            {
+                await WriteAsync();
+            }
+        }
+    }
+
+    private async Task WriteAsync()
+    {
+        var result = await OrderDialog.OpenCreateAsync(DialogService, OrderService);
+        if (result.EntityId is { } id)
+        {
+            Navigation.NavigateTo(MyRequests.DetailsPath(id));
+        }
+    }
+}

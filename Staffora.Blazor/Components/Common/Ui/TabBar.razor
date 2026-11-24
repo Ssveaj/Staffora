@@ -1,0 +1,100 @@
+@using System.Globalization
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+<div class="@RootClass" role="tablist" aria-label="@Label" @ref="this.tablist" @attributes="AdditionalAttributes">
+    @foreach (var item in Items)
+    {
+        var selected = item.Key == Selected;
+        <button type="button"
+                role="tab"
+                id="@TabId(IdPrefix, item.Key)"
+                class="@(selected ? "tab-bar__tab tab-bar__tab--selected" : "tab-bar__tab")"
+                aria-selected="@(selected ? "true" : "false")"
+                aria-controls="@PanelId"
+                tabindex="@(selected ? "0" : "-1")"
+                @attributes="ItemAttributes(item)"
+                @onclick="() => SelectAsync(item.Key)">
+            @if (item.Icon is { } icon)
+            {
+                <MaterialSymbol Name="@icon" Class="tab-bar__icon" />
+            }
+            <span class="tab-bar__label">@item.Label</span>
+            @if (item.Count is { } count)
+            {
+                <span class="tab-bar__count">@count.ToString(CultureInfo.InvariantCulture)</span>
+            }
+        </button>
+    }
+</div>
+
+@code {
+    internal const string ModulePath = "./scripts/tab-bar.js";
+
+    private ElementReference tablist;
+    private IJSObjectReference? module;
+
+    [Parameter, EditorRequired] public IReadOnlyList<TabBarItem> Items { get; set; } = [];
+
+    [Parameter] public string? Selected { get; set; }
+
+    [Parameter] public EventCallback<string> SelectedChanged { get; set; }
+
+    [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired] public string IdPrefix { get; set; } = string.Empty;
+
+    [Parameter] public string? PanelId { get; set; }
+
+    [Parameter] public string? ItemAttribute { get; set; }
+
+    [Parameter] public string? Class { get; set; }
+
+    [Parameter(CaptureUnmatchedValues = true)] public IReadOnlyDictionary<string, object>? AdditionalAttributes { get; set; }
+
+    public static string TabId(string idPrefix, string key) => $"{idPrefix}-{key}";
+
+    private string RootClass => Class is null ? "tab-bar" : $"tab-bar {Class}";
+
+    private Dictionary<string, object>? ItemAttributes(TabBarItem item) =>
+        ItemAttribute is null ? null : new Dictionary<string, object> { [ItemAttribute] = item.Key };
+
+    private async Task SelectAsync(string key)
+    {
+        if (key != Selected)
+        {
+            await SelectedChanged.InvokeAsync(key);
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        try
+        {
+            this.module = await JS.InvokeAsync<IJSObjectReference>("import", ModulePath);
+            await this.module.InvokeVoidAsync("attach", this.tablist);
+        }
+        catch (Exception exception) when (exception is JSException or JSDisconnectedException or TaskCanceledException or ObjectDisposedException or InvalidOperationException)
+        {
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (this.module is not null)
+            {
+                await this.module.DisposeAsync();
+            }
+        }
+        catch (Exception exception) when (exception is JSDisconnectedException or TaskCanceledException)
+        {
+        }
+    }
+}

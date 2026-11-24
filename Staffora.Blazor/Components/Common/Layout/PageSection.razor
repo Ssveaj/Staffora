@@ -1,0 +1,35 @@
+<section class="@ResolvedClass">
+    @if (!string.IsNullOrWhiteSpace(Title) || !string.IsNullOrWhiteSpace(Description))
+    {
+        <div class="page-section__heading">
+            @if (!string.IsNullOrWhiteSpace(Title))
+            {
+                <h2 class="page-section__title">@Title</h2>
+            }
+            @if (!string.IsNullOrWhiteSpace(Description))
+            {
+                <p class="page-section__description">@Description</p>
+            }
+        </div>
+    }
+
+    @ChildContent
+</section>
+
+@code {
+    [Parameter]
+    public string? Title { get; set; }
+
+    [Parameter]
+    public string? Description { get; set; }
+
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    [Parameter]
+    public string? Class { get; set; }
+
+    private string ResolvedClass => string.IsNullOrWhiteSpace(Class)
+        ? "page-section"
+        : $"page-section {Class}";
+}

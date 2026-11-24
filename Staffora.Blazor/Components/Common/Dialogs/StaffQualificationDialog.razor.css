@@ -1,0 +1,17 @@
+.staff-qualification {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: var(--space-2) var(--space-6);
+    margin: 0;
+}
+
+.staff-qualification dt {
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-medium);
+}
+
+.staff-qualification dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+}

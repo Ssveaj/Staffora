@@ -1,0 +1,66 @@
+.state-entity-dialog__body {
+    container: dialog-body / inline-size;
+}
+
+.field-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-4);
+    min-width: 0;
+}
+
+@container dialog-body (min-width: 40rem) {
+    .field-row {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+.form-eyebrow {
+    margin: 0;
+    color: var(--color-text-subtle);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-semibold);
+    letter-spacing: 0.06em;
+    line-height: var(--line-height-snug);
+    text-transform: uppercase;
+}
+
+.rz-form-field .rz-form-field-helper {
+    padding: var(--space-1) 0 0;
+}
+
+.field-helper {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-1);
+    color: var(--color-text-subtle);
+    font-size: var(--font-size-dense);
+    line-height: var(--line-height-snug);
+}
+
+.field-helper .field-helper__icon {
+    flex: none;
+    color: var(--color-text-faint);
+    font-size: 1rem;
+    line-height: 1;
+}
+
+.rz-dropdown-item.rz-state-disabled,
+.rz-multiselect-item.rz-state-disabled {
+    opacity: 1;
+    color: var(--rz-input-disabled-color);
+}
+
+.state-entity-dialog {
+    --rz-border-focus: var(--rz-border-width) solid var(--dialog-state-text);
+    --rz-input-focus-border: var(--rz-border-focus);
+    --rz-input-focus-border-block-end: var(--rz-input-focus-border);
+    --rz-input-focus-shadow: inset 0 0 0 1px var(--dialog-state-text);
+    --rz-form-field-focus-shadow: var(--rz-input-focus-shadow);
+    --rz-form-field-label-focus-color: var(--dialog-state-text);
+    --rz-dropdown-open-border: 1px solid var(--dialog-state-text);
+    --rz-checkbox-checked-background-color: var(--dialog-state-text);
+    --rz-checkbox-checked-hover-background-color: var(--dialog-state-text);
+    --rz-radio-circle-background-color: var(--dialog-state-text);
+    --rz-radio-circle-hover-background-color: var(--dialog-state-text);
+}

@@ -1,0 +1,186 @@
+.assignment-dialog {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    border-radius: var(--radius-sm);
+}
+
+    .assignment-dialog:focus-visible {
+        outline: 2px solid var(--color-accent);
+        outline-offset: 4px;
+    }
+
+.assignment-dialog__notice {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--color-info-border);
+    border-radius: var(--radius-lg);
+    background: var(--color-info-soft);
+    color: var(--color-text);
+}
+
+    .assignment-dialog__notice ::deep .assignment-dialog__notice-icon {
+        flex: none;
+        color: var(--color-info);
+        font-size: 1.35rem;
+    }
+
+.assignment-dialog__notice--own {
+    border-color: var(--color-accent-soft);
+    background: var(--color-accent-tint);
+}
+
+    .assignment-dialog__notice--own ::deep .assignment-dialog__notice-icon {
+        color: var(--color-accent);
+    }
+
+.assignment-dialog__notice-title {
+    margin: 0;
+    font-weight: var(--font-weight-semibold);
+}
+
+.assignment-dialog__notice-text {
+    margin: var(--space-1) 0 0;
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+}
+
+.assignment-dialog__answer-by {
+    color: var(--color-text);
+    font-weight: var(--font-weight-medium);
+}
+
+.assignment-dialog__section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding-bottom: var(--space-4);
+    border-bottom: 1px solid var(--color-divider-faint);
+}
+
+.assignment-dialog__heading {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin: 0;
+    color: var(--color-text);
+    font-size: 0.9375rem;
+    font-weight: var(--font-weight-semibold);
+}
+
+    .assignment-dialog__heading ::deep .material-symbol {
+        color: var(--color-text-subtle);
+        font-size: 1.25rem;
+    }
+
+.assignment-dialog__body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    min-width: 0;
+    padding-left: 1.75rem;
+}
+
+.assignment-dialog__lead {
+    margin: 0;
+    color: var(--color-text);
+    font-size: var(--font-size-xl);
+    font-weight: var(--font-weight-semibold);
+    line-height: var(--line-height-snug);
+}
+
+.assignment-dialog__line {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    margin: 0;
+    color: var(--color-text);
+    font-size: 1.0625rem;
+}
+
+    .assignment-dialog__line ::deep .material-symbol {
+        flex: none;
+        margin-top: 0.15rem;
+        color: var(--color-text-subtle);
+        font-size: 1.15rem;
+    }
+
+.assignment-dialog__rows {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+}
+
+    .assignment-dialog__rows > div {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: var(--space-1) var(--space-4);
+        padding: 0.5rem 0;
+        border-bottom: 1px solid var(--color-divider-faint);
+    }
+
+        .assignment-dialog__rows > div:last-child {
+            border-bottom: 0;
+        }
+
+    .assignment-dialog__rows dt {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        color: var(--color-text-subtle);
+        font-size: var(--font-size-dense);
+    }
+
+        .assignment-dialog__rows dt ::deep .material-symbol {
+            font-size: 1.05rem;
+        }
+
+    .assignment-dialog__rows dd {
+        margin: 0;
+        color: var(--color-text);
+        font-weight: var(--font-weight-semibold);
+        text-align: right;
+        overflow-wrap: anywhere;
+    }
+
+.assignment-dialog__subheading {
+    margin: var(--space-2) 0 0;
+    color: var(--color-text-subtle);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-bold);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.assignment-dialog__text {
+    margin: 0;
+    color: var(--color-text);
+    white-space: pre-line;
+    overflow-wrap: anywhere;
+}
+
+.assignment-dialog__text--none {
+    color: var(--color-text-subtle);
+}
+
+.assignment-dialog__audience {
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-regular);
+}
+
+.assignment-dialog__help {
+    margin: 0;
+    color: var(--color-text-subtle);
+    font-size: var(--font-size-sm);
+}
+
+@media (max-width: 639.98px) {
+    .assignment-dialog__body {
+        padding-left: 0;
+    }
+}

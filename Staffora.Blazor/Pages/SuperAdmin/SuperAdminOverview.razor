@@ -1,0 +1,341 @@
+@page "/superadmin/overview"
+@layout SuperAdminLayout
+@using System.Globalization
+@using Microsoft.Extensions.Options
+@using Staffora.Core.Entities.Tenancy
+@using Staffora.Core.Settings
+@inject DialogService DialogService
+@inject PlatformConsoleService PlatformConsole
+@inject TenantService TenantService
+@inject TimeProvider Clock
+@inject IOptions<Staffora.Services.Settings.PlatformOptions> Platform
+
+<HomeBoard data-platform-overview>
+    <section class="hero" aria-label="The platform in figures">
+        <div class="hero__inner">
+            <div class="hero__main rise">
+                <HomeHead Title="Platform overview"
+                          Eyebrow="@Overline"
+                          Description="The platform at a glance: its companies, the error log, failed cross-tenant messages and impersonations. Today and this week follow the platform's time zone."
+                          Hero="true" />
+
+                @if (this.loading)
+                {
+                    <p class="hero__status" role="status">
+                        <RadzenProgressBarCircular ShowValue="false" Mode="ProgressBarMode.Indeterminate" Size="ProgressBarCircularSize.Small" />
+                        <span>Loading the overview...</span>
+                    </p>
+                }
+                else if (this.overview is { } figures)
+                {
+                    <dl class="hero-figures" aria-label="The platform in figures">
+                        <div class="hero-figure" data-figure="errors" data-tone="@ToneOf(PlatformOverviewRules.ErrorsTone(figures.ErrorsLastDay))">
+                            <dt>Errors, last 24 h<span class="visually-hidden">@ToneText(PlatformOverviewRules.ErrorsTone(figures.ErrorsLastDay))</span></dt>
+                            <dd class="hero-figure__value">@Number(figures.ErrorsLastDay)</dd>
+                            <dd class="hero-figure__note">@Number(figures.ErrorsLastWeek) in @PlatformConsoleService.RecentErrorDays days · @(figures.LastError is { } last ? $"last {PlatformOverviewRules.Ago(last, figures.ReadAt)}" : "none logged yet")</dd>
+                        </div>
+                        <div class="hero-figure" data-figure="messages" data-tone="@ToneOf(PlatformOverviewRules.MessagesTone(figures.DeadLetters))">
+                            <dt>Failed messages<span class="visually-hidden">@ToneText(PlatformOverviewRules.MessagesTone(figures.DeadLetters))</span></dt>
+                            <dd class="hero-figure__value">@Number(figures.DeadLetters)</dd>
+                            <dd class="hero-figure__note">@Number(figures.DeliveredToday) delivered today</dd>
+                        </div>
+                        <div class="hero-figure" data-figure="users" data-tone="calm">
+                            <dt>Active users</dt>
+                            <dd class="hero-figure__value">@Number(figures.ActiveUsers)</dd>
+                            <dd class="hero-figure__note">in @PlatformOverviewRules.Count(figures.Tenants.Count, "tenant", "tenants")</dd>
+                        </div>
+                        <div class="hero-figure" data-figure="acting" data-tone="@ToneOf(PlatformOverviewRules.ActingTone(figures.OpenImpersonation))">
+                            <dt>Acting as a user<span class="visually-hidden">@ToneText(PlatformOverviewRules.ActingTone(figures.OpenImpersonation))</span></dt>
+                            <dd class="hero-figure__value hero-figure__value--text">@(figures.OpenImpersonation?.Target ?? "None")</dd>
+                            <dd class="hero-figure__note">@(figures.OpenImpersonation is { } open ? $"since {Time(open.Started)}, no end recorded · " : string.Empty)@PlatformOverviewRules.Count(figures.ImpersonationsToday, "session", "sessions") today, audited</dd>
+                        </div>
+                    </dl>
+                }
+            </div>
+
+        </div>
+    </section>
+
+    <div class="floor">
+        <div class="floor__inner">
+            @if (!this.loading && this.overview is null)
+            {
+                <EmptyState Icon="lock" Title="The overview is not available" Text="@this.error" Tone="UiTone.Warning" Role="alert" />
+            }
+
+            <div class="floor__row floor__row--lifted">
+                @if (this.overview is { } list)
+                {
+                    <section class="card card--lifted tenants-card rise rise--3" aria-labelledby="tenants-title">
+                        <header class="card__head">
+                            <h2 id="tenants-title" class="card__title">Tenants</h2>
+                            <a class="card__link" href="/superadmin/tenants">All tenants <MaterialSymbol Name="arrow_forward" /></a>
+                        </header>
+                        <div class="tenant-cols" aria-hidden="true">
+                            <span>Tenant</span><span>State</span><span>Users</span><span>Jobs this week</span><span>Open slots</span>
+                        </div>
+                        <ul class="tenant-rows" aria-label="Tenants">
+                            @foreach (var tenant in list.Tenants)
+                            {
+                                <li>
+                                    <a class="tenant-row tenant-row--company" href="@ConsolePath(tenant.Id)" data-tenant-id="@tenant.Id">
+                                        <span class="tenant-row__mark" aria-hidden="true">@Initials(tenant.Name)</span>
+                                        <span class="tenant-row__who">
+                                            <span class="tenant-row__name">@tenant.Name</span>
+                                            @if (!string.IsNullOrWhiteSpace(tenant.Description))
+                                            {
+                                                <span class="tenant-row__kind">@tenant.Description</span>
+                                            }
+                                        </span>
+                                        <span class="tenant-row__state"><span class="@($"state-pill state-pill--{PillTone(tenant)}")"><span class="state-pill__dot" aria-hidden="true"></span>@PlatformTenantList.StateLabel(tenant.State)</span></span>
+                                        <span class="tenant-row__figs">
+                                        <span class="tenant-row__fig" data-fig="users"><span class="tenant-row__label">Users</span><span class="tenant-row__value">@Number(tenant.Users)</span></span>
+                                        <span class="tenant-row__fig" data-fig="jobs"><span class="tenant-row__label">Jobs this week</span><span class="tenant-row__value">@Number(tenant.JobsThisWeek)</span></span>
+                                        <span class="tenant-row__fig" data-fig="open"><span class="tenant-row__label">Open slots</span><span class="tenant-row__value">@Number(tenant.OpenSlots)</span></span>
+                                        </span>
+                                    </a>
+                                </li>
+                            }
+                        </ul>
+                    </section>
+                }
+
+                <section class="card card--lifted act-card rise rise--4" aria-labelledby="act-title">
+                    <header class="card__head">
+                        <h2 id="act-title" class="card__title">Act as a user</h2>
+                        <span class="act-card__audited"><MaterialSymbol Name="verified_user" />Audited</span>
+                    </header>
+                    <label class="act-card__label" for="act-search">Find a user in any tenant</label>
+                    <div class="act-card__search">
+                        <MaterialSymbol Name="search" Class="act-card__search-icon" />
+                        <input id="act-search" name="act-search" type="search" placeholder="Name or email" autocomplete="off"
+                               @bind="this.search" @bind:event="oninput" @onkeydown="SearchKeyAsync" />
+                    </div>
+                    @if (this.overview is { RecentTargets.Count: > 0 } acted)
+                    {
+                        <p class="act-card__recent-label" id="act-recent">Recent</p>
+                        <form method="post" action="Account/Impersonation/Start">
+                            <AntiforgeryToken />
+                            <ul class="act-card__recent" aria-labelledby="act-recent">
+                                @foreach (var target in acted.RecentTargets)
+                                {
+                                    <li>
+                                        <button type="submit" class="act-card__person" name="targetUserId" value="@target.UserId">
+                                            <span class="act-card__avatar" aria-hidden="true">@Initials(target.Name)</span>
+                                            <span class="act-card__who">
+                                                <span class="act-card__name"><span class="visually-hidden">Act as </span>@target.Name</span>
+                                                <span class="act-card__tenant">@target.TenantName</span>
+                                            </span>
+                                            <MaterialSymbol Name="arrow_forward" Class="act-card__go" />
+                                        </button>
+                                    </li>
+                                }
+                            </ul>
+                        </form>
+                    }
+                    else if (this.overview is not null)
+                    {
+                        <p class="act-card__none">The users you act as appear here, one click away.</p>
+                    }
+                    <div class="act-card__foot">
+                        <span class="act-card__hint">Press Enter to search, or open the full list.</span>
+                        <IconTextButton Text="Impersonate User" Icon="person_search" ButtonStyle="ButtonStyle.Light" Click="OpenPickerAsync" />
+                    </div>
+                </section>
+            </div>
+
+            @if (this.overview is { } today)
+            {
+                <div class="floor__row">
+                    <section class="card onboard-card rise rise--5" aria-labelledby="onboard-title">
+                        <header class="onboard-card__head">
+                            <div>
+                                <h2 id="onboard-title" class="onboard-card__title">Onboard a company</h2>
+                                <p class="onboard-card__lead">A new staffing company is ready in three steps.</p>
+                            </div>
+                            <IconTextButton Text="Start onboarding" Icon="add_business" ButtonStyle="ButtonStyle.Primary" Click="StartOnboardingAsync" />
+                        </header>
+
+                        <ol class="steps">
+                            <li class="steps__step">
+                                <span class="steps__mark" aria-hidden="true">1</span>
+                                <h3 class="steps__title">Name and business</h3>
+                                <p class="steps__text">What the company is called and what it does, in a line.</p>
+                            </li>
+                            <li class="steps__step">
+                                <span class="steps__mark steps__mark--two" aria-hidden="true">2</span>
+                                <h3 class="steps__title">System owner</h3>
+                                <p class="steps__text">The person who runs the company here and gets its first sign-in.</p>
+                            </li>
+                            <li class="steps__step">
+                                <span class="steps__mark steps__mark--done" aria-hidden="true"><MaterialSymbol Name="check" /></span>
+                                <h3 class="steps__title">Goes live</h3>
+                                <p class="steps__text">Once its system owner can sign in, you activate it from its console.</p>
+                            </li>
+                        </ol>
+
+                        <div class="onboard-card__foot">
+                            @{
+                                var waiting = today.Tenants.Where(tenant => tenant.State == TenantState.Setup).ToList();
+                            }
+                            @if (waiting.Count == 0)
+                            {
+                                <div class="waiting waiting--empty">
+                                    <span class="waiting__icon" aria-hidden="true"><MaterialSymbol Name="schedule" /></span>
+                                    <p class="waiting__text"><strong>No company waiting in Setup</strong>Companies you onboard wait here until you activate them.</p>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="waiting">
+                                    <p class="waiting__title">Waiting in Setup</p>
+                                    <ul class="waiting__list" aria-label="Waiting in Setup">
+                                        @foreach (var tenant in waiting)
+                                        {
+                                            <li>
+                                                <a class="waiting__item" href="@ConsolePath(tenant.Id)" data-overdue="@(PlatformOverviewRules.IsSetupOverdue(tenant, today.ReadAt) ? "true" : "false")">
+                                                    <span class="waiting__name">@tenant.Name</span>
+                                                    <span class="waiting__since">@($"created {PlatformOverviewRules.Ago(tenant.Created, today.ReadAt)}")</span>
+                                                </a>
+                                            </li>
+                                        }
+                                    </ul>
+                                </div>
+                            }
+
+                            <ul class="state-counts" aria-label="Tenants by state">
+                                @foreach (var count in today.TenantsByState)
+                                {
+                                    <li>
+                                        <span class="state-count" data-state="@PlatformTenantList.StateValue(count.State)" data-zero="@(count.Count == 0 ? "true" : "false")">
+                                            <span class="state-count__label">@PlatformTenantList.StateLabel(count.State)</span>
+                                            <span class="state-count__value">@Number(count.Count)</span>
+                                        </span>
+                                    </li>
+                                }
+                            </ul>
+                        </div>
+                    </section>
+
+                    <section class="card today-card rise rise--6" aria-labelledby="today-title">
+                        <header class="today-card__head">
+                            <h2 id="today-title" class="card__title">Today</h2>
+                            <span class="today-card__sub">Impersonations, audited</span>
+                        </header>
+                        @{
+                            var sessions = today.RecentImpersonations.Where(session => session.Started >= DayStartUtc).ToList();
+                        }
+                        @if (sessions.Count == 0)
+                        {
+                            <p class="today-card__none">
+                                No impersonations today.@(today.RecentImpersonations.Count > 0 ? $" The last was {PlatformOverviewRules.Ago(today.RecentImpersonations[0].Started, today.ReadAt)}." : string.Empty)
+                            </p>
+                        }
+                        else
+                        {
+                            <ol class="timeline" aria-label="Today's impersonations">
+                                @foreach (var session in sessions)
+                                {
+                                    <li class="timeline__item" data-open="@(session.Ended is null ? "true" : "false")">
+                                        <span class="timeline__dot" aria-hidden="true"></span>
+                                        <p class="timeline__time">@Time(session.Started)@(session.Ended is { } ended ? $" – {Time(ended)}" : " · no end recorded")</p>
+                                        <p class="timeline__what">Acted as <strong>@session.Target</strong></p>
+                                        <p class="timeline__where">@session.TenantName · by @session.Impersonator</p>
+                                    </li>
+                                }
+                            </ol>
+                        }
+                        <p class="today-card__foot" data-tone="@ToneOf(PlatformOverviewRules.ActingTone(today.OpenImpersonation))">
+                            <span class="today-card__dot" aria-hidden="true"></span>
+                            <span>@(today.OpenImpersonation is null ? "None open now" : "A session has no end recorded") · @(today.LastError is { } lastError ? $"last error {PlatformOverviewRules.Ago(lastError, today.ReadAt)}" : "no errors logged") · <a href="/superadmin/errorlog">Platform health</a></span>
+                        </p>
+                    </section>
+                </div>
+            }
+        </div>
+    </div>
+</HomeBoard>
+
+@code {
+    private PlatformOverview? overview;
+    private string? error;
+    private bool loading = true;
+    private string search = string.Empty;
+
+    private TimeZoneInfo Zone => IanaTimeZones.TryFind(Platform.Value.TimeZone, out var zone) ? zone : TimeZoneInfo.Utc;
+
+    private DateTimeOffset LocalNow => TimeZoneInfo.ConvertTime(this.overview is { } read ? new DateTimeOffset(read.ReadAt, TimeSpan.Zero) : Clock.GetUtcNow(), Zone);
+
+    private DateTime DayStartUtc => TimeZoneInfo.ConvertTimeToUtc(LocalNow.Date, Zone);
+
+    private string Overline => string.Create(CultureInfo.InvariantCulture, $"{LocalNow:dddd d MMMM} · {LocalNow:HH:mm} {ZoneName}");
+
+    private string ZoneName => Zone.BaseUtcOffset == TimeSpan.Zero && !Zone.SupportsDaylightSavingTime
+        ? "UTC"
+        : $"{Platform.Value.TimeZone[(Platform.Value.TimeZone.LastIndexOf('/') + 1)..].Replace('_', ' ')} time";
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        var result = await PlatformConsole.GetOverviewAsync();
+        this.overview = result.IsSuccess ? result.Value : null;
+        this.error = result.IsSuccess ? null : result.Error;
+        this.loading = false;
+    }
+
+    private async Task OpenPickerAsync()
+    {
+        var typed = this.search.Trim();
+        await DialogService.OpenFormDialogAsync<ImpersonateUserDialog>("Impersonate User", parameters => parameters.Set(dialog => dialog.InitialSearch, typed), new FormDialogOptions { Width = "800px", Resizable = true, Icon = "person_search" });
+    }
+
+    private async Task SearchKeyAsync(KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter")
+        {
+            await OpenPickerAsync();
+        }
+    }
+
+    private async Task StartOnboardingAsync()
+    {
+        var created = await TenantOnboardingDialog.OpenAsync(DialogService);
+        if (created is { } tenantId)
+        {
+            await TenantDialog.OpenAsync(DialogService, TenantService, tenantId);
+        }
+
+        await LoadAsync();
+    }
+
+    private static string ToneOf(PlatformHealth health) => health switch
+    {
+        PlatformHealth.Attention => "attention",
+        PlatformHealth.Problem => "problem",
+        _ => "calm",
+    };
+
+    private static string ToneText(PlatformHealth health) => health switch
+    {
+        PlatformHealth.Attention => " (needs a look)",
+        PlatformHealth.Problem => " (needs you)",
+        _ => string.Empty,
+    };
+
+    private static string PillTone(PlatformOverviewTenant tenant) => tenant.State switch
+    {
+        TenantState.Setup => "setup",
+        TenantState.Active => "active",
+        _ => "held",
+    };
+
+    private static string ConsolePath(Guid tenantId) => $"/superadmin/tenants/{tenantId}";
+
+    private static string Initials(string name) =>
+        string.Concat(name.Split(' ', StringSplitOptions.RemoveEmptyEntries).Take(2).Select(word => char.ToUpperInvariant(word[0])));
+
+    private static string Number(int value) => value.ToString(CultureInfo.InvariantCulture);
+
+    private string Time(DateTime instant) => TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(instant, DateTimeKind.Utc), Zone).ToString("HH:mm", CultureInfo.InvariantCulture);
+}

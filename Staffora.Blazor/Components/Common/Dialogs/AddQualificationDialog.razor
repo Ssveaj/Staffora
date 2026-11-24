@@ -1,0 +1,72 @@
+@using Staffora.Core.Models
+@using Staffora.Services.Resources
+@inject DialogService DialogService
+@inject QualificationService QualificationService
+
+<FormDialogFrame OnSave="AddAsync" SaveText="Add qualification" SaveIcon="add" SaveDisabled="@(this.qualificationId is null)" IsBusy="@this.adding">
+    @if (this.choices is null)
+    {
+        <LoadingState Text="Loading qualifications…" Inline="true" />
+    }
+    else if (this.choices.Count == 0)
+    {
+        <RadzenText TextStyle="TextStyle.Body2" class="text-muted" data-no-choices>There is no active qualification the staff member does not hold. Qualifications are added on the Qualifications page.</RadzenText>
+    }
+    else
+    {
+        <RadzenFormField Text="Qualification" Component="staff-qualification" Style="width: 100%;">
+            <RadzenDropDown Name="staff-qualification" InputAttributes="@FieldLabel.Of("Qualification")" @bind-Value="this.qualificationId"
+                            Data="@this.choices" TextProperty="Name" ValueProperty="Id" TValue="Guid?"
+                            AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
+                            Placeholder="Select a qualification" Style="width: 100%;" />
+        </RadzenFormField>
+    }
+
+    @if (!string.IsNullOrEmpty(this.error))
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Danger" Variant="Variant.Flat" Shade="Shade.Lighter" ShowIcon="true" AllowClose="false">@this.error</RadzenAlert>
+    }
+</FormDialogFrame>
+
+@code {
+    private IReadOnlyList<QualificationChoice>? choices;
+    private Guid? qualificationId;
+    private bool adding;
+    private string? error;
+
+    [Parameter, EditorRequired] public Guid UserId { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var choices = await QualificationService.GetChoicesForAsync(UserId);
+        this.choices = choices.IsSuccess && choices.Value is { } offered ? offered : [];
+        this.error = choices.IsSuccess ? null : choices.Error;
+    }
+
+    private async Task AddAsync()
+    {
+        if (this.qualificationId is not { } qualificationId)
+        {
+            return;
+        }
+
+        this.error = null;
+        this.adding = true;
+        var given = await QualificationService.GiveQualificationAsync(UserId, qualificationId);
+        this.adding = false;
+        if (given.IsSuccess)
+        {
+            DialogService.Close(true);
+        }
+        else
+        {
+            this.error = given.Error ?? "The qualification could not be given.";
+        }
+    }
+
+    public static Task<bool> OpenAsync(DialogService dialogService, Guid userId, string? staffName) =>
+        dialogService.OpenFormDialogAsync<AddQualificationDialog>(
+            string.IsNullOrWhiteSpace(staffName) ? "Add qualification" : $"Add a qualification to {staffName}",
+            parameters => parameters.Set(dialog => dialog.UserId, userId),
+            new FormDialogOptions { Width = "440px" });
+}

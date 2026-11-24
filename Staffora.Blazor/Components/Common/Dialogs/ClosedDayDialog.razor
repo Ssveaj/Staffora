@@ -1,0 +1,158 @@
+@using Staffora.Core.Entities.Scheduling
+@using Staffora.Core.Models
+@using Staffora.Core.Scheduling
+@using Staffora.Services.Scheduling
+@inject DialogService DialogService
+@inject ClosedDayService ClosedDays
+
+<FormDialogFrame ReadOnly="@(this.editor is not { CanEdit: true })">
+    <ChildContent>
+        @if (this.editor is null)
+        {
+            @if (string.IsNullOrEmpty(this.error))
+            {
+                <LoadingState Text="Loading the closed day…" Inline="true" />
+            }
+        }
+        else
+        {
+            <p class="closed-day__intro">Nobody the day applies to is staffed on it: the candidate lists, the timeline and the priorities count them as not free, as for an absence.</p>
+            <RadzenFormField Text="Name" Component="closed-day-name" Style="width: 100%;">
+                <RadzenTextBox Name="closed-day-name" @bind-Value="this.name" MaxLength="@ClosedDay.NameMaxLength" Disabled="@(!this.editor.CanEdit)" Placeholder="For example, a public holiday" />
+            </RadzenFormField>
+            <div class="closed-day__dates">
+                <RadzenFormField Text="First day" Component="closed-day-first">
+                    <RadzenDatePicker TValue="DateOnly?" Name="closed-day-first" Value="@this.firstDay" ValueChanged="@((DateOnly? day) => FirstDayChanged(day))" DateFormat="yyyy-MM-dd" AllowClear="false"
+                                      InputAttributes="@FieldLabel.Of("First day")" PopupRenderMode="PopupRenderMode.OnDemand" Disabled="@(!this.editor.CanEdit)" />
+                </RadzenFormField>
+                <RadzenFormField Text="Last day" Component="closed-day-last">
+                    <RadzenDatePicker TValue="DateOnly?" Name="closed-day-last" @bind-Value="this.lastDay" DateFormat="yyyy-MM-dd" AllowClear="false"
+                                      InputAttributes="@FieldLabel.Of("Last day")" PopupRenderMode="PopupRenderMode.OnDemand" Disabled="@(!this.editor.CanEdit)" />
+                </RadzenFormField>
+            </div>
+            <RadzenFormField Text="Applies to" Component="closed-day-unit" Style="width: 100%;">
+                <RadzenDropDown Name="closed-day-unit" InputAttributes="@FieldLabel.Of("Applies to")" @bind-Value="this.unitId"
+                                Data="@this.editor.Units" TextProperty="@nameof(ClosedDayUnitChoice.Name)" ValueProperty="@nameof(ClosedDayUnitChoice.Id)" TValue="Guid"
+                                AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" Disabled="@(!this.editor.CanEdit)" Style="width: 100%;" />
+            </RadzenFormField>
+            <p class="closed-day__scope" data-closed-day-scope>@ScopeText</p>
+        }
+
+        @if (!string.IsNullOrEmpty(this.error))
+        {
+            <RadzenAlert AlertStyle="AlertStyle.Danger" Variant="Variant.Flat" Shade="Shade.Lighter" ShowIcon="true" AllowClose="false" data-closed-day-error>@this.error</RadzenAlert>
+        }
+    </ChildContent>
+    <Footer>
+        @if (this.editor is { CanEdit: true } editable)
+        {
+            @if (editable.Id is not null)
+            {
+                <IconTextButton Text="Delete" Icon="delete" ButtonStyle="ButtonStyle.Danger" Variant="Variant.Text" Click="DeleteAsync" Disabled="@this.busy" data-closed-day-delete />
+                <span class="closed-day__spacer" aria-hidden="true"></span>
+            }
+            <RadzenButton Text="Cancel" ButtonStyle="ButtonStyle.Light" Variant="Variant.Flat" Click="@(() => DialogService.Close(false))" Disabled="@this.busy" />
+            <IconTextButton Text="Save" Icon="event_busy" ButtonStyle="ButtonStyle.Primary" Click="SaveAsync" Disabled="@(!Ready)" IsBusy="@this.busy" data-closed-day-save />
+        }
+        else
+        {
+            <RadzenButton Text="Close" ButtonStyle="ButtonStyle.Light" Variant="Variant.Flat" Click="@(() => DialogService.Close(false))" />
+        }
+    </Footer>
+</FormDialogFrame>
+
+@code {
+    private ClosedDayEditor? editor;
+    private string? name;
+    private DateOnly? firstDay;
+    private DateOnly? lastDay;
+    private Guid unitId;
+    private bool busy;
+    private string? error;
+
+    [Parameter] public Guid? ClosedDayId { get; set; }
+
+    private bool Ready => this.editor is { CanEdit: true } && !this.busy && !string.IsNullOrWhiteSpace(this.name) && this.firstDay is not null && this.lastDay is not null;
+
+    private string ScopeText =>
+        this.unitId == Guid.Empty
+            ? "Every staff member of the organization."
+            : $"The staff members of {this.editor?.Units.FirstOrDefault(unit => unit.Id == this.unitId)?.Name ?? "the unit"} and of the units below it.";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var read = await ClosedDays.GetEditorAsync(ClosedDayId);
+        if (!read.IsSuccess || read.Value is not { } loaded)
+        {
+            this.error = read.Error ?? ClosedDayService.ReadFailed;
+            return;
+        }
+
+        this.editor = loaded;
+        (this.name, this.firstDay, this.lastDay, this.unitId) = (loaded.Draft.Name, loaded.Draft.FirstDay, loaded.Draft.LastDay, loaded.Draft.OrganizationUnitId ?? Guid.Empty);
+    }
+
+    private void FirstDayChanged(DateOnly? day)
+    {
+        if (this.lastDay is null || (day is { } first && (this.lastDay < first || this.lastDay == this.firstDay)))
+        {
+            this.lastDay = day;
+        }
+
+        this.firstDay = day;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (!Ready || this.editor is null || this.firstDay is not { } first || this.lastDay is not { } last)
+        {
+            return;
+        }
+
+        this.error = null;
+        this.busy = true;
+        var draft = new ClosedDayDraft(this.name ?? string.Empty, first, last, ClosedDayUnitChoice.UnitOf(this.unitId));
+        Result saved = this.editor.Id is { } id
+            ? await ClosedDays.UpdateClosedDayAsync(id, draft)
+            : await ClosedDays.CreateClosedDayAsync(draft);
+        this.busy = false;
+        if (saved.IsSuccess)
+        {
+            DialogService.Close(true);
+        }
+        else
+        {
+            this.error = saved.Error ?? ClosedDayService.SaveFailed;
+        }
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (this.editor?.Id is not { } id || !await DialogService.ConfirmAsync($"Delete the closed day {this.editor.Draft.Name}? Staffing then counts its days as ordinary days again.", "Delete closed day", okText: "Delete", destructive: true, icon: "delete"))
+        {
+            return;
+        }
+
+        this.error = null;
+        this.busy = true;
+        var deleted = await ClosedDays.DeleteClosedDayAsync(id);
+        this.busy = false;
+        if (deleted.IsSuccess)
+        {
+            DialogService.Close(true);
+        }
+        else
+        {
+            this.error = deleted.Error ?? ClosedDayService.DeleteFailed;
+        }
+    }
+
+    public static Task<bool> OpenCreateAsync(DialogService dialogService) =>
+        dialogService.OpenFormDialogAsync<ClosedDayDialog>("New closed day", options: new FormDialogOptions { Width = "520px", Icon = "event_busy" });
+
+    public static Task<bool> OpenAsync(DialogService dialogService, ClosedDayListItem closedDay)
+    {
+        ArgumentNullException.ThrowIfNull(closedDay);
+        return dialogService.OpenFormDialogAsync<ClosedDayDialog>(closedDay.Name, parameters => parameters.Set(dialog => dialog.ClosedDayId, (Guid?)closedDay.Id), new FormDialogOptions { Width = "520px", Icon = "event_busy" });
+    }
+}

@@ -1,0 +1,53 @@
+@font-face {
+    font-family: "Material Symbols Outlined";
+    font-style: normal;
+    font-weight: 100 700;
+    font-display: block;
+    src: url("_content/Radzen.Blazor/fonts/MaterialSymbolsOutlined.woff2") format("woff2");
+}
+
+html,
+body {
+    font-family: var(--font-family-sans);
+    font-size: var(--font-size-md);
+    line-height: var(--line-height-normal);
+    color: var(--color-text);
+}
+
+h1, h2, h3, h4, h5, h6 {
+    line-height: var(--line-height-tight);
+    font-weight: var(--font-weight-semibold);
+}
+
+code, kbd, pre, samp {
+    font-family: var(--font-family-mono);
+}
+
+.material-symbol {
+    font-family: "Material Symbols Outlined";
+    font-weight: var(--font-weight-regular);
+    font-style: normal;
+    font-size: var(--icon-size, var(--icon-size-md));
+    line-height: 1;
+    display: inline-block;
+    width: 1em;
+    height: 1em;
+    overflow: hidden;
+    vertical-align: middle;
+    white-space: nowrap;
+    text-transform: none;
+    letter-spacing: normal;
+    word-wrap: normal;
+    direction: ltr;
+    font-feature-settings: "liga";
+    -webkit-font-smoothing: antialiased;
+    user-select: none;
+}
+
+.material-symbol--sm {
+    --icon-size: var(--icon-size-sm);
+}
+
+.material-symbol--lg {
+    --icon-size: var(--icon-size-lg);
+}

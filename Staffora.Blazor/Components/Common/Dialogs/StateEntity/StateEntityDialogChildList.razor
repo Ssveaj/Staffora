@@ -1,0 +1,211 @@
+@using Staffora.Core.Workflow.FieldAccess
+@typeparam TItem
+@implements IDisposable
+
+@if (ShowsAdd)
+{
+    <div class="state-entity-child-list__actions">
+        @if (Declared.AddChoice is { } choice && choice.Options() is { Count: > 0 } options)
+        {
+            <RadzenFormField Text="@choice.Label" Component="@choice.Name" class="state-entity-child-list__choice">
+                <RadzenDropDown TValue="string" Name="@choice.Name" InputAttributes="@FieldLabel.Of(choice.Label)"
+                                Data="@(new[] { new ListOption(string.Empty, choice.NoneText) }.Concat(options).ToList())" TextProperty="Label" ValueProperty="Value"
+                                Value="@(this.chosen ?? string.Empty)" ValueChanged="@((string value) => Choose(choice, value))" />
+            </RadzenFormField>
+        }
+        <IconTextButton Text="@(Declared.AddLabel!)" Icon="add" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Click="@AddAsync" />
+    </div>
+}
+
+<ListView TItem="TItem"
+          @ref="this.list"
+          Definition="@Declared.Definition"
+          Load="@LoadAsync"
+          RowKey="@RowKey"
+          RowLabel="@RowLabel"
+          Label="@Label"
+          RowState="@(RowStateOf is null ? null : StripOf)"
+          Columns="@Columns"
+          OnOpen="@OnOpenRow"
+          Id="@Id"
+          ItemName="@ItemName"
+          ItemsName="@ItemsName"
+          SearchLabel="@SearchLabel"
+          EmptyTitle="@EmptyTitle"
+          EmptyText="@EmptyText"
+          EmptyIcon="@EmptyIcon"
+          BindAddress="@BindAddress"
+          AddressPrefix="@AddressPrefix" />
+
+@code {
+    private ListView<TItem>? list;
+
+    private int loadedFor;
+
+    private bool stale;
+
+    private bool opening;
+
+    private bool reloading;
+
+    private bool adding;
+
+    private string? chosen;
+
+    private void Choose(StateEntityDialogAddChoice choice, string? value)
+    {
+        this.chosen = string.IsNullOrEmpty(value) ? null : value;
+        choice.Chosen(this.chosen);
+    }
+
+    [Inject] private DialogService DialogService { get; set; } = null!;
+
+    private bool ShowsAdd =>
+        Declared is { Add: not null, AddLabel.Length: > 0 } view
+        && (view.Area is not { } area || Context.RowsAreaAccessOf(area).HasFlag(FieldAccessFlags.Editable))
+        && (view.CanAdd?.Invoke() ?? true);
+
+    private async Task AddAsync()
+    {
+        if (this.adding || Context.IsBusy || Declared.Add is not { } add)
+        {
+            return;
+        }
+
+        this.adding = true;
+        try
+        {
+            if (await add(DialogService, Context.ViewLifetime(View)) && this.list is not null && !Context.Lifetime.IsCancellationRequested
+                && !await Context.ReloadAsync() && !Context.Lifetime.IsCancellationRequested)
+            {
+                await this.list.ReloadAsync();
+            }
+        }
+        catch (Exception) when (Context.Lifetime.IsCancellationRequested)
+        {
+        }
+        finally
+        {
+            this.adding = false;
+        }
+    }
+
+    private ListRowState StripOf(TItem item) => ListRowState.Of(RowStateOf!(item));
+
+    private Func<TItem, Task>? OnOpenRow => OpenRow is null ? null : OpenAsync;
+
+    [CascadingParameter] public StateEntityDialogContext Context { get; set; } = null!;
+
+    [Parameter, EditorRequired] public string View { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired] public Func<TItem, Guid> RowKey { get; set; } = null!;
+
+    [Parameter, EditorRequired] public Func<TItem, string> RowLabel { get; set; } = null!;
+
+    [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
+
+    [Parameter] public Func<TItem, Task<StateEntityDialogResult>>? OpenRow { get; set; }
+
+    [Parameter] public Func<TItem, Enum>? RowStateOf { get; set; }
+
+    [Parameter] public RenderFragment? Columns { get; set; }
+
+    [Parameter] public string? Id { get; set; }
+
+    [Parameter] public string ItemName { get; set; } = "row";
+
+    [Parameter] public string ItemsName { get; set; } = "rows";
+
+    [Parameter] public string SearchLabel { get; set; } = "Search";
+
+    [Parameter] public string? EmptyTitle { get; set; }
+
+    [Parameter] public string? EmptyText { get; set; }
+
+    [Parameter] public string EmptyIcon { get; set; } = "inbox";
+
+    [Parameter] public bool? BindAddress { get; set; }
+
+    [Parameter] public string? AddressPrefix { get; set; }
+
+    private StateEntityDialogListView<TItem> Declared => (StateEntityDialogListView<TItem>)Context.ViewNamed(View)!;
+
+    protected override void OnInitialized()
+    {
+        if (Context?.ViewNamed(View) is not StateEntityDialogListView<TItem>)
+        {
+            throw new InvalidOperationException($"A {nameof(StateEntityDialogChildList<TItem>)} shows a list view its context declares; '{View}' is no list of {typeof(TItem).Name}.");
+        }
+
+        this.loadedFor = Context.Version;
+        Context.Changed += OnContextChanged;
+    }
+
+    private async Task<Result<ListPage<TItem>>> LoadAsync(ListQuery query)
+    {
+        var view = Declared;
+        var token = Context.ViewLifetime(View);
+        this.loadedFor = Context.Version;
+        this.stale = false;
+        try
+        {
+            return await view.Load(query, token);
+        }
+        catch (Exception exception) when (token.IsCancellationRequested)
+        {
+            this.stale = true;
+            throw exception as OperationCanceledException ?? new OperationCanceledException(token);
+        }
+    }
+
+    private void OnContextChanged() => _ = InvokeAsync(async () =>
+    {
+        if (this.opening || this.list is null)
+        {
+            return;
+        }
+
+        if (Context.Version != this.loadedFor)
+        {
+            this.stale = true;
+        }
+
+        if (this.stale && !this.reloading && Context.ActiveViewKey == View && !Context.Lifetime.IsCancellationRequested)
+        {
+            this.reloading = true;
+            try
+            {
+                await this.list.ReloadAsync();
+            }
+            finally
+            {
+                this.reloading = false;
+            }
+        }
+    });
+
+    private async Task OpenAsync(TItem item)
+    {
+        this.opening = true;
+        try
+        {
+            var result = await OpenRow!(item);
+
+            if (Context.Lifetime.IsCancellationRequested)
+            {
+                return;
+            }
+
+            var reloaded = (result.Changed || result.Deleted) && await Context.ReloadAsync();            if (!reloaded && !Context.Lifetime.IsCancellationRequested)
+            {
+                await Context.RefreshConversationsAsync();
+            }
+        }
+        finally
+        {
+            this.opening = false;
+        }
+    }
+
+    public void Dispose() => Context.Changed -= OnContextChanged;
+}

@@ -1,0 +1,120 @@
+.state-entity-dialog-side {
+    --state-entity-side-tint: color-mix(in srgb, var(--dialog-state-color, var(--color-accent)) 18%, var(--color-surface));
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    padding: var(--space-3) var(--space-3) var(--space-4);
+    background: var(--state-entity-side-tint);
+}
+
+.state-entity-dialog-side ::deep .comment-bubbles {
+    --comment-other-bg: var(--color-surface);
+    --comment-own-bg: color-mix(in srgb, var(--dialog-state-color, var(--color-accent)) 30%, var(--color-surface));
+}
+
+.state-entity-dialog-side__panel {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: var(--space-2);
+    min-height: 0;
+    padding-top: var(--space-3);
+}
+
+.state-entity-dialog-side__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-1) var(--space-2);
+    min-height: 2rem;
+    padding: 0 0.15rem 0.35rem;
+    border-bottom: 1px solid color-mix(in srgb, var(--dialog-state-color, var(--color-accent)) 38%, transparent);
+}
+
+.state-entity-dialog-side__head ::deep .state-entity-dialog-side__head-icon {
+    flex: none;
+    color: var(--dialog-state-text, var(--color-accent));
+    font-size: 20px;
+    line-height: 1;
+}
+
+.state-entity-dialog-side__count {
+    flex: none;
+    min-width: 1.15rem;
+    height: 1.15rem;
+    padding: 0 0.3rem;
+    border-radius: var(--radius-full);
+    background: var(--dialog-pill-fill, var(--color-accent-strong));
+    color: var(--dialog-pill-text, var(--color-on-accent));
+    font-size: var(--font-size-2xs);
+    font-weight: var(--font-weight-bold);
+    line-height: 1.15rem;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+
+.state-entity-dialog-side__title {
+    color: var(--color-text);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+}
+
+.state-entity-dialog-side__flag {
+    padding: 0 var(--space-2);
+    border: 1px solid var(--color-warning-border);
+    border-radius: var(--radius-full);
+    background: var(--color-warning-soft);
+    color: var(--color-warning-strong);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-semibold);
+    line-height: 1.5rem;
+}
+
+.state-entity-dialog-side__audience {
+    margin: 0;
+    color: color-mix(in srgb, var(--dialog-state-color, var(--color-accent)) 45%, var(--color-text));
+    font-size: var(--font-size-xs);
+    line-height: 1.35;
+}
+
+.state-entity-dialog-side__closed {
+    display: flex;
+    flex: none;
+    align-items: flex-start;
+    gap: var(--space-2);
+    margin: var(--space-2) 0 0;
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+    line-height: 1.4;
+}
+
+::deep .state-entity-dialog-side__closed-icon {
+    flex: none;
+    font-size: 1.1rem;
+    color: inherit;
+}
+
+.state-entity-dialog-side__panel ::deep .comment-bubbles {
+    flex: 1 1 auto;
+}
+
+.state-entity-dialog-side__panel ::deep .comment-bubbles__scroller {
+    flex: 1 1 auto;
+    min-height: 8rem;
+    max-height: none;
+}
+
+.state-entity-dialog-side__panel ::deep .comment-bubbles__composer {
+    margin-top: auto;
+}
+
+@media (max-width: 768px) {
+    .state-entity-dialog-side__panel ::deep .comment-bubbles__scroller {
+        max-height: 50vh;
+    }
+}

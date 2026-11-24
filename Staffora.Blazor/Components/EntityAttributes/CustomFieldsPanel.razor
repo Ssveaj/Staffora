@@ -1,0 +1,106 @@
+@using Staffora.Core.Entities.EntityAttributes
+@using Staffora.Blazor.Components.Common.Dialogs
+
+@inject CustomFieldService AttributeService
+@inject DialogService DialogService
+@inject IRuntimeExecutionContext Runtime
+
+<div class="custom-fields-panel">
+    <ListView @ref="this.list"
+              TItem="CustomFieldRow"
+              Id="@(AddressPrefix is null ? "custom-fields" : null)"
+              Label="Custom fields"
+              ItemName="field"
+              ItemsName="fields"
+              AddressPrefix="@AddressPrefix"
+              Definition="@ListDefinitionShown"
+              Load="Load"
+              RowKey="field => field.Id"
+              RowLabel="field => field.Name"
+              RowState="StateOf"
+              StateTitle="@(this.platform ? "State" : "Scope")"
+              OnOpen="OpenAsync"
+              SearchPlaceholder="Field name"
+              EmptyIcon="tune"
+              EmptyText="@EmptyText">
+        <Columns>
+            <ListColumn TItem="CustomFieldRow" Title="Name" Primary="true">
+                @context.Name
+            </ListColumn>
+            @if (EveryTenant)
+            {
+                <ListColumn TItem="CustomFieldRow" Title="Tenant" HiddenWhenGroupedBy="@CustomFieldList.ByTenant">
+                    @(context.TenantName ?? "Global")
+                </ListColumn>
+            }
+            else if (this.platform)
+            {
+                <ListColumn TItem="CustomFieldRow" Title="Scope">
+                    @(context.IsGlobal ? "Global" : "Own")
+                </ListColumn>
+            }
+            <ListColumn TItem="CustomFieldRow" Title="Type">
+                @AttributeValueRules.TypeLabel(context.ValueType)
+            </ListColumn>
+            <ListColumn TItem="CustomFieldRow" Title="Applies to" HiddenWhenGroupedBy="@CustomFieldList.ByEntity">
+                @CustomFieldTargets.Label(context.Target)
+            </ListColumn>
+        </Columns>
+    </ListView>
+</div>
+
+@code {
+    [Parameter] public string? AddressPrefix { get; set; }
+
+    [Parameter] public Guid? TenantId { get; set; }
+
+    private ListView<CustomFieldRow>? list;
+    private bool platform;
+
+    private bool EveryTenant => this.platform && TenantId is null;
+
+    private ListDefinition ListDefinitionShown => TenantId is not null ? CustomFieldList.ConsoleDefinition : CustomFieldList.For(this.platform);
+
+    private string EmptyText => TenantId is not null ? "The tenant has no custom fields and there are no global ones." : "No custom fields have been added yet.";
+
+    private Task<Result<ListPage<CustomFieldRow>>> Load(ListQuery query) =>
+        TenantId is { } tenantId ? AttributeService.QueryTenantDefinitionsAsync(tenantId, query) : AttributeService.QueryDefinitionsAsync(query);
+
+    protected override void OnInitialized() => this.platform = Runtime.HasPlatformReach();
+
+    private ListRowState StateOf(CustomFieldRow field) =>
+        this.platform
+            ? field.State switch
+            {
+                CustomFieldState.Active => new ListRowState("Active", UiTone.Success),
+                CustomFieldState.Inactive => new ListRowState("Inactive", UiTone.Neutral),
+                _ => new ListRowState("Draft", UiTone.Info),
+            }
+            : field.IsGlobal ? new ListRowState("Global", UiTone.Neutral) : new ListRowState("Own", UiTone.Info);
+
+    public async Task CreateAsync()
+    {
+        if (await ChooseCustomFieldTargetDialog.OpenAsync(DialogService) is not { } target)
+        {
+            return;
+        }
+
+        var result = target switch
+        {
+            CustomFieldTarget.OrganizationUnit => await UnitFieldDialog.OpenCreateAsync(DialogService, AttributeService),
+            CustomFieldTarget.Job => await JobFieldDialog.OpenCreateAsync(DialogService, AttributeService),
+            _ => await UserFieldDialog.OpenCreateAsync(DialogService, AttributeService),
+        };
+        if (result.Changed && this.list is not null)
+        {
+            await this.list.ReloadAsync();
+        }
+    }
+
+    private Task OpenAsync(CustomFieldRow field) => field.Target switch
+    {
+        CustomFieldTarget.OrganizationUnit => UnitFieldDialog.OpenAsync(DialogService, AttributeService, field.Id),
+        CustomFieldTarget.Job => JobFieldDialog.OpenAsync(DialogService, AttributeService, field.Id),
+        _ => UserFieldDialog.OpenAsync(DialogService, AttributeService, field.Id),
+    };
+}

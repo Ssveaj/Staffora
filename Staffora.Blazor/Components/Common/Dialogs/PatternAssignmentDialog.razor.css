@@ -1,0 +1,25 @@
+.pattern-assignment-dialog {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+
+.pattern-assignment-dialog__staff,
+.pattern-assignment-dialog__help {
+    margin: 0;
+}
+
+.pattern-assignment-dialog__help {
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+}
+
+.pattern-assignment-dialog__note {
+    margin: 0;
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--color-warning-border);
+    border-radius: var(--radius-md);
+    background: var(--color-warning-soft);
+    color: var(--color-warning-strong);
+}
+

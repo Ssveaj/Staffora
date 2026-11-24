@@ -1,0 +1,66 @@
+{
+  "id": "platform-owner-sets-up-custom-fields",
+  "title": "The platform owner sets up a company's custom fields",
+  "goal": "The platform owner adds a choice field for Company A's users from the platform settings, as a draft, and activates it; the company's administrator sees the company's fields read-only, sets the new field on a person, and finds the choice kept after a reload; the company's other fields show in the person's and a unit's dialogs.",
+  "actors": [
+    {
+      "id": "platform-owner",
+      "description": "Operates the platform, sets up every custom field, and acts inside a tenant only by impersonating one of its users."
+    },
+    {
+      "id": "tenant-administrator",
+      "description": "Holds every permission of Company A, as the platform owner sees and acts while impersonating them."
+    }
+  ],
+  "preconditions": [
+    "The end-to-end database was prepared in this run: Company A with Sam Taylor and Alex Morgan, its active custom fields for users (Team, Badge number, Has keys), units (Opened, Rooms, Floor area) and jobs (Room, Budget code) set up by the platform owner, and the active global user field Employee number."
+  ],
+  "steps": [
+    {
+      "id": "create-choice-field",
+      "actor": "platform-owner",
+      "intent": "Add a choice field with three options for Company A's users on the platform settings",
+      "outcome": "The new field is saved as a draft, which no tenant sees, and shows on the platform settings under Company A, with its options."
+    },
+    {
+      "id": "activate-choice-field",
+      "actor": "platform-owner",
+      "intent": "Activate the new field",
+      "outcome": "The field is in use: Company A's records carry it."
+    },
+    {
+      "id": "impersonate-administrator",
+      "actor": "platform-owner",
+      "intent": "Impersonate Company A's administrator",
+      "outcome": "The platform owner sees Company A as its administrator does."
+    },
+    {
+      "id": "see-custom-fields",
+      "actor": "tenant-administrator",
+      "intent": "Open the Custom fields panel of the settings",
+      "outcome": "The panel lists the company's fields, the new one among them, beside the global field, every one read-only and none to add."
+    },
+    {
+      "id": "set-choice-on-user",
+      "actor": "tenant-administrator",
+      "intent": "Choose an option of the new field for Sam Taylor and save",
+      "outcome": "The person's dialog shows the new field among the company's fields, and saving keeps the choice."
+    },
+    {
+      "id": "reload-keeps-choice",
+      "actor": "tenant-administrator",
+      "intent": "Reload the user list and open Sam Taylor again",
+      "outcome": "The person's dialog shows the option chosen before the reload."
+    },
+    {
+      "id": "see-unit-fields",
+      "actor": "tenant-administrator",
+      "intent": "Open the head office",
+      "outcome": "The unit's dialog shows the company's unit fields: a date, a whole number and a number."
+    }
+  ],
+  "completion": [
+    "The new choice field is Company A's and holds Sam Taylor's choice by its option, kept through a reload.",
+    "The tenant reads every active field and changes none; no field is deleted."
+  ]
+}

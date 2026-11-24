@@ -1,0 +1,49 @@
+{
+  "id": "platform-owner-sign-in",
+  "title": "The platform owner signs in",
+  "goal": "The platform owner reaches the platform console with the credentials the preparation issued for this run.",
+  "actors": [
+    {
+      "id": "platform-owner",
+      "description": "Operates the platform and has oversight of every tenant."
+    }
+  ],
+  "preconditions": [
+    "The end-to-end database was prepared in this run, with the platform owner's persona and a fresh password."
+  ],
+  "steps": [
+    {
+      "id": "sign-in",
+      "actor": "platform-owner",
+      "intent": "Sign in with the issued email and password",
+      "outcome": "The platform owner is signed in as themselves."
+    },
+    {
+      "id": "open-console",
+      "actor": "platform-owner",
+      "intent": "Open the platform console",
+      "outcome": "The console shows the platform overview."
+    },
+    {
+      "id": "filter-survives-reload",
+      "actor": "platform-owner",
+      "intent": "Filter the error log, then reload the page",
+      "outcome": "The error log shows only the errors the filters match, and opens again with the same filters and errors, read from its address."
+    },
+    {
+      "id": "link-to-other-filters",
+      "actor": "platform-owner",
+      "intent": "Follow a link to the error log with other filters while it is open",
+      "outcome": "The error log shows what the link names, not the filters it had."
+    },
+    {
+      "id": "dialog-in-address",
+      "actor": "platform-owner",
+      "intent": "Open a tenant's details from its console, then close them",
+      "outcome": "The address names the open tenant while its details are open and drops it once they are closed."
+    }
+  ],
+  "completion": [
+    "The platform owner is on the platform console, signed in, not impersonating anyone, and the console's filters and open dialog live in its address."
+  ]
+}

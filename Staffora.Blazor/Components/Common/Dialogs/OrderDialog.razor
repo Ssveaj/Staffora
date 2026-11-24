@@ -1,0 +1,107 @@
+@using Staffora.Blazor.Components.Common.Dialogs.StateEntity
+@using Staffora.Blazor.Components.Common.WorkflowFields
+@using Staffora.Core.Entities.Jobs
+@using Staffora.Core.Jobs
+@using Staffora.Core.Entities.Portal
+@using Staffora.Core.Workflow.WorkflowAttributes
+@using Staffora.Services.Portal
+@implements IStateEntityDialog<OrderDialogContext>
+
+<div class="order-dialog">
+    <dl class="order-dialog__facts">
+        <div class="order-dialog__fact">
+            <dt><span class="material-symbol order-dialog__icon" aria-hidden="true">handshake</span>Goes to</dt>
+            <dd data-order-supplier>@(Context.Supplier ?? "No staffing company in use")</dd>
+        </div>
+        <div class="order-dialog__fact">
+            <dt><span class="material-symbol order-dialog__icon" aria-hidden="true">person</span>Written by</dt>
+            <dd data-order-orderer>@Context.Orderer</dd>
+        </div>
+    </dl>
+    <StateFieldTextBox @bind-Value="Context.Entity!.Name" Label="Job" MaxLength="@Order.NameMaxLength" Name="order-name" />
+    <StateFieldTextArea @bind-Value="Context.Entity!.Description" Label="Description" MaxLength="@Order.DescriptionMaxLength" Rows="3" Name="order-description" />
+    <StateFieldTextBox @bind-Value="Context.Entity!.PlaceName" Label="Place" MaxLength="@Job.PlaceNameMaxLength" Name="order-place-name" />
+    <StateFieldTextBox @bind-Value="Context.Entity!.StreetAddress" Label="Street address" MaxLength="@Job.StreetAddressMaxLength" Name="order-street" />
+    <div class="field-row">
+        <StateFieldTextBox @bind-Value="Context.Entity!.PostalCode" Label="Postal code" MaxLength="@Job.PostalCodeMaxLength" Name="order-postal-code" />
+        <StateFieldTextBox @bind-Value="Context.Entity!.City" Label="City" MaxLength="@Job.CityMaxLength" Name="order-city" />
+    </div>
+    <StateFieldDropDown TValue="JobSchedule" TItem="ScheduleOption" @bind-Value="Context.Entity!.Schedule" @bind-Value:after="ScheduleChosen" Data="@ScheduleOptions"
+                        TextProperty="Label" ValueProperty="Value" Label="Schedule" Name="order-schedule" />
+    @if (Context.Entity!.Schedule == JobSchedule.Single)
+    {
+        <div class="field-row">
+            <StateFieldDatePicker TValue="DateOnly" @bind-Value="Context.Entity!.PeriodStart" @bind-Value:after="TimesEdited" Label="Day" Name="order-day" />
+            <StateFieldTime @bind-Value="Context.Entity!.StartTime" @bind-Value:after="TimesEdited" Label="Starts" Name="order-start-time" />
+            <StateFieldTime @bind-Value="Context.Entity!.EndTime" @bind-Value:after="TimesEdited" Label="Ends" Name="order-end-time"
+                            Helper="@(EndsNextDay ? "Ends the next day." : null)" />
+        </div>
+    }
+    else
+    {
+    <div class="field-row">
+        <StateFieldDatePicker TValue="DateOnly" @bind-Value="Context.Entity!.PeriodStart" Label="Period starts" Name="order-period-start" />
+        <StateFieldDatePicker TValue="DateOnly" @bind-Value="Context.Entity!.PeriodEnd" Label="Period ends" Name="order-period-end" />
+    </div>
+    }
+    <StateAreaFieldset Area="@OrderWorkflowAttribute.AreaLines" Legend="People">
+        <StateOrderLines Area="@OrderWorkflowAttribute.AreaLines" Values="@Context.Entity!.Lines" Options="@Context.OfferedServices" Name="order-line" />
+    </StateAreaFieldset>
+    <p class="order-dialog__help">
+        Describe what the job is and what its staff members should bring. Save the order as a draft, and send it once it is
+        complete: the staffing company receives it as a job and staffs it. A sent order is no longer changed.
+    </p>
+</div>
+
+@code {
+    private int? shownVersion;
+
+    [Parameter, EditorRequired] public OrderDialogContext Context { get; set; } = null!;
+
+    protected override void OnParametersSet()
+    {
+        if (this.shownVersion != Context.Version)
+        {
+            this.shownVersion = Context.Version;
+            Context.DisplayName = string.IsNullOrWhiteSpace(Context.Entity!.Name) ? null : Context.Entity.Name;
+        }
+    }
+
+    private static readonly IReadOnlyList<ScheduleOption> ScheduleOptions = [new(JobSchedule.Single, "Single"), new(JobSchedule.Recurring, "Every week")];
+
+    private bool EndsNextDay => Context.Entity is { Schedule: JobSchedule.Single, StartTime: { } start, EndTime: { } end } && end <= start;
+
+    private void ScheduleChosen()
+    {
+        var order = Context.Entity!;
+        if (order.Schedule == JobSchedule.Single)
+        {
+            order.PeriodEnd = order.PeriodStart;
+            JobRules.Normalize(order);
+        }
+        else
+        {
+            (order.StartTime, order.EndTime) = (null, null);
+            order.PeriodEnd = order.PeriodStart.AddMonths(3);
+        }
+
+        Context.NotifyEdited();
+    }
+
+    private void TimesEdited()
+    {
+        JobRules.Normalize(Context.Entity!);
+        Context.NotifyEdited();
+    }
+
+    private sealed record ScheduleOption(JobSchedule Value, string Label);
+
+    internal static OrderDialogContext ContextFor(OrderService service, Guid? requestId) =>
+        new(service, requestId) { DefaultTitle = "Order", CreateTitle = "New order", EntityIcon = "post_add" };
+
+    public static Task<StateEntityDialogResult> OpenAsync(DialogService dialogService, OrderService service, Guid requestId, StateEntityDialogOptions? options = null) =>
+        dialogService.OpenStateEntityDialogAsync<OrderDialog, OrderDialogContext>(ContextFor(service, requestId), options);
+
+    public static Task<StateEntityDialogResult> OpenCreateAsync(DialogService dialogService, OrderService service) =>
+        dialogService.OpenStateEntityDialogAsync<OrderDialog, OrderDialogContext>(ContextFor(service, null));
+}

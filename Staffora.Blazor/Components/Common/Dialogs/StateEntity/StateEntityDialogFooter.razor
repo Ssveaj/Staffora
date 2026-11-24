@@ -1,0 +1,253 @@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+<div class="state-entity-dialog-footer" @ref="this.footer">
+    @foreach (var error in new[] { this.stepError, this.askError }.OfType<string>())
+    {
+        <div class="state-entity-dialog-footer__error" role="alert">
+            <MaterialSymbol Name="error" />
+            <span>@error</span>
+        </div>
+    }
+    @if (this.notice is not null)
+    {
+        <div class="state-entity-dialog-footer__notice" role="alert">
+            <MaterialSymbol Name="info" />
+            <span>@this.notice</span>
+        </div>
+    }
+    <div class="state-entity-dialog-footer__status visually-hidden" role="status" aria-live="polite">@this.status</div>
+    @{
+        var judged = Context.JudgedOffers(this.answers);
+        var offers = judged.Where(offer => offer.CanRun || offer.Transition.ShowWhenBlocked || offer.WaitsForSave).ToList();
+
+        var locks = Context.LocksUntilEdit;
+        var mayEdit = locks && !Context.Editing && !Context.RecordLocked
+            && judged.Any(offer => Context.IsEditStep(offer.Transition) && (offer.CanRun || offer.Transition.ShowWhenBlocked));
+        if (locks)
+        {
+            offers = [.. offers.Where(offer => Context.IsEditStep(offer.Transition) == Context.Editing)];
+        }
+    }
+    <div class="state-entity-dialog-footer__bar" role="group" aria-label="Steps" aria-busy="@(this.asking ? "true" : "false")" inert="@Context.IsHeldByMove">
+        <div class="state-entity-dialog-footer__leading">
+            @foreach (var offer in offers.Where(offer => offer.Transition.Placement == TransitionPlacement.Leading))
+            {
+                <TransitionButton @key="offer.Transition.Key" Context="@Context" Offer="@offer" Disabled="@Disabled" OnStarted="@StepStarted" OnRefused="@StepRefused" OnSucceeded="@StepSucceeded" />
+            }
+        </div>
+        @if (Context.FooterActions is { } actions)
+        {
+            <div class="state-entity-dialog-footer__actions">@actions</div>
+        }
+        <div class="state-entity-dialog-footer__trailing">
+            @if (locks && Context.Editing)
+            {
+                <div class="transition-button transition-button--own">
+                    <IconTextButton Text="Cancel" Icon="close" ButtonStyle="ButtonStyle.Light" Variant="Variant.Flat" Size="ButtonSize.Medium"
+                                    aria-disabled="@(Disabled ? "true" : null)" data-dialog-action="cancel" class="transition-button__button" Click="@CancelEditAsync" />
+                </div>
+            }
+            @foreach (var offer in offers.Where(offer => offer.Transition.Placement != TransitionPlacement.Leading))
+            {
+                <TransitionButton @key="offer.Transition.Key" Context="@Context" Offer="@offer" Disabled="@Disabled" OnStarted="@StepStarted" OnRefused="@StepRefused" OnSucceeded="@StepSucceeded" />
+            }
+            @if (mayEdit)
+            {
+                <div class="transition-button transition-button--own">
+                    <IconTextButton Text="Edit" Icon="edit" ButtonStyle="ButtonStyle.Light" Variant="Variant.Flat" Size="ButtonSize.Medium"
+                                    aria-disabled="@(Disabled ? "true" : null)" data-dialog-action="edit" class="transition-button__button" Click="@EditAsync" />
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private ElementReference footer;
+    private IJSObjectReference? module;
+    private IReadOnlyList<TransitionOffer> answers = [];
+    private (Guid? EntityId, int Version)? askedFor;
+    private int refreshToken;
+    private string? stepError;
+    private string? askError;
+    private string? status;
+    private string? notice;
+    private string? focusAfterStep;
+    private string? lastStep;
+    private bool asking;
+
+    [Parameter, EditorRequired] public StateEntityDialogContext Context { get; set; } = null!;
+
+    private bool Disabled => Context.IsBusy || Context.FooterDisabled;
+
+    protected override void OnInitialized()
+    {
+        Context.Changed += OnContextChanged;
+        Context.Edited += OnEdited;
+        Context.StatusReported += OnStatusReported;
+        Context.LeaveStepStarted += OnLeaveStepStarted;
+        Context.LeaveStepEnded += OnLeaveStepEnded;
+    }
+
+    protected override Task OnParametersSetAsync() => AskWhenTheVersionChangedAsync();
+
+    private void OnContextChanged() => _ = InvokeAsync(AskWhenTheVersionChangedAsync);
+
+    private void OnEdited() => _ = InvokeAsync(StateHasChanged);
+
+    private void OnLeaveStepStarted(ITransition transition) => _ = InvokeAsync(() =>
+    {
+        StepStarted(transition);
+        StateHasChanged();
+    });
+
+    private void OnLeaveStepEnded(ITransition transition, TransitionAttempt attempt) => _ = InvokeAsync(() =>
+    {
+        if (attempt.Error is { } error)
+        {
+            this.stepError = error;
+        }
+        else if (attempt.Ran)
+        {
+            this.status = $"{Context.LabelOf(transition)}: done.";
+            this.notice = Context.TakeOneTimeMessage();
+        }
+
+        StateHasChanged();
+    });
+
+    private void OnStatusReported(string status) => _ = InvokeAsync(() =>
+    {
+        this.status = status;
+        StateHasChanged();
+    });
+
+    private async Task AskWhenTheVersionChangedAsync()
+    {
+        var version = (Context.EntityId, Context.Version);
+        if (Context.LoadState != StateEntityDialogLoadState.Loaded || this.askedFor == version)
+        {
+            return;
+        }
+
+        this.askedFor = version;
+        var token = ++this.refreshToken;
+        this.answers = [];
+        this.asking = true;
+        StateHasChanged();
+
+        Result<IReadOnlyList<TransitionOffer>> answer;
+        try
+        {
+            answer = await Context.GetTransitionOffersAsync();
+        }
+        catch (Exception) when (Context.Lifetime.IsCancellationRequested)
+        {
+            return;
+        }
+
+        if (token != this.refreshToken)
+        {
+            return;
+        }
+
+        this.asking = false;
+
+        if (answer.IsSuccess && answer.Value is not null)
+        {
+            this.answers = answer.Value;
+            this.askError = null;
+        }
+        else
+        {
+            this.answers = [];
+            this.askError = string.IsNullOrWhiteSpace(answer.Error) ? "The steps could not be read. Close the dialog and try again." : answer.Error;
+        }
+
+        StateHasChanged();
+    }
+
+    private Task EditAsync()
+    {
+        if (Disabled)
+        {
+            return Task.CompletedTask;
+        }
+
+        this.stepError = null;
+        this.focusAfterStep = this.answers.FirstOrDefault(offer => Context.IsEditStep(offer.Transition))?.Transition.Key;
+        Context.BeginEditing();
+        return Task.CompletedTask;
+    }
+
+    private async Task CancelEditAsync()
+    {
+        if (Disabled)
+        {
+            return;
+        }
+
+        this.stepError = null;
+        this.focusAfterStep = "edit";
+        await Context.CancelEditingAsync();
+    }
+
+    private void StepStarted(ITransition transition)
+    {
+        this.lastStep = transition.Key;
+        this.stepError = null;
+        this.status = null;
+        this.notice = null;
+    }
+
+    private void StepRefused(string message)
+    {
+        this.stepError = message;
+        this.focusAfterStep = this.lastStep;
+    }
+
+    private void StepSucceeded(ITransition transition)
+    {
+        this.status = $"{Context.LabelOf(transition)}: done.";
+        this.notice = Context.TakeOneTimeMessage();
+        this.focusAfterStep = transition.Key;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (this.focusAfterStep is not { } key || this.asking)
+        {
+            return;
+        }
+
+        this.focusAfterStep = null;
+        try
+        {
+            this.module ??= await JS.InvokeAsync<IJSObjectReference>("import", StateEntityDialogHeader.ModulePath);
+            await this.module.InvokeVoidAsync("restoreFocus", this.footer, key);
+        }
+        catch (Exception exception) when (exception is JSException or JSDisconnectedException or TaskCanceledException or ObjectDisposedException or InvalidOperationException)
+        {
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        Context.Changed -= OnContextChanged;
+        Context.Edited -= OnEdited;
+        Context.StatusReported -= OnStatusReported;
+        Context.LeaveStepStarted -= OnLeaveStepStarted;
+        Context.LeaveStepEnded -= OnLeaveStepEnded;
+        try
+        {
+            if (this.module is not null)
+            {
+                await this.module.DisposeAsync();
+            }
+        }
+        catch (Exception exception) when (exception is JSDisconnectedException or TaskCanceledException)
+        {
+        }
+    }
+}

@@ -1,0 +1,15 @@
+@inherits StateFieldBase<bool>
+
+@if (IsVisible && IsEditable)
+{
+    <div class="state-field-switch" data-field="@FieldName" data-access="editable">
+        <RadzenSwitch Name="@InputName" Value="@Value" ValueChanged="@((bool on) => SetAsync(on))" ValueExpression="@ValueExpression" />
+        <RadzenLabel Text="@Label" Component="@InputName" />
+    </div>
+}
+else if (IsVisible)
+{
+    <StateFieldFrame Label="@Label" Component="@InputName" Helper="@Helper" Field="@FieldName" IsReadOnly="true">
+        <RadzenTextBox Name="@InputName" Value="@(Value ? "Yes" : "No")" ReadOnly="true" />
+    </StateFieldFrame>
+}

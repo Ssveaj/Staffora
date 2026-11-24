@@ -1,0 +1,20 @@
+@inject DialogService DialogService
+
+<DialogNotice Message="@Message" Icon="@(Icon ?? (Destructive ? "warning" : "help"))" Tone="@(Destructive ? DialogTone.Danger : DialogTone.Info)">
+    <Buttons>
+        <RadzenButton Text="@CancelText" ButtonStyle="ButtonStyle.Light" Variant="Variant.Flat" Click="@(() => DialogService.Close(false))" />
+        <RadzenButton Text="@OkText" ButtonStyle="@(Destructive ? ButtonStyle.Danger : ButtonStyle.Primary)" class="dialog-confirm" Click="@(() => DialogService.Close(true))" />
+    </Buttons>
+</DialogNotice>
+
+@code {
+    [Parameter, EditorRequired] public string Message { get; set; } = string.Empty;
+
+    [Parameter] public string OkText { get; set; } = "Yes";
+
+    [Parameter] public string CancelText { get; set; } = "Cancel";
+
+    [Parameter] public string? Icon { get; set; }
+
+    [Parameter] public bool Destructive { get; set; }
+}

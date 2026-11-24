@@ -1,0 +1,178 @@
+@page "/Account/Login"
+@attribute [Microsoft.AspNetCore.Authorization.AllowAnonymous]
+@attribute [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting(Staffora.Blazor.Helper.RateLimitPolicies.SignIn)]
+
+@using Microsoft.AspNetCore.Authentication
+@using Microsoft.AspNetCore.Identity
+@using Staffora.Core.Entities.Identity
+@using Staffora.Services.Authorization
+
+@inject UserManager<ApplicationUser> UserManager
+@inject SignInManager<ApplicationUser> SignInManager
+@inject ILogger<Login> Logger
+@inject NavigationManager NavigationManager
+@inject IdentityRedirectManager RedirectManager
+
+<PageTitle>Sign in - Staffora</PageTitle>
+
+<div class="sign-in">
+    <section class="sign-in__panel" aria-label="About Staffora">
+        <img class="sign-in__art" src="@Assets["images/sign-in-art.svg"]" alt="" width="1200" height="1200" decoding="async" />
+        <div class="sign-in__glow" aria-hidden="true"></div>
+        <div class="sign-in__story">
+            <p class="sign-in__brand">
+                <span class="sign-in__mark"><MaterialSymbol Name="groups" /></span>
+                Staffora
+            </p>
+            <div class="sign-in__pitch">
+                <p class="sign-in__headline">Every job, the right people.</p>
+                <p class="sign-in__lede">Plan the work, reach the right staff and keep every customer in the loop.</p>
+                <ul class="sign-in__proofs">
+                    <li><span class="sign-in__proof-icon"><MaterialSymbol Name="event_note" /></span>Plan jobs and their staff</li>
+                    <li><span class="sign-in__proof-icon"><MaterialSymbol Name="touch_app" /></span>Staff answer in one tap</li>
+                    <li><span class="sign-in__proof-icon"><MaterialSymbol Name="storefront" /></span>Customers order through their portal</li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <div class="sign-in__floor">
+        <section class="sign-in-card" aria-labelledby="sign-in-title">
+            <header class="sign-in-card__header">
+                <h1 id="sign-in-title">Welcome back</h1>
+                <p>Sign in to Staffora</p>
+            </header>
+            <EditForm EditContext="this.editContext" method="post" OnSubmit="LoginUser" FormName="login" class="sign-in-card__form">
+                <div class="sign-in-card__field">
+                    <label for="Input.Email" class="sign-in-card__label">Email</label>
+                    <InputText @bind-Value="Input.Email" id="Input.Email" class="form-control sign-in-card__input" autocomplete="username" aria-required="true" placeholder="name@example.com" />
+                </div>
+                <div class="sign-in-card__field">
+                    <label for="Input.Password" class="sign-in-card__label">Password</label>
+                    <InputText type="password" @bind-Value="Input.Password" id="Input.Password" class="form-control sign-in-card__input" autocomplete="current-password" aria-required="true" />
+                </div>
+                <label class="sign-in-card__remember">
+                    <InputCheckbox @bind-Value="Input.RememberMe" class="form-check-input" />
+                    Remember me
+                </label>
+                <button type="submit" class="btn btn-primary sign-in-card__submit">Sign in</button>
+                @if (this.errorMessage is { } error)
+                {
+                    <p class="sign-in-card__error" role="alert">@error</p>
+                }
+            </EditForm>
+            <p class="sign-in-card__help">Forgot your password? Ask your organization's administrator for a new one.</p>
+        </section>
+    </div>
+</div>
+
+@code {
+    private string? errorMessage;
+    private EditContext editContext = default!;
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromForm]
+    private InputModel Input { get; set; } = default!;
+
+    [SupplyParameterFromQuery]
+    private string? ReturnUrl { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Input ??= new();
+
+        this.editContext = new EditContext(Input);
+
+        if (HttpMethods.IsGet(HttpContext.Request.Method))
+        {
+            await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
+        }
+    }
+
+    public async Task LoginUser()
+    {
+        if (string.IsNullOrWhiteSpace(Input.Email) || string.IsNullOrEmpty(Input.Password))
+        {
+            this.errorMessage = WrongCredentials;
+            return;
+        }
+
+        var result = await SignInManager.PasswordSignInAsync(Input.Email, Input.Password, Input.RememberMe, lockoutOnFailure: true);
+
+        if (result.Succeeded)
+        {
+            Logger.LogInformation("User logged in.");
+            var redirectUri = await GetPostLoginRedirectAsync();
+            RedirectManager.RedirectTo(redirectUri);
+        }
+        else if (result.IsLockedOut)
+        {
+            Logger.LogWarning("User account locked out.");
+            RedirectManager.RedirectTo("Account/Lockout");
+        }
+        else if (result.IsNotAllowed && SignInManager is ApplicationSignInManager manager && ApplicationSignInManager.MessageFor(manager.Refusal) is { } refusal)
+        {
+            Logger.LogInformation("Sign-in refused: {Refusal}.", manager.Refusal);
+            this.errorMessage = refusal;
+        }
+        else
+        {
+            this.errorMessage = WrongCredentials;
+        }
+    }
+
+    private const string WrongCredentials = "Wrong email or password. Please try again.";
+
+    private sealed class InputModel
+    {
+        public string Email { get; set; } = "";
+
+        public string Password { get; set; } = "";
+
+        public bool RememberMe { get; set; }
+    }
+
+    private async Task<string?> GetPostLoginRedirectAsync()
+    {
+        var user = (SignInManager as ApplicationSignInManager)?.SignedInUser;
+        if (user is null)
+        {
+            return ReturnUrl;
+        }
+
+        var roles = await UserManager.GetRolesAsync(user);
+        if (!roles.Contains(AppRoles.Admin, StringComparer.OrdinalIgnoreCase))
+        {
+            return ReturnUrl;
+        }
+
+        var normalizedReturnUrl = NormalizeReturnUrl(ReturnUrl);
+        if (string.IsNullOrEmpty(normalizedReturnUrl) || normalizedReturnUrl == "/")
+        {
+            return "/superadmin/overview";
+        }
+
+        return ReturnUrl;
+    }
+
+    private string NormalizeReturnUrl(string? returnUrl)
+    {
+        if (string.IsNullOrWhiteSpace(returnUrl))
+        {
+            return string.Empty;
+        }
+
+        var relativePath = Uri.IsWellFormedUriString(returnUrl, UriKind.Absolute)
+            ? NavigationManager.ToBaseRelativePath(returnUrl)
+            : returnUrl.TrimStart('/');
+
+        if (string.IsNullOrWhiteSpace(relativePath))
+        {
+            return "/";
+        }
+
+        return $"/{relativePath.TrimStart('/')}";
+    }
+}

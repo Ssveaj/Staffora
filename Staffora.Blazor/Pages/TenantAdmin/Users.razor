@@ -1,0 +1,114 @@
+@page "/tenant/management/users"
+@attribute [Authorize]
+@inject UserService UserService
+@inject DialogService DialogService
+@inject Staffora.Services.Settings.TenantClock TenantClock
+
+<PermissionView Permission="RolePermission.UsersView">
+    <Loading>
+        <PageScaffold>
+            <Main>
+                <LoadingState Text="Loading users…" />
+            </Main>
+        </PageScaffold>
+    </Loading>
+    <Authorized>
+        <PageScaffold>
+            <Header>
+                <PageHeader Title="Users"
+                            Count="@(this.count)"
+                            Description="Find the company's user accounts and open one to see it in full."
+                            Icon="people"
+                            RootText="Organization"
+                            RootPath="/tenant/management">
+                    <Actions>
+                        <PermissionView Permission="RolePermission.UsersCreate">
+                            <Authorized>
+                                <IconTextButton Text="New User"
+                                              Icon="person_add"
+                                              ButtonStyle="ButtonStyle.Primary"
+                                              Click="CreateUserAsync" />
+                            </Authorized>
+                        </PermissionView>
+                    </Actions>
+                </PageHeader>
+            </Header>
+            <Main>
+                <PageSection>
+                    <ListView @ref="this.list"
+                              TItem="UserListItemDto"
+                              TotalChanged="@(total => this.count = total)"
+                              Id="users"
+                              Label="Users"
+                              ItemName="user"
+                              ItemsName="users"
+                              Definition="UserList.Definition"
+                              Load="UserService.QueryUsersAsync"
+                              RowKey="user => user.Id"
+                              RowLabel="user => user.DisplayName"
+                              RowState="user => ListRowState.Of(user.State)"
+                              OnOpen="OpenUserAsync"
+                              QuickFilter="@UserList.Status"
+                              SearchPlaceholder="Name, email or user name"
+                              EmptyIcon="person_off"
+                              EmptyText="No users have been added yet.">
+                        <Columns>
+                            <ListColumn TItem="UserListItemDto" Title="Name" Primary="true" Avatar="true" Subtitle="user => user.Email">
+                                @context.DisplayName
+                            </ListColumn>
+                            <ListColumn TItem="UserListItemDto" Title="User name">
+                                @context.UserName
+                            </ListColumn>
+                            <ListColumn TItem="UserListItemDto" Title="Last signed in">
+                                @(context.LastSignedIn is { } signedIn ? Local(signedIn, "yyyy-MM-dd HH:mm") : "Never")
+                            </ListColumn>
+                            <ListColumn TItem="UserListItemDto" Title="Member since">
+                                @Local(context.Created, "yyyy-MM-dd")
+                            </ListColumn>
+                        </Columns>
+                    </ListView>
+                </PageSection>
+            </Main>
+        </PageScaffold>
+    </Authorized>
+    <NotAuthorized>
+        <PageScaffold>
+            <Header>
+                <PageHeader Title="Users" Icon="people" RootText="Organization" RootPath="/tenant/management" />
+            </Header>
+            <Main>
+                <PageSection>
+                    <EmptyState Icon="lock" Title="Access denied" Text="You do not have permission to view users." Tone="UiTone.Warning" Role="alert" />
+                </PageSection>
+            </Main>
+        </PageScaffold>
+    </NotAuthorized>
+</PermissionView>
+
+@code {
+    private ListView<UserListItemDto>? list;
+
+    private TimeZoneInfo zone = TimeZoneInfo.Utc;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var read = await TenantClock.GetTimeZoneAsync();
+        this.zone = read.IsSuccess && read.Value is not null ? read.Value : TimeZoneInfo.Utc;
+    }
+
+    private string Local(DateTime utc, string format) =>
+        Staffora.Services.Settings.TenantClock.ToLocal(utc, this.zone).ToString(format, System.Globalization.CultureInfo.InvariantCulture);
+
+    private int? count;
+
+    private async Task CreateUserAsync()
+    {
+        var result = await UserDialog.OpenCreateAsync(DialogService, UserService);
+        if (result.EntityId is not null && this.list is not null)
+        {
+            await this.list.ReloadAsync();
+        }
+    }
+
+    private Task OpenUserAsync(UserListItemDto user) => UserDialog.OpenAsync(DialogService, UserService, user.Id);
+}

@@ -1,0 +1,51 @@
+<section class="@CssClass" aria-labelledby="@this.headingId" @attributes="AdditionalAttributes">
+    <header class="home-sheet__head">
+        <div class="home-sheet__titles">
+            <h2 class="home-sheet__title" id="@this.headingId">@Title</h2>
+            @if (!string.IsNullOrWhiteSpace(Note))
+            {
+                <p class="home-sheet__note">@Note</p>
+            }
+        </div>
+        @if (!string.IsNullOrWhiteSpace(Href))
+        {
+            <a class="home-sheet__link" href="@Href">@LinkText <MaterialSymbol Name="arrow_forward" /></a>
+        }
+        @HeadAside
+    </header>
+    <div class="home-sheet__body">
+        @ChildContent
+    </div>
+</section>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = string.Empty;
+
+    [Parameter] public string? Note { get; set; }
+
+    [Parameter] public string? Href { get; set; }
+
+    [Parameter] public string LinkText { get; set; } = "Show all";
+
+    [Parameter] public RenderFragment? HeadAside { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    [Parameter] public bool Lifted { get; set; }
+
+    [Parameter] public bool Wide { get; set; }
+
+    [Parameter] public int Rise { get; set; } = 1;
+
+    [Parameter(CaptureUnmatchedValues = true)] public IReadOnlyDictionary<string, object>? AdditionalAttributes { get; set; }
+
+    private readonly string headingId = $"home-sheet-{Guid.NewGuid():N}";
+
+    private string CssClass => string.Join(' ', new[]
+    {
+        "home-sheet",
+        Lifted ? "home-sheet--lifted" : null,
+        Wide ? "home-sheet--wide" : null,
+        $"home-sheet-rise home-sheet-rise--{Math.Clamp(Rise, 1, 6)}",
+    }.Where(part => part is not null));
+}

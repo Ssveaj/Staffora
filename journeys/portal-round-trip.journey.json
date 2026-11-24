@@ -1,0 +1,55 @@
+{
+  "id": "portal-round-trip",
+  "title": "A customer's order goes through the portal and back",
+  "goal": "An orderer of a customer sends an order from the customer portal; the staffing company's coordinator staffs the job it became and confirms it; the orderer sees the order confirmed with the staff member's name; a second order is canceled from the portal while it waits, and the staffing company's job is canceled with it.",
+  "actors": [
+    {
+      "id": "orderer",
+      "description": "Riley Quinn, an orderer of Brightpath Learning, the customer whose portal Company A runs."
+    },
+    {
+      "id": "coordinator",
+      "description": "Casey Lind of Company A, who staffs the jobs customers send."
+    }
+  ],
+  "preconditions": [
+    "The end-to-end database was prepared in this run: Company A with the coordinator Casey Lind and the qualified staff member Jamie Fors, its active customer Brightpath Learning whose portal Company A enabled, the service Classroom assistant it offers in that portal, and that portal's customer administrator and orderer, all set up through the services."
+  ],
+  "steps": [
+    {
+      "id": "send-order",
+      "actor": "orderer",
+      "intent": "Write an order in the portal, ask for two people of a service the staffing company offers, and send it",
+      "outcome": "The order is sent, and the staffing company has a job waiting for coordination for the customer, with a slot for each person made from its service."
+    },
+    {
+      "id": "staff-order",
+      "actor": "coordinator",
+      "intent": "Complete the job that arrived with a weekly time, start staffing it and assign a qualified staff member to one of its two slots",
+      "outcome": "The job is being staffed and one of its slots is covered by the assigned staff member."
+    },
+    {
+      "id": "confirm-job",
+      "actor": "coordinator",
+      "intent": "Confirm the job",
+      "outcome": "The job is confirmed with its staff member."
+    },
+    {
+      "id": "customer-sees-staff",
+      "actor": "orderer",
+      "intent": "Look at the order in the portal",
+      "outcome": "The order reads confirmed and names the staff member, and nothing else of the staffing company."
+    },
+    {
+      "id": "cancel-second-order",
+      "actor": "orderer",
+      "intent": "Send a second order and cancel it from the portal while it waits",
+      "outcome": "The order reads \"Cancellation sent\"; the staffing company's job for it is canceled by the customer, the coordinator is told, and the order then reads canceled by us."
+    }
+  ],
+  "completion": [
+    "An order sent from the portal became a job the staffing company staffed and confirmed, and the portal shows its staff member.",
+    "An order canceled from the portal canceled its job in the staffing company, and both sides end canceled.",
+    "Every job the run made is canceled on its way out, so its staff member is free for the next run."
+  ]
+}

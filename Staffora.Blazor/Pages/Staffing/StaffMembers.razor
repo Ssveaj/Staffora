@@ -1,0 +1,133 @@
+@page "/staffing/staff"
+@attribute [Authorize]
+@inject ResourceService ResourceService
+@inject UserService UserService
+@inject RoleHoldingService RoleHoldingService
+@inject IRuntimeExecutionContext Runtime
+@inject DialogService DialogService
+
+<PermissionView Permission="RolePermission.ResourcesView">
+    <Loading>
+        <PageScaffold>
+            <Main>
+                <LoadingState Text="Loading staff members…" />
+            </Main>
+        </PageScaffold>
+    </Loading>
+    <Authorized>
+        <PageScaffold>
+            <Header>
+                <PageHeader Title="Staff"
+                            Count="@(this.count)"
+                            Description="The company's staff members: who can be staffed, and the units they work for."
+                            Icon="badge"
+                            RootText="Staffing">
+                    <Actions>
+                        <PermissionView Permission="RolePermission.RolesEdit">
+                            <Authorized>
+                                <IconTextButton Text="New staff member"
+                                                Icon="person_add"
+                                                ButtonStyle="ButtonStyle.Primary"
+                                                Click="NewStaffAsync" />
+                            </Authorized>
+                        </PermissionView>
+                    </Actions>
+                </PageHeader>
+            </Header>
+            <Main>
+                <PageSection>
+                    @if (this.notice is { } notice)
+                    {
+                        <RadzenAlert AlertStyle="AlertStyle.Info" Variant="Variant.Flat" Shade="Shade.Lighter" ShowIcon="true" AllowClose="false" role="status">@notice</RadzenAlert>
+                    }
+                    <ListView @ref="this.list"
+                              TItem="StaffListItem"
+                              TotalChanged="@(total => this.count = total)"
+                              Id="staff"
+                              Label="Staff"
+                              ItemName="staff"
+                              ItemsName="staff"
+                              Definition="StaffList.Definition"
+                              Load="LoadAsync"
+                              RowKey="staff => staff.ResourceId"
+                              RowLabel="staff => staff.Name"
+                              RowState="staff => ListRowState.Of(staff.State)"
+                              OnOpen="OpenStaffAsync"
+                              QuickFilter="@StaffList.Status"
+                              SearchPlaceholder="Name or email"
+                              EmptyIcon="badge"
+                              EmptyText="Nobody is a staff member yet. Give someone the Staff role on a unit to make them one.">
+                        <Columns>
+                            <ListColumn TItem="StaffListItem" Title="Name" Primary="true" Avatar="true" Subtitle="staff => staff.Email">
+                                @context.Name
+                            </ListColumn>
+                            <ListColumn TItem="StaffListItem" Title="Units">
+                                @(context.Units.Count == 0 ? "None" : string.Join(", ", context.Units))
+                            </ListColumn>
+                            <ListColumn TItem="StaffListItem" Title="Work pattern">
+                                @if (context.WorkPattern is { } cover)
+                                {
+                                    <span class="@(cover.EndsSoon ? "staff-pattern staff-pattern--ending" : "staff-pattern")" data-work-pattern="@(cover.Current ? "current" : "upcoming")">@cover.Label</span>
+                                }
+                                else
+                                {
+                                    <span class="staff-pattern staff-pattern--none" data-work-pattern="none">@StaffPatternCover.NoneLabel</span>
+                                }
+                            </ListColumn>
+                        </Columns>
+                    </ListView>
+                </PageSection>
+            </Main>
+        </PageScaffold>
+    </Authorized>
+    <NotAuthorized>
+        <PageScaffold>
+            <Header>
+                <PageHeader Title="Staff" Icon="badge" RootText="Staffing" />
+            </Header>
+            <Main>
+                <PageSection>
+                    <EmptyState Icon="lock" Title="Access denied" Text="You do not have permission to view staff members." Tone="UiTone.Warning" Role="alert" />
+                </PageSection>
+            </Main>
+        </PageScaffold>
+    </NotAuthorized>
+</PermissionView>
+
+@code {
+    private ListView<StaffListItem>? list;
+
+    private int? count;
+    private string? notice;
+
+    private Task<Result<ListPage<StaffListItem>>> LoadAsync(ListQuery query) => ResourceService.QueryStaffMembersAsync(query);
+
+    private Task OpenStaffAsync(StaffListItem staff) => UserDialog.OpenAsync(DialogService, UserService, staff.UserId);
+
+    private async Task NewStaffAsync()
+    {
+        this.notice = null;
+        if (Runtime.TenantId is not { } tenantId)
+        {
+            return;
+        }
+
+        var choices = await RoleHoldingService.GetRoleHoldingChoicesAsync(tenantId);
+        if (!choices.IsSuccess || choices.Value is not { } offered)
+        {
+            this.notice = choices.Error ?? "You cannot give roles here.";
+            return;
+        }
+
+        if (offered.ForNewStaff().Roles.Count == 0)
+        {
+            this.notice = "No role you may give makes its holders staff members. A role's \"Holders are staff members\" switch, on the Roles page, says which roles do.";
+            return;
+        }
+
+        if (await AddRoleHoldingDialog.OpenForNewStaffAsync(DialogService, tenantId, offered) && this.list is not null)
+        {
+            await this.list.ReloadAsync();
+        }
+    }
+}

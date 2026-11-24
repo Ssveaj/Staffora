@@ -1,0 +1,271 @@
+@using Microsoft.Extensions.Logging
+@using Staffora.Core
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+@inject ILogger<UnitTree> Log
+
+@if (Units.Count == 0)
+{
+    <p class="unit-tree__empty">No organization units yet.</p>
+}
+else
+{
+    <ul role="tree" aria-label="@Label" class="unit-tree" @ref="this.treeElement">
+        @RenderItems(this.roots, 1)
+    </ul>
+}
+
+@code {
+    public const string ModulePath = "./scripts/unit-tree.js";
+
+    [Parameter, EditorRequired] public IReadOnlyList<OrganizationUnitNode> Units { get; set; } = [];
+
+    [Parameter] public Guid? SelectedId { get; set; }
+
+    [Parameter] public EventCallback<OrganizationUnitNode> SelectedChanged { get; set; }
+
+    [Parameter] public string Label { get; set; } = "Organization units";
+
+    private readonly string idPrefix = $"unit-tree-{Guid.NewGuid():N}";
+    private readonly Dictionary<Guid, ElementReference> itemRefs = [];
+    private readonly HashSet<Guid> collapsed = [];
+
+    private ElementReference treeElement;
+    private IJSObjectReference? module;
+    private bool moduleAttached;
+    private List<OrganizationUnitNode> roots = [];
+    private ILookup<Guid, OrganizationUnitNode> childrenOf = Enumerable.Empty<OrganizationUnitNode>().ToLookup(unit => unit.Id);
+    private Dictionary<Guid, OrganizationUnitNode> byId = [];
+
+    private Dictionary<Guid, Guid?> shownParent = [];
+    private HashSet<Guid> unlinked = [];
+    private Guid? focusedId;
+    private bool focusPending;
+
+    protected override void OnParametersSet()
+    {
+        var outline = OrganizationUnitOutline.Of(Units);
+        this.byId = outline.ToDictionary(entry => entry.Unit.Id, entry => entry.Unit);
+        this.unlinked = outline.Where(entry => !entry.IsLinked).Select(entry => entry.Unit.Id).ToHashSet();
+        this.shownParent = outline.ToDictionary(
+            entry => entry.Unit.Id,
+            entry => entry.IsLinked && entry.Unit.ParentId is { } parent && this.byId.ContainsKey(parent) ? entry.Unit.ParentId : null);
+        this.childrenOf = outline
+            .Where(entry => this.shownParent[entry.Unit.Id] is not null)
+            .Select(entry => entry.Unit)
+            .ToLookup(unit => unit.ParentId!.Value);
+        this.roots = outline.Where(entry => this.shownParent[entry.Unit.Id] is null).Select(entry => entry.Unit).ToList();
+        if (this.unlinked.Count > 0)
+        {
+            Log.LogWarning("{Count} organization units do not reach the top of their tree through their parents (a cycle); they are listed on their own: {UnitIds}.", this.unlinked.Count, this.unlinked);
+        }
+
+        this.collapsed.IntersectWith(this.byId.Keys);
+        if (this.focusedId is { } focused && !this.byId.ContainsKey(focused))
+        {
+            this.focusedId = null;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!this.moduleAttached && Units.Count > 0)
+        {
+            this.moduleAttached = true;
+            try
+            {
+                this.module ??= await JS.InvokeAsync<IJSObjectReference>("import", ModulePath);
+                await this.module.InvokeVoidAsync("attach", this.treeElement);
+            }
+            catch (Exception exception) when (exception is JSDisconnectedException or TaskCanceledException or ObjectDisposedException)
+            {
+            }
+        }
+
+        if (this.focusPending && this.focusedId is { } id && this.itemRefs.TryGetValue(id, out var item))
+        {
+            this.focusPending = false;
+            try
+            {
+                await item.FocusAsync();
+            }
+            catch (Exception exception) when (exception is JSException or JSDisconnectedException or TaskCanceledException)
+            {
+            }
+        }
+    }
+
+    private Guid? TabStop =>
+        this.focusedId is { } focused && IsVisible(focused) ? focused
+        : SelectedId is { } selected && IsVisible(selected) ? selected
+        : this.roots.FirstOrDefault()?.Id;
+
+    private RenderFragment RenderItems(IReadOnlyList<OrganizationUnitNode> items, int level) => __builder =>
+    {
+        for (var index = 0; index < items.Count; index++)
+        {
+            var unit = items[index];
+            var children = this.childrenOf[unit.Id].ToList();
+            var hasChildren = children.Count > 0;
+            var expanded = hasChildren && !this.collapsed.Contains(unit.Id);
+            var selected = unit.Id == SelectedId;
+            var itemId = ItemId(unit.Id);
+            var groupId = $"{itemId}-group";
+            <li role="none" class="unit-tree__node">
+                <div role="treeitem"
+                     id="@itemId"
+                     class="unit-tree__item @(selected ? "unit-tree__item--selected" : null)"
+                     style="@($"--unit-tree-level: {level - 1}")"
+                     aria-level="@level"
+                     aria-setsize="@items.Count"
+                     aria-posinset="@(index + 1)"
+                     aria-expanded="@(hasChildren ? (expanded ? "true" : "false") : null)"
+                     aria-selected="@(selected ? "true" : "false")"
+                     aria-owns="@(expanded ? groupId : null)"
+                     tabindex="@(unit.Id == TabStop ? "0" : "-1")"
+                     data-unit-id="@unit.Id"
+                     @ref="this.itemRefs[unit.Id]"
+                     @onkeydown="args => OnKeyDownAsync(args, unit)"
+                     @onfocus="() => this.focusedId = unit.Id"
+                     @onclick="() => SelectAsync(unit)">
+                    @if (hasChildren)
+                    {
+                        <span class="unit-tree__toggle" aria-hidden="true" @onclick="() => Toggle(unit.Id)" @onclick:stopPropagation="true">
+                            <MaterialSymbol Name="@(expanded ? "expand_more" : "chevron_right")" />
+                        </span>
+                    }
+                    else
+                    {
+                        <span class="unit-tree__toggle unit-tree__toggle--leaf" aria-hidden="true"></span>
+                    }
+                    <MaterialSymbol Name="@unit.UnitType.GetIcon()" Class="unit-tree__icon" />
+                    <span class="unit-tree__label">@unit.Name</span>
+                    <span class="unit-tree__type">@EnumDisplayHelper.GetDisplayName(unit.UnitType)</span>
+                    @if (!unit.InUse)
+                    {
+                        <span class="unit-tree__flag">@OrganizationUnitOutline.MarkOf(unit.State).Trim()</span>
+                    }
+                    @if (this.unlinked.Contains(unit.Id))
+                    {
+                        <span class="unit-tree__flag">(not linked to the tree)</span>
+                    }
+                </div>
+                @if (expanded)
+                {
+                    <ul role="group" id="@groupId" class="unit-tree__group">
+                        @RenderItems(children, level + 1)
+                    </ul>
+                }
+            </li>
+        }
+    };
+
+    private string ItemId(Guid unitId) => $"{this.idPrefix}-{unitId:N}";
+
+    private List<OrganizationUnitNode> VisibleItems()
+    {
+        var visible = new List<OrganizationUnitNode>();
+        void Walk(IEnumerable<OrganizationUnitNode> level)
+        {
+            foreach (var unit in level)
+            {
+                visible.Add(unit);
+                if (!this.collapsed.Contains(unit.Id))
+                {
+                    Walk(this.childrenOf[unit.Id]);
+                }
+            }
+        }
+
+        Walk(this.roots);
+        return visible;
+    }
+
+    private bool IsVisible(Guid unitId)
+    {
+        var passed = new HashSet<Guid> { unitId };
+        for (var parent = this.shownParent.GetValueOrDefault(unitId); parent is { } id && passed.Add(id); parent = this.shownParent.GetValueOrDefault(id))
+        {
+            if (this.collapsed.Contains(id))
+            {
+                return false;
+            }
+        }
+
+        return this.byId.ContainsKey(unitId);
+    }
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs args, OrganizationUnitNode unit)
+    {
+        var visible = VisibleItems();
+        var index = visible.FindIndex(item => item.Id == unit.Id);
+        var hasChildren = this.childrenOf[unit.Id].Any();
+        switch (args.Key)
+        {
+            case "ArrowDown" when index >= 0 && index < visible.Count - 1:
+                MoveFocus(visible[index + 1].Id);
+                break;
+            case "ArrowUp" when index > 0:
+                MoveFocus(visible[index - 1].Id);
+                break;
+            case "Home" when visible.Count > 0:
+                MoveFocus(visible[0].Id);
+                break;
+            case "End" when visible.Count > 0:
+                MoveFocus(visible[^1].Id);
+                break;
+            case "ArrowRight" when hasChildren && this.collapsed.Contains(unit.Id):
+                this.collapsed.Remove(unit.Id);
+                break;
+            case "ArrowRight" when hasChildren:
+                MoveFocus(this.childrenOf[unit.Id].First().Id);
+                break;
+            case "ArrowLeft" when hasChildren && !this.collapsed.Contains(unit.Id):
+                this.collapsed.Add(unit.Id);
+                break;
+            case "ArrowLeft" when this.shownParent.GetValueOrDefault(unit.Id) is { } parent:
+                MoveFocus(parent);
+                break;
+            case "Enter" or " ":
+                await SelectAsync(unit);
+                break;
+        }
+    }
+
+    private void MoveFocus(Guid unitId)
+    {
+        this.focusedId = unitId;
+        this.focusPending = true;
+    }
+
+    private void Toggle(Guid unitId)
+    {
+        if (!this.collapsed.Remove(unitId))
+        {
+            this.collapsed.Add(unitId);
+        }
+
+        MoveFocus(unitId);
+    }
+
+    private async Task SelectAsync(OrganizationUnitNode unit)
+    {
+        this.focusedId = unit.Id;
+        this.focusPending = true;
+        await SelectedChanged.InvokeAsync(unit);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (this.module is not null)
+            {
+                await this.module.DisposeAsync();
+            }
+        }
+        catch (Exception exception) when (exception is JSDisconnectedException or ObjectDisposedException or TaskCanceledException)
+        {
+        }
+    }
+}

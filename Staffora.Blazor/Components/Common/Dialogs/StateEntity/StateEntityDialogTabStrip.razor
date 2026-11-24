@@ -1,0 +1,65 @@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+@{
+    var views = Context.OfferedViews;
+    var active = Context.ActiveViewKey;
+}
+<div class="state-entity-dialog-tabs" role="tablist" aria-label="Views" inert="@Context.IsHeldByMove" @ref="this.tablist">
+    @foreach (var view in views)
+    {
+        var selected = view.Key == active;
+        <button type="button"
+                role="tab"
+                id="@Context.ViewTabId(view.Key)"
+                class="@(selected ? "state-entity-dialog-tabs__tab state-entity-dialog-tabs__tab--selected" : "state-entity-dialog-tabs__tab")"
+                data-view="@view.Key"
+                aria-selected="@(selected ? "true" : "false")"
+                aria-controls="@Context.ViewPanelId(view.Key)"
+                aria-disabled="@(Context.IsBusy || Context.IsSettling ? "true" : null)"
+                tabindex="@(selected ? "0" : "-1")"
+                @onclick="@(() => SelectAsync(view.Key))">
+            <span class="state-entity-dialog-tabs__label">@view.Label</span>
+        </button>
+    }
+</div>
+
+@code {
+    private ElementReference tablist;
+    private IJSObjectReference? module;
+
+    [Parameter, EditorRequired] public StateEntityDialogContext Context { get; set; } = null!;
+
+    private Task SelectAsync(string key) => Context.SelectViewAsync(key);
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        try
+        {
+            this.module = await JS.InvokeAsync<IJSObjectReference>("import", StateEntityDialogHeader.ModulePath);
+            await this.module.InvokeVoidAsync("attachTabs", this.tablist);
+        }
+        catch (Exception exception) when (exception is JSException or JSDisconnectedException or TaskCanceledException or ObjectDisposedException or InvalidOperationException)
+        {
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (this.module is not null)
+            {
+                await this.module.DisposeAsync();
+            }
+        }
+        catch (Exception exception) when (exception is JSDisconnectedException or TaskCanceledException)
+        {
+        }
+    }
+}

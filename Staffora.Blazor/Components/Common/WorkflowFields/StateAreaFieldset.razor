@@ -1,0 +1,31 @@
+@using Staffora.Core.Workflow.FieldAccess
+
+@if (Access.HasFlag(FieldAccessFlags.Visible))
+{
+    <fieldset class="state-area-fieldset" data-area="@Area" data-access="@(Editable ? "editable" : "read-only")">
+        <legend class="state-area-fieldset__legend form-eyebrow">@Legend@if (!Editable)
+            {
+                <span class="state-area-fieldset__read-only"> (read-only)</span>
+            }</legend>
+        @ChildContent
+    </fieldset>
+}
+
+@code {
+    [CascadingParameter] public StateEntityDialogContext? DialogContext { get; set; }
+
+    [Parameter, EditorRequired] public string Area { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired] public string Legend { get; set; } = string.Empty;
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private FieldAccessFlags Access { get; set; }
+
+    private bool Editable => Access.HasFlag(FieldAccessFlags.Editable);
+
+    protected override void OnParametersSet()
+    {
+        Access = (DialogContext ?? throw new InvalidOperationException("StateAreaFieldset is part of a state-entity dialog's body; its layout cascades the dialog's context.")).AreaAccessOf(Area);
+    }
+}

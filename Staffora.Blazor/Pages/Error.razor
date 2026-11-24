@@ -1,0 +1,23 @@
+@page "/Error"
+@attribute [Microsoft.AspNetCore.Authorization.AllowAnonymous]
+@attribute [Staffora.Blazor.Layout.CustomerPortalPage]
+@attribute [ExcludeFromInteractiveRouting]
+@using Staffora.Services.Diagnostics
+
+<SystemPage Title="Something went wrong" Eyebrow="Error" Message="An error occurred while processing your request. Try again later." Icon="error" Tone="UiTone.Danger">
+    @if (ShowRequestId)
+    {
+        <p class="error-page__request">If it happens again, report this request ID: <code data-correlation-id>@RequestId</code></p>
+    }
+</SystemPage>
+
+@code{
+    [CascadingParameter]
+    private HttpContext? HttpContext { get; set; }
+
+    private string? RequestId { get; set; }
+    private bool ShowRequestId => !string.IsNullOrEmpty(RequestId);
+
+    protected override void OnInitialized() =>
+        RequestId = HttpContext?.Features.Get<LogScope>()?.CorrelationId ?? HttpContext?.TraceIdentifier;
+}

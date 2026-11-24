@@ -1,0 +1,140 @@
+@using Staffora.Core.Models
+@using Staffora.Core.Scheduling
+@using Staffora.Services.Scheduling
+@inject DialogService DialogService
+@inject PatternAssignmentService AssignmentService
+
+<FormDialogFrame OnSave="AssignAsync" SaveText="Assign" SaveIcon="group_add" SaveDisabled="@(!CanAssign)" IsBusy="@this.assigning">
+    @if (this.choices is null)
+    {
+        @if (string.IsNullOrEmpty(this.error))
+        {
+            <LoadingState Text="Loading staff members…" Inline="true" />
+        }
+    }
+    else if (!this.choices.Published)
+    {
+        <RadzenText TextStyle="TextStyle.Body2" class="text-muted" data-not-published>Only a published work pattern is given to staff members. Publish this one first.</RadzenText>
+    }
+    else if (this.choices.Staff.Count == 0)
+    {
+        <RadzenText TextStyle="TextStyle.Body2" class="text-muted" data-no-staff>There is no staff member to give a work pattern: every staff record is inactive, or there is none yet.</RadzenText>
+    }
+    else
+    {
+        <p class="assign-pattern__intro">
+            Each staff member chosen works by <strong>@this.choices.Pattern</strong> from the start date, at once: the assignments are
+            created and activated together, or none is if anyone cannot be given it. The cycle starts on the Monday of the start date's week.
+        </p>
+        <RadzenFormField Text="Staff members" Component="assign-pattern-staff" Style="width: 100%;">
+            <RadzenDropDown Name="assign-pattern-staff" InputAttributes="@FieldLabel.Of("Staff members")" TValue="IEnumerable<Guid>"
+                            @bind-Value="Chosen" Data="@this.choices.Staff" TextProperty="@nameof(PatternStaffChoice.Label)" ValueProperty="@nameof(PatternStaffChoice.ResourceId)"
+                            DisabledProperty="@nameof(PatternStaffChoice.HasThisPattern)"
+                            Multiple="true" Chips="true" AllowSelectAll="false" AllowClear="true"
+                            AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive" FilterOperator="StringFilterOperator.Contains"
+                            Placeholder="Search and choose staff members" Style="width: 100%;" />
+        </RadzenFormField>
+        <div class="assign-pattern__dates">
+            <RadzenFormField Text="From" Component="assign-pattern-from">
+                <RadzenDatePicker TValue="DateOnly?" Name="assign-pattern-from" @bind-Value="this.from" DateFormat="yyyy-MM-dd" AllowClear="false"
+                                  InputAttributes="@FieldLabel.Of("From")" PopupRenderMode="PopupRenderMode.OnDemand" />
+            </RadzenFormField>
+            <RadzenFormField Text="To (optional)" Component="assign-pattern-to">
+                <RadzenDatePicker TValue="DateOnly?" Name="assign-pattern-to" @bind-Value="this.to" DateFormat="yyyy-MM-dd" AllowClear="true"
+                                  InputAttributes="@FieldLabel.Of("To (optional)")" Placeholder="Until further notice" PopupRenderMode="PopupRenderMode.OnDemand" />
+            </RadzenFormField>
+        </div>
+        <p class="assign-pattern__count" data-chosen-count="@ChosenCount" role="status">@ChosenText</p>
+    }
+
+    @if (!string.IsNullOrEmpty(this.error))
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Danger" Variant="Variant.Flat" Shade="Shade.Lighter" ShowIcon="true" AllowClose="false" data-assign-error>
+            @if (this.refused is { Count: > 0 } refusals)
+            {
+                <p class="assign-pattern__refused-title">@PatternAssignmentService.NothingAssigned @(refusals.Count == 1 ? "This staff member cannot be given the pattern:" : $"These {refusals.Count} staff members cannot be given the pattern:")</p>
+                <ul class="assign-pattern__refused" aria-label="Staff members refused">
+                    @foreach (var refusal in refusals)
+                    {
+                        <li data-refused="@refusal.ResourceId"><strong>@refusal.Staff</strong>: @refusal.Reason</li>
+                    }
+                </ul>
+            }
+            else
+            {
+                @this.error
+            }
+        </RadzenAlert>
+    }
+</FormDialogFrame>
+
+@code {
+    private PatternStaffChoices? choices;
+    private IEnumerable<Guid> chosen = [];
+    private DateOnly? from;
+    private DateOnly? to;
+    private bool assigning;
+    private string? error;
+    private IReadOnlyList<PatternStaffRefusal>? refused;
+
+    [Parameter, EditorRequired] public Guid PatternId { get; set; }
+
+    private IEnumerable<Guid> Chosen
+    {
+        get => this.chosen;
+        set => this.chosen = [.. Holders.Union(value ?? [])];
+    }
+
+    private IEnumerable<Guid> Holders => this.choices?.Staff.Where(choice => choice.HasThisPattern).Select(choice => choice.ResourceId) ?? [];
+
+    private IReadOnlyList<Guid> NewlyChosen => [.. this.chosen.Except(Holders)];
+
+    private int ChosenCount => NewlyChosen.Count;
+
+    private string ChosenText => ChosenCount switch
+    {
+        0 => "No staff member chosen yet.",
+        1 => "1 staff member chosen.",
+        var count => $"{count} staff members chosen.",
+    };
+
+    private bool CanAssign => this.choices is { Published: true } && ChosenCount > 0 && this.from is not null && !this.assigning;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var read = await AssignmentService.GetStaffChoicesForPatternAsync(PatternId);
+        this.choices = read.IsSuccess ? read.Value : null;
+        this.from = read.Value?.Today;
+        this.chosen = [.. Holders];
+        this.error = read.IsSuccess ? null : read.Error ?? "The staff members could not be read.";
+    }
+
+    private async Task AssignAsync()
+    {
+        if (!CanAssign || this.from is not { } start)
+        {
+            return;
+        }
+
+        this.error = null;
+        this.refused = null;
+        this.assigning = true;
+        var given = await AssignmentService.AssignPatternToStaffAsync(PatternId, NewlyChosen, start, this.to);
+        this.assigning = false;
+        if (given.IsSuccess)
+        {
+            DialogService.Close(true);
+        }
+        else
+        {
+            this.error = given.Error ?? "The work pattern could not be assigned.";
+            this.refused = given.Value?.Refused;
+        }
+    }
+
+    public static Task<bool> OpenAsync(DialogService dialogService, Guid patternId, string? patternName) =>
+        dialogService.OpenFormDialogAsync<AssignPatternToStaffDialog>(
+            string.IsNullOrWhiteSpace(patternName) ? "Assign to staff" : $"Assign {patternName} to staff",
+            parameters => parameters.Set(dialog => dialog.PatternId, patternId),
+            new FormDialogOptions { Width = "560px" });
+}

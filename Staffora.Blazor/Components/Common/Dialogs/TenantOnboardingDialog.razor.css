@@ -1,0 +1,49 @@
+.tenant-onboarding__owner {
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    margin: 0;
+    padding: var(--space-3);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    min-width: 0;
+}
+
+.tenant-onboarding__legend {
+    font-weight: 600;
+    padding: 0 var(--space-1);
+}
+
+.tenant-onboarding__note {
+    margin: 0;
+    color: var(--color-text-muted);
+}
+
+.tenant-onboarding__pair {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: var(--space-3);
+}
+
+@media (min-width: 640px) {
+    .tenant-onboarding__pair {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
+.tenant-onboarding__done p {
+    margin: 0 0 var(--space-2);
+}
+
+.tenant-onboarding__password code {
+    font-size: 1.125rem;
+    user-select: all;
+    overflow-wrap: anywhere;
+}
+
+.tenant-onboarding__copied {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-top: var(--space-2);
+}

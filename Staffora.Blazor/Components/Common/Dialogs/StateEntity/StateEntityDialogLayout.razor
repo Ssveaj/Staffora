@@ -1,0 +1,97 @@
+@implements IDisposable
+
+<div class="state-entity-dialog"
+     data-state-entity-dialog="@BodyType.Name"
+     data-load-state="@Context.LoadState.ToString().ToLowerInvariant()"
+     style="@AccentStyle">
+    <StateEntityDialogHeader Context="@Context" />
+
+    @if (Context.LoadState == StateEntityDialogLoadState.Loaded && Context.HasViewTabs)
+    {
+        <StateEntityDialogTabStrip Context="@Context" />
+    }
+
+    <div class="@MainClass">
+    <div class="state-entity-dialog__body" inert="@Context.IsBusy" aria-busy="@(Context.IsBusy ? "true" : null)">
+        @switch (Context.LoadState)
+        {
+            case StateEntityDialogLoadState.Loading:
+                <LoadingState />
+                break;
+            case StateEntityDialogLoadState.CouldNotOpen:
+                <div class="state-entity-dialog__could-not-open">
+                    <EmptyState Icon="link_off" Title="This could not be opened" Text="@Context.CouldNotOpenReason" Tone="UiTone.Danger" Role="alert" />
+                </div>
+                break;
+            case StateEntityDialogLoadState.Loaded:
+                <CascadingValue Value="@Context" IsFixed="true">
+                    <CascadingValue Value="@EditContextForTheEntity()">
+                        <DynamicComponent Type="@BodyType" Parameters="@this.bodyParameters" />
+                    </CascadingValue>
+                </CascadingValue>
+                break;
+        }
+    </div>
+
+    <StateEntityDialogSide Context="@Context" />
+    </div>
+
+    @if (Context.LoadState == StateEntityDialogLoadState.Loaded)
+    {
+        <StateEntityDialogFooter Context="@Context" />
+    }
+</div>
+
+@code {
+    private Dictionary<string, object?> bodyParameters = null!;
+    private EditContext? editContext;
+
+    [Parameter, EditorRequired] public StateEntityDialogContext Context { get; set; } = null!;
+
+    [Parameter, EditorRequired] public Type BodyType { get; set; } = null!;
+
+    private string MainClass => Context.HasSideColumn ? "state-entity-dialog__main state-entity-dialog__main--with-side" : "state-entity-dialog__main";
+
+    private string? AccentStyle =>
+        Context.LoadState == StateEntityDialogLoadState.Loaded && Context.State is { } state
+            ? Staffora.Blazor.Helper.DialogStateColors.Style(state.GetStateColor())
+            : null;
+
+    protected override void OnInitialized()
+    {
+        this.bodyParameters = new() { [nameof(IStateEntityDialog<StateEntityDialogContext>.Context)] = Context };
+        Context.Changed += OnContextChanged;
+    }
+
+    protected override Task OnInitializedAsync() => Context.EnsureLoadedAsync();
+
+    private EditContext EditContextForTheEntity()
+    {
+        var entity = Context.EntityObject!;
+        if (!ReferenceEquals(this.editContext?.Model, entity))
+        {
+            if (this.editContext is not null)
+            {
+                this.editContext.OnFieldChanged -= OnFieldChanged;
+            }
+
+            this.editContext = new EditContext(entity);
+            this.editContext.OnFieldChanged += OnFieldChanged;
+        }
+
+        return this.editContext;
+    }
+
+    private void OnFieldChanged(object? sender, FieldChangedEventArgs e) => Context.NotifyEdited();
+
+    private void OnContextChanged() => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        Context.Changed -= OnContextChanged;
+        if (this.editContext is not null)
+        {
+            this.editContext.OnFieldChanged -= OnFieldChanged;
+        }
+    }
+}

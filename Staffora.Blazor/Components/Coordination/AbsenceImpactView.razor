@@ -1,0 +1,118 @@
+@using Staffora.Services.Jobs
+@using Staffora.Services.Scheduling
+@inject ResourceAbsenceService AbsenceService
+@inject SlotAssignmentService AssignmentService
+@inject JobService JobService
+@inject DialogService DialogService
+
+<section class="absence-impact" data-absence-impact aria-label="Affected jobs">
+    @if (this.readError is { } failed)
+    {
+        <EmptyState Icon="error" Title="The affected jobs could not be shown" Text="@failed" Tone="UiTone.Warning" Role="alert" Compact="true" />
+    }
+    else if (this.read is not { } impact)
+    {
+        <LoadingState Text="Reading affected jobs…" Inline="true" />
+    }
+    else if (impact.Rows.Count == 0)
+    {
+        <EmptyState Icon="event_available" Title="No job is affected" Text="@(impact.Scheduled ? "The staff member has no request or assignment at the times of this absence." : "A canceled or rejected absence blocks nothing.")" Compact="true" />
+    }
+    else
+    {
+        <ul class="absence-impact__rows" aria-label="Affected assignments">
+            @foreach (var row in impact.Rows)
+            {
+                <li @key="row.AssignmentId" class="@(row.Settled ? "absence-impact__row absence-impact__row--settled" : "absence-impact__row")"
+                    data-impact-row="@row.Job" data-settled="@(row.Settled ? "true" : null)">
+                    <span class="absence-impact__what">
+                        <b class="absence-impact__job">@row.Job</b>
+                        <span class="absence-impact__slot">@row.Slot, @row.Customer</span>
+                    </span>
+                    <span class="absence-impact__facts">
+                        <span class="@(row.Settled ? "absence-impact__state absence-impact__state--settled" : "absence-impact__state")" data-impact-state>@row.StateText</span>
+                        @if (row.OpenAgain)
+                        {
+                            <span class="absence-impact__again" data-open-again>Open again</span>
+                        }
+                        <span class="absence-impact__when" data-impact-when>@row.OccurrencesText</span>
+                    </span>
+                    <span class="absence-impact__actions">
+                        <IconTextButton Text="Open" Icon="assignment_ind" ButtonStyle="ButtonStyle.Light" Size="ButtonSize.Small" Disabled="@(this.opening)"
+                                        aria-label="@($"Open the assignment of {impact.Staff}: {row.Job}, {row.Slot}")" data-impact-action="open" Click="@(() => OpenAssignmentAsync(row))" />
+                        <IconTextButton Text="Staffing" Icon="person_search" ButtonStyle="ButtonStyle.Primary" Variant="Variant.Outlined" Size="ButtonSize.Small" Disabled="@(this.opening)"
+                                        aria-label="@($"Staffing of {row.Job}, {row.Slot}")" data-impact-action="staffing" Click="@(() => OpenStaffingAsync(row))" />
+                    </span>
+                </li>
+            }
+        </ul>
+    }
+</section>
+
+@code {
+    private AbsenceImpact? read;
+    private string? readError;
+    private bool opening;
+    private int? readVersion;
+    private int readCount;
+
+    [CascadingParameter] public StateEntityDialogContext? Dialog { get; set; }
+
+    [Parameter] public int Version { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Version != this.readVersion)
+        {
+            await ReadAsync();
+        }
+    }
+
+    private async Task ReadAsync()
+    {
+        var mine = ++this.readCount;
+        this.readVersion = Version;
+        if (Dialog?.EntityId is not { } absenceId)
+        {
+            (this.read, this.readError) = (null, "No absence is shown.");
+            return;
+        }
+
+        var answer = await AbsenceService.ReadAbsenceImpactAsync(absenceId);
+        if (mine != this.readCount)
+        {
+            return;
+        }
+
+        (this.read, this.readError) = answer.IsSuccess && answer.Value is { } found ? (found, (string?)null) : (null, answer.Error ?? "The affected jobs could not be read. Try again.");
+    }
+
+    private Task OpenAssignmentAsync(AbsenceImpactRow row) => OpenAsync(() => SlotAssignmentDialog.OpenAsync(DialogService, AssignmentService, row.AssignmentId));
+
+    private Task OpenStaffingAsync(AbsenceImpactRow row) => OpenAsync(() => JobDialog.OpenStaffingAsync(DialogService, JobService, row.JobId, row.SlotId));
+
+    private async Task OpenAsync(Func<Task<StateEntityDialogResult>> open)
+    {
+        if (this.opening)
+        {
+            return;
+        }
+
+        this.opening = true;
+        try
+        {
+            await open();
+        }
+        finally
+        {
+            this.opening = false;
+        }
+
+        if (Dialog is { } dialog && !dialog.Lifetime.IsCancellationRequested && await dialog.ReloadAsync())
+        {
+            return;
+        }
+
+        await ReadAsync();
+    }
+}

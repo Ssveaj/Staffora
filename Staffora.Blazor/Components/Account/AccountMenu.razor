@@ -1,0 +1,132 @@
+@inject AuthenticationStateProvider AuthStateProvider
+@inject UserSessionService UserSessionService
+@inject IRuntimeExecutionContext Runtime
+@implements IDisposable
+
+<div class="account-menu">
+    @if (UserSessionService.UserId != Guid.Empty && !UserSessionService.ImpersonationEnded && !OnConsole)
+    {
+        <NotificationBell />
+    }
+    <details class="account-menu__profile">
+        <summary class="@TriggerClass" data-impersonating="@(Impersonation ? "true" : null)">
+            <span class="visually-hidden">Account menu: </span>
+            <span class="account-menu__avatar" aria-hidden="true">@Initials(TriggerName)</span>
+            <span class="account-menu__identity">
+                <span class="account-menu__name">@TriggerName</span>
+                @if (TriggerContext is { } context)
+                {
+                    <span class="visually-hidden">, </span>
+                    <span class="account-menu__context">@context</span>
+                }
+            </span>
+            <MaterialSymbol Name="expand_more" Class="account-menu__chevron" />
+        </summary>
+        <div class="account-menu__panel">
+            <div class="account-menu__head">
+                <p class="account-menu__eyebrow">Signed in as</p>
+                <p class="account-menu__panel-name">@OwnName</p>
+                @if (!string.IsNullOrWhiteSpace(UserSessionService.Email) && !string.Equals(UserSessionService.Email, OwnName, StringComparison.OrdinalIgnoreCase))
+                {
+                    <p class="account-menu__panel-meta">@UserSessionService.Email</p>
+                }
+                @if (OnConsole)
+                {
+                    <p class="account-menu__panel-meta">Platform owner, on the platform console</p>
+                }
+
+                @if (Impersonation)
+                {
+                    <div class="account-menu__running-as">
+                        @if (UserSessionService.IsImpersonating)
+                        {
+                            <p class="account-menu__eyebrow">Running as</p>
+                            <p class="account-menu__panel-name">@UserSessionService.ImpersonatedUserName</p>
+                            @if (!string.IsNullOrWhiteSpace(UserSessionService.ImpersonatedEmail) && !string.Equals(UserSessionService.ImpersonatedEmail, UserSessionService.ImpersonatedUserName, StringComparison.OrdinalIgnoreCase))
+                            {
+                                <p class="account-menu__panel-meta">@UserSessionService.ImpersonatedEmail</p>
+                            }
+                        }
+                        else
+                        {
+                            <p class="account-menu__eyebrow">Impersonation ended</p>
+                            <p class="account-menu__panel-meta">This impersonation is no longer valid. End it to return to the platform console.</p>
+                        }
+                        <form method="post" action="Account/Impersonation/End">
+                            <AntiforgeryToken />
+                            <button type="submit" class="account-menu__end">
+                                <MaterialSymbol Name="person_off" />
+                                <span>End impersonation</span>
+                            </button>
+                        </form>
+                    </div>
+                }
+            </div>
+
+            @if (UserSessionService.UserId != Guid.Empty && !Impersonation && !OnConsole)
+            {
+                <a class="account-menu__item" href="/me/profile">
+                    <MaterialSymbol Name="account_circle" />
+                    <span>My profile</span>
+                </a>
+            }
+            <form method="post" action="Account/Logout">
+                <AntiforgeryToken />
+                <input type="hidden" name="returnUrl" value="" />
+                <button type="submit" class="account-menu__item">
+                    <MaterialSymbol Name="logout" />
+                    <span>Sign out</span>
+                </button>
+            </form>
+        </div>
+    </details>
+</div>
+
+@code {
+    private string displayName = string.Empty;
+
+    private bool OnConsole => Runtime.HasPlatformReach();
+
+    private bool Impersonation => UserSessionService.IsImpersonating || UserSessionService.ImpersonationEnded;
+
+    private string OwnName => UserSessionService.UserName ?? this.displayName;
+
+    private string TriggerName => UserSessionService.IsImpersonating
+        ? UserSessionService.ImpersonatedUserName ?? "Impersonated user"
+        : OwnName;
+
+    private string? TriggerContext => UserSessionService.IsImpersonating ? "Impersonating"
+        : UserSessionService.ImpersonationEnded ? "Impersonation ended"
+        : OnConsole ? "Platform owner"
+        : null;
+
+    private string TriggerClass => Impersonation ? "account-menu__trigger account-menu__trigger--impersonating" : "account-menu__trigger";
+
+    protected override async Task OnInitializedAsync()
+    {
+        UserSessionService.OnChanged += OnSessionChanged;
+
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        this.displayName = authState.User.Identity?.Name ?? "User";
+    }
+
+    public static string Initials(string? name)
+    {
+        var local = (name ?? string.Empty).Split('@')[0];
+        var parts = local.Split(['.', '_', '-', ' '], StringSplitOptions.RemoveEmptyEntries);
+        var initials = parts.Length switch
+        {
+            0 => "?",
+            1 => parts[0][..Math.Min(2, parts[0].Length)],
+            _ => string.Concat(parts[0][0], parts[1][0]),
+        };
+        return initials.ToUpperInvariant();
+    }
+
+    private void OnSessionChanged() => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        UserSessionService.OnChanged -= OnSessionChanged;
+    }
+}

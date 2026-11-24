@@ -1,0 +1,538 @@
+@using System.Globalization
+@using Staffora.Core.Entities.Scheduling
+@using Staffora.Core.Scheduling
+@using Staffora.Services.Coordination
+@using Staffora.Services.Jobs
+@using Staffora.Services.Scheduling
+@using Staffora.Services.Settings
+@inject StaffAvailabilityService Availability
+@inject ResourceAbsenceService AbsenceService
+@inject SlotAssignmentService AssignmentService
+@inject PermissionService Permissions
+@inject IRuntimeExecutionContext Runtime
+@inject DialogService DialogService
+@inject TimeProvider Clock
+@inject TenantChangeFeed ChangeFeed
+
+<div class="person-schedule" data-schedule-month="@this.shown?.Key" aria-busy="@(this.loading ? "true" : "false")">
+    @if (this.mark is { } since)
+    {
+        <LiveRefresh Interest="@(ResourceId is null ? ChangeInterest.OwnWork : ChangeInterest.Coordination)" OnChange="ReloadAsync" Since="since" />
+    }
+
+    <div class="person-schedule__toolbar">
+        <div class="person-schedule__nav" role="group" aria-label="Choose the month">
+            <button type="button" class="person-schedule__tool person-schedule__tool--icon" aria-label="Previous month" title="Previous month" disabled="@(this.shown is null)" @onclick="() => MoveAsync(-1)">
+                <MaterialSymbol Name="chevron_left" />
+            </button>
+            <button type="button" class="person-schedule__tool" disabled="@(this.loading || this.shown?.IsCurrent == true)" @onclick="ThisMonthAsync">Today</button>
+            <button type="button" class="person-schedule__tool person-schedule__tool--icon" aria-label="Next month" title="Next month" disabled="@(this.shown is null)" @onclick="() => MoveAsync(1)">
+                <MaterialSymbol Name="chevron_right" />
+            </button>
+        </div>
+        <h2 class="person-schedule__title" id="@TitleId">
+            <span>@(this.shown?.Title ?? "Schedule")</span>
+            @if (this.shown is { } titled)
+            {
+                <span class="person-schedule__subtitle">@titled.WeeksLabel</span>
+            }
+        </h2>
+        <span class="person-schedule__spacer" aria-hidden="true"></span>
+        @if (this.mayAddAbsence && this.shown is not null)
+        {
+            <IconTextButton Text="@(IsOwn ? "Report absence" : "Register absence")"
+                            Icon="event_busy"
+                            ButtonStyle="ButtonStyle.Light"
+                            Click="AddAbsenceAsync" />
+        }
+    </div>
+    <p class="visually-hidden" role="status">@StatusText</p>
+
+    @if (this.error is { } error)
+    {
+        <div class="person-schedule__error">
+            <EmptyState Icon="error" Title="The schedule could not be shown" Text="@error" Tone="UiTone.Warning" Role="alert" />
+        </div>
+    }
+    else if (this.shown is { } month && this.axis is { } axis)
+    {
+        var hours = month.Hours;
+        <div class="person-schedule__cards">
+            <section class="person-schedule__card person-schedule__pattern" aria-label="Work pattern" data-pattern>
+                <span class="person-schedule__card-icon" aria-hidden="true"><MaterialSymbol Name="sync_alt" /></span>
+                <div class="person-schedule__card-text">
+                    @if (month.Pattern is { } pattern)
+                    {
+                        <div class="person-schedule__card-row">
+                            <span class="person-schedule__label">Work pattern</span>
+                            <strong data-pattern-name>@pattern.Name</strong>
+                            @if (EndsText(pattern, month.Today) is { } ends)
+                            {
+                                <span class="person-schedule__ends" data-pattern-ends>@ends</span>
+                            }
+                        </div>
+                        <p class="person-schedule__card-meta" data-pattern-period>@PatternLine(month, pattern)</p>
+                    }
+                    else
+                    {
+                        <div class="person-schedule__card-row">
+                            <span class="person-schedule__label">Work pattern</span>
+                            <strong>None this month</strong>
+                        </div>
+                        <p class="person-schedule__card-meta" data-pattern-period>@(month.NextPattern is { } upcoming ? $"Then {upcoming.Name} from {OwnScheduleMonth.LongDate(upcoming.From)}{(upcoming.Confirmed ? null : ", not confirmed yet")}" : "No work pattern gives working time in this month.")</p>
+                    }
+                </div>
+            </section>
+            <section class="person-schedule__card person-schedule__figures" aria-label="@($"Hours in {month.Title}")" data-month-hours>
+                <div class="person-schedule__figure-row">
+                    <span class="person-schedule__label">@month.First.ToString("MMMM", CultureInfo.InvariantCulture)</span>
+                    <span class="person-schedule__figure" data-hours-working><strong>@hours.WorkingLabel</strong> working</span>
+                    <span class="person-schedule__figure" data-hours-assignments><span class="person-schedule__swatch person-schedule__swatch--assignment" aria-hidden="true"></span><strong>@hours.AssignmentLabel</strong> assignments</span>
+                    <span class="person-schedule__figure" data-hours-absence><span class="person-schedule__swatch person-schedule__swatch--absence" aria-hidden="true"></span><strong>@hours.AbsenceLabel</strong> absence</span>
+                    <span class="person-schedule__figure" data-hours-open><span class="person-schedule__swatch person-schedule__swatch--work" aria-hidden="true"></span><strong>@hours.OpenLabel</strong> open</span>
+                </div>
+                @if (hours.WorkingMinutes > 0)
+                {
+                    <div class="person-schedule__thin" aria-hidden="true">
+                        <span class="person-schedule__thin-part person-schedule__swatch--assignment" style="@WidthStyle(hours.AssignmentMinutes, hours.WorkingMinutes)"></span>
+                        <span class="person-schedule__thin-part person-schedule__swatch--absence" style="@WidthStyle(hours.AbsenceMinutes, hours.WorkingMinutes)"></span>
+                        <span class="person-schedule__thin-part person-schedule__swatch--work" style="@WidthStyle(hours.OpenMinutes, hours.WorkingMinutes)"></span>
+                    </div>
+                }
+            </section>
+        </div>
+
+        <section class="person-schedule__days" aria-labelledby="@TitleId">
+            <div class="person-schedule__key">
+                <ul class="person-schedule__legend" aria-label="Each day in layers, bottom to top">
+                    <li><span class="person-schedule__layer" aria-hidden="true">1</span><span class="person-schedule__swatch person-schedule__swatch--work" aria-hidden="true"></span>Working time</li>
+                    <li><span class="person-schedule__layer" aria-hidden="true">2</span><span class="person-schedule__swatch person-schedule__swatch--assignment" aria-hidden="true"></span>Assignments</li>
+                    <li><span class="person-schedule__layer" aria-hidden="true">3</span><span class="person-schedule__swatch person-schedule__swatch--absence" aria-hidden="true"></span>Absence</li>
+                </ul>
+                <span class="person-schedule__zone">Times are the organization's local time (@month.TimeZoneId)</span>
+            </div>
+            <div class="person-schedule__scroll" role="region" tabindex="0" aria-label="@($"Days of {month.Title}")">
+                <div class="@(this.hasNotes ? "person-schedule__grid person-schedule__grid--notes" : "person-schedule__grid")" data-axis="@AxisText(axis)">
+                    <div class="person-schedule__axis" aria-hidden="true">
+                        <span class="person-schedule__corner">@axis.FoldsLabel</span>
+                        <span class="person-schedule__ticks">
+                            @foreach (var tick in axis.Ticks)
+                            {
+                                <span class="person-schedule__tick" style="@AtStyle(tick.At)">@tick.Label</span>
+                            }
+                        </span>
+                        @if (this.hasNotes)
+                        {
+                            <span class="person-schedule__notes-head"></span>
+                        }
+                    </div>
+                    @foreach (var week in month.Weeks)
+                    {
+                        <div class="person-schedule__week" data-week="@ScheduleRules.DateText(week.Monday)">
+                            @{ var weekHours = week.Hours; }
+                            <h3 class="person-schedule__week-head">
+                                <span class="person-schedule__week-name">Week @week.Number</span>
+                                <span class="person-schedule__week-range">@week.RangeLabel</span>
+                                @if (week.PatternWeek is { } patternWeek)
+                                {
+                                    <span class="person-schedule__chip" data-pattern-week>Pattern week @patternWeek</span>
+                                }
+                                <span class="person-schedule__week-hours" data-week-hours>@weekHours.WorkingLabel working · @weekHours.AssignmentLabel assignments · @weekHours.AbsenceLabel absence · @weekHours.OpenLabel open</span>
+                            </h3>
+                            <ol class="person-schedule__rows" aria-label="@($"Days of week {week.Number}")">
+                                @foreach (var day in week.Days)
+                                {
+                                    var isToday = day.Date == month.Today;
+                                    var whole = day.Absences.Any(absence => absence.From is null && absence.Until is null);
+                                    <li @key="day.Date" class="@RowClass(day, isToday)" data-date="@ScheduleRules.DateText(day.Date)">
+                                        <div class="person-schedule__day">
+                                            <span class="person-schedule__day-name" aria-hidden="true">
+                                                <strong>@day.Date.ToString("ddd d", CultureInfo.InvariantCulture)</strong>
+                                                @if (isToday)
+                                                {
+                                                    <span class="person-schedule__today">Today</span>
+                                                }
+                                                @foreach (var holiday in day.Holidays)
+                                                {
+                                                    <span class="person-schedule__holiday" data-holiday="@holiday">@holiday</span>
+                                                }
+                                            </span>
+                                            <span class="visually-hidden">@day.Label@(isToday ? ", today" : null)@(day.Holidays.Count > 0 ? $", {string.Join(", ", day.Holidays)}" : null):</span>
+                                            <span class="person-schedule__day-hours"><span class="visually-hidden">Working time </span><span data-hours>@(day.Working.Count == 0 ? "No working time" : day.HoursLabel)</span></span>
+                                        </div>
+                                        <div class="person-schedule__track">
+                                            @foreach (var fold in axis.Folds)
+                                            {
+                                                <span class="person-schedule__fold" style="@SpanStyle(axis.Position(fold.Start), axis.Position(fold.End))" aria-hidden="true"></span>
+                                            }
+                                            @foreach (var work in day.Working)
+                                            {
+                                                var (start, end) = OwnDayMinutes.Of(work);
+                                                <span class="person-schedule__work" style="@SpanStyle(axis.Position(start), axis.Position(end))" aria-hidden="true" data-work></span>
+                                            }
+                                            @if (!day.IsQuiet)
+                                            {
+                                                <ul class="person-schedule__items" aria-label="@($"Assignments and absences of {day.Label}")">
+                                                    @foreach (var occurrence in day.Occurrences)
+                                                    {
+                                                        var (start, end) = OwnDayMinutes.Of(occurrence);
+                                                        <li @key="(occurrence.AssignmentId, occurrence.Start)" class="@(whole ? "person-schedule__bar person-schedule__bar--assignment person-schedule__bar--under" : "person-schedule__bar person-schedule__bar--assignment")"
+                                                            style="@SpanStyle(axis.Position(start), axis.Position(end))" data-occurrence="@occurrence.AssignmentId">
+                                                            @if (this.readsAssignments)
+                                                            {
+                                                                <button type="button" class="person-schedule__open" title="@OccurrenceText(occurrence)" @onclick="() => OpenAssignmentAsync(occurrence.AssignmentId)">
+                                                                    @OccurrenceFace(occurrence)
+                                                                </button>
+                                                            }
+                                                            else
+                                                            {
+                                                                <span class="person-schedule__open" title="@OccurrenceText(occurrence)">@OccurrenceFace(occurrence)</span>
+                                                            }
+                                                        </li>
+                                                    }
+                                                    @foreach (var absence in day.Absences)
+                                                    {
+                                                        var (start, end) = AbsenceSpan(day, absence, axis);
+                                                        <li @key="absence.AbsenceId" class="@(absence.From is null && absence.Until is null ? "person-schedule__bar person-schedule__bar--absence person-schedule__bar--whole" : "person-schedule__bar person-schedule__bar--absence")"
+                                                            style="@SpanStyle(start, end)" data-absence="@absence.AbsenceId">
+                                                            <button type="button" class="person-schedule__open" title="@($"{AbsenceTitle(absence)}, {StatusOf(absence)}")" @onclick="() => OpenAbsenceAsync(absence.AbsenceId)">
+                                                                <strong class="person-schedule__plate">@AbsenceTitle(absence)</strong>
+                                                                <span>@StatusOf(absence)</span>
+                                                            </button>
+                                                        </li>
+                                                    }
+                                                </ul>
+                                            }
+                                            @if (isToday && NowAt(axis) is { } now)
+                                            {
+                                                <span class="person-schedule__now" style="@AtStyle(now)" title="Now" aria-hidden="true" data-now-line></span>
+                                            }
+                                        </div>
+                                        @if (this.hasNotes)
+                                        {
+                                            <div class="person-schedule__notes">
+                                                @foreach (var note in day.Notes)
+                                                {
+                                                    <span class="person-schedule__note" data-note>@note</span>
+                                                }
+                                            </div>
+                                        }
+                                    </li>
+                                }
+                            </ol>
+                        </div>
+                    }
+                </div>
+            </div>
+        </section>
+
+        @if (ShowPatternWeeks && month.Pattern is { } given)
+        {
+            <section class="person-schedule__card person-schedule__cycle" aria-labelledby="@($"{TitleId}-cycle")" data-pattern-weeks>
+                <div class="person-schedule__cycle-head">
+                    <h2 class="person-schedule__cycle-title" id="@($"{TitleId}-cycle")">The weeks your pattern gives</h2>
+                    <span class="person-schedule__cycle-sub">@(given.CycleWeeks > 1 ? $"Repeats every {given.CycleWeeks} weeks" : "The same every week")</span>
+                </div>
+                <div class="person-schedule__cycle-scroll" role="region" tabindex="0" aria-label="@($"The weeks of {given.Name}")">
+                    <table class="person-schedule__cycle-table">
+                        <thead>
+                            <tr>
+                                <th scope="col"><span class="visually-hidden">Week of the pattern</span></th>
+                                @foreach (var name in WeekdayNames)
+                                {
+                                    <th scope="col">@name</th>
+                                }
+                                <th scope="col">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var row in given.CycleRows)
+                            {
+                                var isThis = given.Covers(month.Today) && given.CycleWeekOn(month.Today) == row.Week;
+                                <tr class="@(isThis ? "person-schedule__cycle-row--this" : null)" data-cycle-week="@row.Week">
+                                    <th scope="row">Week @row.Week @if (isThis) {<span class="person-schedule__chip">This week</span>}</th>
+                                    @foreach (var dayTimes in row.Days)
+                                    {
+                                        var times = OwnPatternWeekRow.TimesOf(dayTimes);
+                                        <td class="@(times.Count == 0 ? "person-schedule__off" : null)">
+                                            @if (times.Count == 0)
+                                            {
+                                                <span>Off</span>
+                                            }
+                                            else
+                                            {
+                                                @foreach (var time in times)
+                                                {
+                                                    <span class="person-schedule__time">@time</span>
+                                                }
+                                            }
+                                        </td>
+                                    }
+                                    <td class="person-schedule__total">@OwnHours.Text(row.Minutes)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                @if (month.PreviousPattern is { } before)
+                {
+                    <p class="person-schedule__cycle-foot" data-pattern-before><MaterialSymbol Name="history" /> Before this: @before.Name, @before.PeriodLabel</p>
+                }
+            </section>
+        }
+    }
+    else
+    {
+        <LoadingState Text="Loading the month…" />
+    }
+</div>
+
+@code {
+    private static readonly string[] WeekdayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+    [Parameter] public Guid? ResourceId { get; set; }
+
+    [Parameter] public DateOnly? Month { get; set; }
+
+    [Parameter] public bool ShowPatternWeeks { get; set; } = true;
+
+    [Parameter] public EventCallback<DateOnly?> MonthChanged { get; set; }
+
+    private readonly string id = $"person-schedule-{Guid.NewGuid():N}";
+    private OwnScheduleMonth? shown;
+    private OwnDayAxis? axis;
+    private bool hasNotes;
+    private string? error;
+    private bool loading = true;
+    private bool mayAddAbsence;
+    private bool readsAssignments;
+    private int readVersion;
+    private (Guid? Resource, DateOnly? Month)? asked;
+
+    private DateOnly? requested;
+    private Guid? absenceUser;
+
+    private long? mark;
+
+    private string TitleId => this.id;
+
+    private bool IsOwn => ResourceId is null || (this.shown is { } month && month.UserId == Runtime.EffectiveUserId);
+
+    private string StatusText => this.loading ? "Loading the month..." : this.shown is { } month ? $"Showing {month.Title}." : string.Empty;
+
+    protected override void OnInitialized()
+    {
+        this.mark = ChangeFeed.Mark();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var now = (ResourceId, Month is { } month ? OwnScheduleMonth.FirstOf(month) : (DateOnly?)null);
+        if (this.asked == now)
+        {
+            return;
+        }
+
+        this.asked = now;
+        this.requested = now.Item2;
+        await ReadAsync();
+    }
+
+    private async Task ReadAsync()
+    {
+        var version = ++this.readVersion;
+        this.loading = true;
+        var result = await Availability.ReadMonthAsync(ResourceId, this.requested);
+        if (version != this.readVersion)
+        {
+            return;
+        }
+
+        this.loading = false;
+        if (!result.IsSuccess || result.Value is not { } month)
+        {
+            (this.shown, this.axis, this.error) = (null, null, result.Error);
+            return;
+        }
+
+        (this.shown, this.error) = (month, null);
+        this.axis = OwnDayAxis.Of(month.Days);
+        this.hasNotes = month.Days.Any(day => day.Notes.Count > 0);
+        if (this.absenceUser != month.UserId)
+        {
+            this.absenceUser = month.UserId;
+            this.mayAddAbsence = await AbsenceService.MayAddAbsenceForUserAsync(month.UserId);
+            this.readsAssignments = await Permissions.HasPermissionAsync(IsOwn ? RolePermission.ViewOwnAssignments : RolePermission.ViewCoordination);
+        }
+    }
+
+    private async Task MoveAsync(int months)
+    {
+        if (this.shown is not { } month)
+        {
+            return;
+        }
+
+        var target = month.First.AddMonths(months);
+        await ChangeMonthAsync(OwnScheduleMonth.FirstOf(month.Today) == target ? null : target);
+    }
+
+    private Task ThisMonthAsync() => ChangeMonthAsync(null);
+
+    private async Task ChangeMonthAsync(DateOnly? month)
+    {
+        this.requested = month;
+        this.asked = (ResourceId, month);
+        await MonthChanged.InvokeAsync(month);
+        await ReadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        await ReadAsync();
+        StateHasChanged();
+    }
+
+    private async Task AddAbsenceAsync()
+    {
+        if (this.shown is not { } month)
+        {
+            return;
+        }
+
+        var result = await AbsenceDialog.OpenCreateAsync(DialogService, AbsenceService, month.UserId);
+        if (result.EntityId is not null)
+        {
+            await ReadAsync();
+        }
+    }
+
+    private async Task OpenAbsenceAsync(Guid absenceId)
+    {
+        await AbsenceDialog.OpenAsync(DialogService, AbsenceService, absenceId);
+        await ReadAsync();
+    }
+
+    private async Task OpenAssignmentAsync(Guid assignmentId)
+    {
+        await SlotAssignmentDialog.OpenAsync(DialogService, AssignmentService, assignmentId);
+        await ReadAsync();
+    }
+
+    private double? NowAt(OwnDayAxis axis)
+    {
+        if (this.shown is not { } month)
+        {
+            return null;
+        }
+
+        try
+        {
+            var local = TenantClock.ToLocal(Clock.GetUtcNow(), TimeZoneInfo.FindSystemTimeZoneById(month.TimeZoneId));
+            var minute = OwnDayMinutes.Minute(TimeOnly.FromDateTime(local.DateTime));
+            return minute < axis.Start || minute > axis.End || axis.IsFolded(minute) ? null : axis.Position(minute);
+        }
+        catch (Exception exception) when (exception is TimeZoneNotFoundException or InvalidTimeZoneException)
+        {
+            return null;
+        }
+    }
+
+    private static (double Start, double End) AbsenceSpan(OwnScheduleDay day, OwnAbsenceEntry absence, OwnDayAxis axis)
+    {
+        if (absence.From is not null || absence.Until is not null)
+        {
+            var (start, end) = OwnDayMinutes.Of(absence);
+            return (axis.Position(start), axis.Position(end));
+        }
+
+        if (day.Working.Count == 0)
+        {
+            return (0, 1);
+        }
+
+        var first = day.Working.Min(work => OwnDayMinutes.Of(work).Start);
+        var last = day.Working.Max(work => OwnDayMinutes.Of(work).End);
+        return (Math.Max(0, axis.Position(first) - 0.01), Math.Min(1, axis.Position(last) + 0.01));
+    }
+
+    private static string AbsenceTitle(OwnAbsenceEntry absence)
+    {
+        var kind = absence.Kind == AbsenceKind.SickLeave ? "Sick leave" : "Planned leave";
+        return (absence.From, absence.Until) switch
+        {
+            ({ } from, { } until) => $"{kind} {WorkPatternRules.TimeText(from)}–{WorkPatternRules.TimeText(until)}",
+            ({ } from, null) => $"{kind} from {WorkPatternRules.TimeText(from)}",
+            (null, { } until) => $"{kind} until {WorkPatternRules.TimeText(until)}",
+            _ => $"{kind}, all day",
+        };
+    }
+
+    private string StatusOf(OwnAbsenceEntry absence)
+    {
+        if (absence.State == ResourceAbsenceState.Requested && absence.Kind == AbsenceKind.SickLeave)
+        {
+            return "Reported";
+        }
+
+        var text = IsOwn
+            ? AbsenceRules.OwnStatusText(absence.State)
+            : absence.State switch
+            {
+                ResourceAbsenceState.Approved => "approved",
+                ResourceAbsenceState.Question => "question to the staff member",
+                ResourceAbsenceState.StaffQuestion => "question to the coordinator",
+                _ => "waiting for approval",
+            };
+        return text.Length == 0 ? text : char.ToUpperInvariant(text[0]) + text[1..];
+    }
+
+    private static string? EndsText(OwnPatternPeriod pattern, DateOnly today) => pattern.DaysLeft(today) switch
+    {
+        null => null,
+        0 => "Ends today",
+        1 => "Ends tomorrow",
+        { } days => $"Ends in {days} days",
+    };
+
+    private static string PatternLine(OwnScheduleMonth month, OwnPatternPeriod pattern)
+    {
+        var parts = new List<string> { pattern.PeriodLabel };
+        var on = pattern.Covers(month.Today) ? month.Today : pattern.Covers(month.First) ? month.First : pattern.From;
+        if (pattern.CycleWeeks > 1)
+        {
+            parts.Add($"week {pattern.CycleWeekOn(on)} of {pattern.CycleWeeks}");
+        }
+
+        if (month.NextPattern is { } next)
+        {
+            parts.Add($"then {next.Name} from {OwnScheduleMonth.LongDate(next.From)}{(next.Confirmed ? null : ", not confirmed yet")}");
+        }
+
+        return string.Join(" · ", parts);
+    }
+
+    private static string OccurrenceText(OwnOccurrenceEntry occurrence) =>
+        string.Join(", ", new[] { occurrence.Job, occurrence.TimesLabel, occurrence.Customer, occurrence.Place }.Where(part => !string.IsNullOrWhiteSpace(part)));
+
+    private static RenderFragment OccurrenceFace(OwnOccurrenceEntry occurrence) => __builder =>
+    {
+        <strong class="person-schedule__job">@occurrence.Job</strong>
+        <span class="person-schedule__meta">@occurrence.TimesLabel@(occurrence.Customer is { Length: > 0 } customer ? $" · {customer}" : null)</span>
+    };
+
+    private static string RowClass(OwnScheduleDay day, bool isToday) => string.Join(' ', new[]
+    {
+        "person-schedule__row",
+        isToday ? "person-schedule__row--today" : null,
+        day.Working.Count == 0 ? "person-schedule__row--off" : null,
+    }.Where(part => part is not null));
+
+    private static string AxisText(OwnDayAxis axis) => string.Join(",", axis.Pieces.Select(piece => $"{(piece.Folded ? "fold " : null)}{piece.Start}-{piece.End}"));
+
+    private static string AtStyle(double at) => string.Create(CultureInfo.InvariantCulture, $"--at: {at};");
+
+    private static string SpanStyle(double start, double end) => string.Create(CultureInfo.InvariantCulture, $"--x0: {start}; --x1: {end};");
+
+    private static string WidthStyle(int part, int whole) => string.Create(CultureInfo.InvariantCulture, $"width: {Math.Round(part * 100d / whole, 3)}%;");
+}

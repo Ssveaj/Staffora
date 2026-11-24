@@ -1,0 +1,36 @@
+<div class="@CssClass" data-field="@Field" data-access="@AccessName">
+    <RadzenFormField Component="@Component" Variant="Variant.Outlined" Style="width: 100%;" Helper="@HelperText">
+        <TextTemplate>
+            <span class="state-field__label">@Label</span>
+            @if (IsRequired)
+            {
+                <span class="state-field__required-mark" aria-hidden="true">*</span>
+            }
+        </TextTemplate>
+        <ChildContent>@ChildContent</ChildContent>
+    </RadzenFormField>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Label { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired] public string Component { get; set; } = string.Empty;
+
+    [Parameter] public string? Field { get; set; }
+
+    [Parameter] public bool IsRequired { get; set; }
+
+    [Parameter] public bool IsReadOnly { get; set; }
+
+    [Parameter] public string? Helper { get; set; }
+
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    public static string HelperIdOf(string inputName) => $"{inputName}-helper";
+
+    private RenderFragment? HelperText => string.IsNullOrWhiteSpace(Helper) ? null : @<span class="field-helper" id="@HelperIdOf(Component)" data-field-helper><MaterialSymbol Name="info" Class="field-helper__icon" /><span>@Helper</span></span>;
+
+    private string AccessName => IsRequired ? "required" : IsReadOnly ? "read-only" : "editable";
+
+    private string CssClass => $"state-field{(IsRequired ? " state-field--required" : null)}{(IsReadOnly ? " state-field--read-only" : null)}";
+}

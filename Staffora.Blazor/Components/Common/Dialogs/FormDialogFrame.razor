@@ -1,0 +1,56 @@
+@inject DialogService DialogService
+
+<CascadingValue Value="DialogScope.Instance" IsFixed="true">
+    <div class="form-dialog-frame" data-read-only="@(ReadOnly ? "true" : null)">
+        <div class="form-dialog-frame__body">
+            @ChildContent
+        </div>
+        <div class="form-dialog-frame__footer">
+            @if (Footer is not null)
+            {
+                @Footer
+            }
+            else if (ReadOnly)
+            {
+                <RadzenButton Text="Close"
+                              ButtonStyle="ButtonStyle.Light"
+                              Variant="Variant.Flat"
+                              Click="@(() => DialogService.Close(false))" />
+            }
+            else
+            {
+                <RadzenButton Text="@CancelText"
+                              ButtonStyle="ButtonStyle.Light"
+                              Variant="Variant.Flat"
+                              Click="@(() => DialogService.Close(false))"
+                              Disabled="@IsBusy" />
+                <IconTextButton Text="@SaveText"
+                              ButtonStyle="ButtonStyle.Primary"
+                              Icon="@SaveIcon"
+                              Click="@OnSave"
+                              Disabled="@SaveDisabled"
+                              IsBusy="@IsBusy" />
+            }
+        </div>
+    </div>
+</CascadingValue>
+
+@code {
+    [Parameter, EditorRequired] public RenderFragment ChildContent { get; set; } = null!;
+
+    [Parameter] public EventCallback OnSave { get; set; }
+
+    [Parameter] public bool SaveDisabled { get; set; }
+
+    [Parameter] public bool IsBusy { get; set; }
+
+    [Parameter] public string SaveText { get; set; } = "Save";
+
+    [Parameter] public string? SaveIcon { get; set; }
+
+    [Parameter] public string CancelText { get; set; } = "Cancel";
+
+    [Parameter] public RenderFragment? Footer { get; set; }
+
+    [Parameter] public bool ReadOnly { get; set; }
+}

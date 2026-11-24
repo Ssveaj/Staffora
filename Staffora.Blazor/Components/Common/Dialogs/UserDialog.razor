@@ -1,0 +1,176 @@
+@using Staffora.Blazor.Components.Common.Dialogs.StateEntity
+@using Staffora.Blazor.Components.Common.List
+@using Staffora.Blazor.Components.Common.Schedule
+@using Staffora.Blazor.Components.Common.WorkflowFields
+@using Staffora.Blazor.Helper
+@using Staffora.Core.Entities.EntityAttributes.UserAttributes
+@using Staffora.Core.Entities.Identity
+@using Staffora.Core.Lists
+@using Staffora.Core.Models
+@implements IStateEntityDialog<UserDialogContext>
+@inject DialogService DialogService
+
+<StateEntityDialogViewPanel Key="@UserDialogContext.InfoView">
+    <div class="user-dialog">
+        <div class="field-row">
+            <StateFieldTextBox @bind-Value="Context.Entity!.FirstName" Label="First name" MaxLength="100" Name="user-first-name" />
+            <StateFieldTextBox @bind-Value="Context.Entity!.LastName" Label="Last name" MaxLength="100" Name="user-last-name" />
+        </div>
+        <div class="field-row">
+            <StateFieldTextBox @bind-Value="Context.Entity!.Email" Label="Email" MaxLength="256" Name="user-email" />
+            <StateFieldTextBox @bind-Value="Context.Entity!.UserName" Label="User name" MaxLength="256" Name="user-username" />
+        </div>
+        <StateCustomFields TValue="ApplicationUserAttribute" Values="@Context.Entity!.Attributes" NamePrefix="user-attribute">
+            <Leading>
+                <StateFieldTextBox @bind-Value="Context.Entity!.PhoneNumber" Label="Phone" MaxLength="32" Name="user-phone" />
+            </Leading>
+        </StateCustomFields>
+    </div>
+</StateEntityDialogViewPanel>
+<StateEntityDialogViewPanel Key="@UserDialogContext.RolesView">
+    <StateEntityDialogChildList TItem="UserRoleHoldingRow"
+                                View="@UserDialogContext.RolesView"
+                                RowKey="@(row => row.Id)"
+                                RowLabel="@(row => $"{row.Role} on {row.Unit}")"
+                                Label="Roles"
+                                ItemName="role"
+                                ItemsName="roles"
+                                EmptyIcon="admin_panel_settings"
+                                EmptyTitle="No roles yet"
+                                EmptyText="A role on a unit grants its permissions across the whole company. The unit records where the person works."
+                                OpenRow="@OpenHoldingAsync">
+        <Columns>
+            <ListColumn TItem="UserRoleHoldingRow" Title="Role" Primary="true">@context.Role</ListColumn>
+            <ListColumn TItem="UserRoleHoldingRow" Title="Unit">@context.UnitLabel</ListColumn>
+        </Columns>
+    </StateEntityDialogChildList>
+</StateEntityDialogViewPanel>
+
+<StateEntityDialogViewPanel Key="@UserDialogContext.StaffView">
+    @if (Context.StaffStatus is { } status)
+    {
+        <p class="user-dialog__staff" data-staff-status>
+            <span>Staff status:</span>
+            <strong>@status</strong>
+            <span class="text-muted">@Context.StaffStatusMeaning</span>
+        </p>
+    }
+    <StateEntityDialogChildList TItem="StaffUnitRow"
+                                View="@UserDialogContext.StaffView"
+                                RowKey="@(row => row.UnitId)"
+                                RowLabel="@(row => row.Unit)"
+                                Label="Units"
+                                ItemName="unit"
+                                ItemsName="units"
+                                EmptyIcon="badge"
+                                EmptyTitle="Not a member of any unit"
+                                EmptyText="A staff member belongs to every unit in use where they hold a role whose holders are staff members. Their staff record and its history are kept.">
+        <Columns>
+            <ListColumn TItem="StaffUnitRow" Title="Unit" Primary="true">@context.UnitLabel</ListColumn>
+
+        </Columns>
+    </StateEntityDialogChildList>
+</StateEntityDialogViewPanel>
+<StateEntityDialogViewPanel Key="@UserDialogContext.QualificationsView">
+    <StateEntityDialogChildList TItem="StaffQualificationRow"
+                                View="@UserDialogContext.QualificationsView"
+                                RowKey="@(row => row.QualificationId)"
+                                RowLabel="@(row => row.Name)"
+                                Label="Qualifications"
+                                ItemName="qualification"
+                                ItemsName="qualifications"
+                                EmptyIcon="workspace_premium"
+                                EmptyTitle="No qualifications yet"
+                                EmptyText="A staff member's qualifications rank them for the slots that ask for them."
+                                OpenRow="@OpenQualificationAsync">
+        <Columns>
+            <ListColumn TItem="StaffQualificationRow" Title="Qualification" Primary="true">@context.NameLabel</ListColumn>
+            <ListColumn TItem="StaffQualificationRow" Title="Description">@context.Description</ListColumn>
+        </Columns>
+    </StateEntityDialogChildList>
+</StateEntityDialogViewPanel>
+
+<StateEntityDialogViewPanel Key="@UserDialogContext.ScheduleView">
+    @if (Context.Schedule is { } schedule)
+    {
+        <div class="user-dialog__schedule-open">
+            <IconTextButton Text="Open schedule" Icon="calendar_month" ButtonStyle="ButtonStyle.Primary" Variant="Variant.Outlined" Size="ButtonSize.Small"
+                            data-open-schedule="@schedule.ResourceId" Click="@(() => PersonScheduleDialog.OpenAsync(DialogService, schedule.ResourceId, Context.DisplayName ?? "the staff member"))" />
+        </div>
+    }
+    else if (Context.ScheduleProblem is { } problem)
+    {
+        <p class="user-dialog__schedule-problem" role="alert">@problem</p>
+    }
+    <StateEntityDialogChildList TItem="PatternAssignmentRow"
+                                View="@UserDialogContext.ScheduleView"
+                                RowKey="@(row => row.Id)"
+                                RowLabel="@(row => $"{row.Pattern} from {row.PeriodLabel}")"
+                                RowStateOf="@(row => row.State)"
+                                Label="Work patterns"
+                                ItemName="work pattern"
+                                ItemsName="work patterns"
+                                EmptyIcon="calendar_month"
+                                EmptyTitle="No work pattern yet"
+                                EmptyText="A staff member works by the work pattern given to them from a date. Without one, every hour of theirs is outside their pattern."
+                                OpenRow="@OpenAssignmentAsync">
+        <Columns>
+            <ListColumn TItem="PatternAssignmentRow" Title="Pattern" Primary="true">@context.PatternLabel</ListColumn>
+            <ListColumn TItem="PatternAssignmentRow" Title="Dates">@context.PeriodLabel</ListColumn>
+        </Columns>
+    </StateEntityDialogChildList>
+</StateEntityDialogViewPanel>
+
+<StateEntityDialogViewPanel Key="@UserDialogContext.AbsenceView">
+    <StateEntityDialogChildList TItem="AbsenceRow"
+                                View="@UserDialogContext.AbsenceView"
+                                RowKey="@(row => row.Id)"
+                                RowLabel="@(row => row.Label)"
+                                RowStateOf="@(row => row.State)"
+                                Label="Absences"
+                                ItemName="absence"
+                                ItemsName="absences"
+                                EmptyIcon="event_busy"
+                                EmptyTitle="No absence yet"
+                                EmptyText="A sick leave keeps a staff member from being staffed as soon as it is reported, and a planned leave once it is approved."
+                                OpenRow="@OpenAbsenceAsync">
+        <Columns>
+            <ListColumn TItem="AbsenceRow" Title="Kind" Primary="true">@context.KindLabel</ListColumn>
+            <ListColumn TItem="AbsenceRow" Title="Period">@context.PeriodLabel</ListColumn>
+            <ListColumn TItem="AbsenceRow" Title="Staffing">@context.BlocksLabel</ListColumn>
+        </Columns>
+    </StateEntityDialogChildList>
+</StateEntityDialogViewPanel>
+
+@code {
+    private int? shownVersion;
+
+    [Parameter, EditorRequired] public UserDialogContext Context { get; set; } = null!;
+
+    protected override void OnParametersSet()
+    {
+        if (this.shownVersion != Context.Version)
+        {
+            this.shownVersion = Context.Version;
+            var name = $"{Context.Entity!.FirstName} {Context.Entity.LastName}".Trim();
+            Context.DisplayName = name.Length > 0 ? name : string.IsNullOrWhiteSpace(Context.Entity.Email) ? null : Context.Entity.Email;
+        }
+    }
+
+    private Task<StateEntityDialogResult> OpenHoldingAsync(UserRoleHoldingRow row) => Context.OpenHoldingAsync(DialogService, row);
+
+    private Task<StateEntityDialogResult> OpenQualificationAsync(StaffQualificationRow row) => StaffQualificationDialog.OpenAsync(DialogService, row, Context.CanManageQualifications);
+
+    private Task<StateEntityDialogResult> OpenAssignmentAsync(PatternAssignmentRow row) => Context.OpenAssignmentAsync(DialogService, row);
+
+    private Task<StateEntityDialogResult> OpenAbsenceAsync(AbsenceRow row) => Context.OpenAbsenceAsync(DialogService, row);
+
+    internal static UserDialogContext ContextFor(UserService service, Guid? userId) =>
+        new(service, userId) { DefaultTitle = "User", CreateTitle = "New user", EntityIcon = "person" };
+
+    public static Task<StateEntityDialogResult> OpenAsync(DialogService dialogService, UserService service, Guid userId, StateEntityDialogOptions? options = null) =>
+        dialogService.OpenStateEntityDialogAsync<UserDialog, UserDialogContext>(ContextFor(service, userId), options);
+
+    public static Task<StateEntityDialogResult> OpenCreateAsync(DialogService dialogService, UserService service) =>
+        dialogService.OpenStateEntityDialogAsync<UserDialog, UserDialogContext>(ContextFor(service, null));
+}

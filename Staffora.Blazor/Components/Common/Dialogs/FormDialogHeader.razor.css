@@ -1,0 +1,61 @@
+.form-dialog-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: 2.5rem;
+    padding: var(--space-1) var(--space-2) var(--space-1) var(--space-4);
+    background: var(--dialog-frame-color, var(--color-accent));
+    color: var(--dialog-header-text, var(--color-on-accent));
+}
+
+.form-dialog-header__title {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    color: inherit;
+    font-size: var(--font-size-lg);
+    font-weight: var(--font-weight-semibold);
+    line-height: var(--line-height-tight);
+    overflow-wrap: anywhere;
+}
+
+.form-dialog-header__title:focus {
+    outline: none;
+}
+
+.form-dialog-header__title:focus-visible {
+    text-decoration: underline 2px color-mix(in srgb, currentColor 50%, transparent);
+    text-underline-offset: 0.3em;
+}
+
+::deep .form-dialog-header__icon {
+    flex: none;
+    color: inherit;
+    font-size: 1.5rem;
+}
+
+::deep .form-dialog-header__close.rz-button {
+    width: 32px;
+    min-width: 32px;
+    height: 32px;
+    padding: 0;
+    border-radius: var(--radius-full);
+    background: transparent;
+}
+
+::deep .form-dialog-header__close,
+::deep .form-dialog-header__close .rz-button-icon-left {
+    color: var(--color-on-accent);
+    font-size: 1.25rem;
+}
+
+::deep .form-dialog-header__close.rz-button:not(.rz-state-disabled):hover {
+    background: color-mix(in srgb, var(--color-on-accent) 14%, transparent);
+    color: var(--color-on-accent);
+}
+
+::deep .form-dialog-header__close:focus-visible {
+    outline: 2px solid var(--color-on-accent);
+    outline-offset: -2px;
+    box-shadow: none;
+}

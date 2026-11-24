@@ -1,0 +1,117 @@
+@using Staffora.Blazor.Components.Common.Dialogs.StateEntity
+@using Staffora.Blazor.Components.Coordination
+@using Staffora.Blazor.Components.Common.List
+@using Staffora.Blazor.Components.Common.WorkflowFields
+@using Staffora.Core.Entities.Jobs
+@using Staffora.Core.Jobs
+@using Staffora.Core.Lists
+@using Staffora.Core.Models
+@using Staffora.Core.Scheduling
+@using Staffora.Core.Workflow.WorkflowAttributes
+@using Staffora.Services.Jobs
+@implements IStateEntityDialog<JobSlotDialogContext>
+@inject DialogService DialogService
+@inject SlotAssignmentService AssignmentService
+@inject RequestRoundService RoundService
+
+<StateEntityDialogViewPanel Key="@JobSlotDialogContext.InfoView">
+<div class="slot-dialog">
+    <p class="slot-dialog__job" data-job>
+        <span>Job:</span>
+        <strong>@Context.Entity!.Job?.Name</strong>
+    </p>
+    @if (Context.Entity!.Service is { } service)
+    {
+        <p class="slot-dialog__job" data-service>
+            <span>Service:</span>
+            <strong>@service.Name</strong>
+        </p>
+    }
+    <StateFieldTextBox @bind-Value="Context.Entity!.Name" Label="Name" MaxLength="@JobSlot.NameMaxLength" Name="slot-name" Placeholder="Such as Lead or Assistant" />
+    <StateFieldTextArea @bind-Value="Context.Entity!.Description" Label="Description" MaxLength="@JobSlot.DescriptionMaxLength" Rows="2" Name="slot-description" />
+    <StateFieldNumeric TValue="int" @bind-Value="Context.Entity!.Count" Label="How many" Min="1" Max="@JobSlotRules.MaxAddCount" Name="slot-count" Helper="Slots alike, added at once and shown as one slot group" />
+    <StateAreaFieldset Area="@JobSlotWorkflowAttribute.AreaQualifications" Legend="Required qualifications">
+        <StateSlotQualifications Area="@JobSlotWorkflowAttribute.AreaQualifications" Values="@Context.Entity!.Qualifications" Options="@Context.Qualifications" Name="slot-qualification" />
+    </StateAreaFieldset>
+    <p class="slot-dialog__help">
+        A slot is changed until its job is confirmed. A staff member without a required qualification can still be staffed, with
+        a warning.
+    </p>
+</div>
+</StateEntityDialogViewPanel>
+<StateEntityDialogViewPanel Key="@JobSlotDialogContext.StaffingView">
+    <SlotStaffingPanel Version="@Context.Version" Label="@Context.Entity!.Name" />
+</StateEntityDialogViewPanel>
+<StateEntityDialogViewPanel Key="@JobSlotDialogContext.RoundsView">
+    <StateEntityDialogChildList TItem="RequestRoundRow"
+                                View="@JobSlotDialogContext.RoundsView"
+                                RowKey="@(row => row.Id)"
+                                RowLabel="@(row => $"Request round of {ScheduleRules.DateText(DateOnly.FromDateTime(row.Created))}")"
+                                RowStateOf="@(row => row.State)"
+                                Label="Request rounds"
+                                ItemName="request round"
+                                ItemsName="request rounds"
+                                EmptyIcon="campaign"
+                                EmptyTitle="No request round yet"
+                                EmptyText="Ask several staff members at once with Request several on the Staffing view."
+                                OpenRow="@OpenRoundAsync">
+        <Columns>
+            <ListColumn TItem="RequestRoundRow" Title="Sent" Primary="true">@ScheduleRules.DateText(DateOnly.FromDateTime(context.Created))</ListColumn>
+            <ListColumn TItem="RequestRoundRow" Title="Rule">@context.RuleLabel</ListColumn>
+            <ListColumn TItem="RequestRoundRow" Title="Requests">@context.CountsLabel</ListColumn>
+            <ListColumn TItem="RequestRoundRow" Title="Sent by">@context.SentBy</ListColumn>
+        </Columns>
+    </StateEntityDialogChildList>
+</StateEntityDialogViewPanel>
+<StateEntityDialogViewPanel Key="@JobSlotDialogContext.StaffMembersView">
+    <StateEntityDialogChildList TItem="SlotAssignmentRow"
+                                View="@JobSlotDialogContext.StaffMembersView"
+                                RowKey="@(row => row.Id)"
+                                RowLabel="@(row => row.Staff)"
+                                RowStateOf="@(row => row.State)"
+                                Label="Staff"
+                                ItemName="staff"
+                                ItemsName="staff"
+                                EmptyIcon="person_search"
+                                EmptyTitle="No staff member asked yet"
+                                EmptyText="Ask staff members for this slot from its Staffing view and pick one who accepts, or assign a staff member straight away."
+                                OpenRow="@OpenAssignmentAsync">
+        <Columns>
+            <ListColumn TItem="SlotAssignmentRow" Title="Staff" Primary="true">@context.Staff</ListColumn>
+        </Columns>
+    </StateEntityDialogChildList>
+</StateEntityDialogViewPanel>
+
+@code {
+    private int? shownVersion;
+
+    [Parameter, EditorRequired] public JobSlotDialogContext Context { get; set; } = null!;
+
+    protected override void OnParametersSet()
+    {
+        if (this.shownVersion != Context.Version)
+        {
+            this.shownVersion = Context.Version;
+            Context.DisplayName = string.IsNullOrWhiteSpace(Context.Entity!.Name) ? null : Context.Entity.Name;
+        }
+    }
+
+    private Task<StateEntityDialogResult> OpenRoundAsync(RequestRoundRow row) => RequestRoundDialog.OpenAsync(DialogService, RoundService, row.Id);
+
+    private Task<StateEntityDialogResult> OpenAssignmentAsync(SlotAssignmentRow row) => SlotAssignmentDialog.OpenAsync(DialogService, AssignmentService, row.Id);
+
+    internal static JobSlotDialogContext ContextFor(JobSlotService service, Guid? slotId, Guid? jobId = null, Guid? serviceId = null) =>
+        new(service, slotId) { JobId = jobId, ServiceId = serviceId, DefaultTitle = "Slot", CreateTitle = "New slot", EntityIcon = "person_search" };
+
+    public static Task<StateEntityDialogResult> OpenAsync(DialogService dialogService, JobSlotService service, Guid slotId, StateEntityDialogOptions? options = null) =>
+        dialogService.OpenStateEntityDialogAsync<JobSlotDialog, JobSlotDialogContext>(ContextFor(service, slotId), options);
+
+    public static Task<StateEntityDialogResult> OpenStaffingAsync(DialogService dialogService, JobSlotService service, Guid slotId) =>
+        OpenAsync(dialogService, service, slotId, new StateEntityDialogOptions { View = JobSlotDialogContext.StaffingView });
+
+    public static Task<StateEntityDialogResult> OpenCreateAsync(DialogService dialogService, JobSlotService service, Guid jobId, Guid? serviceId = null) =>
+        dialogService.OpenStateEntityDialogAsync<JobSlotDialog, JobSlotDialogContext>(ContextFor(service, null, jobId, serviceId));
+
+    public static Task<StateEntityDialogResult> OpenCopyAsync(DialogService dialogService, JobSlotService service, Guid jobId, Guid sourceId) =>
+        dialogService.OpenStateEntityDialogAsync<JobSlotDialog, JobSlotDialogContext>(new(service, null) { JobId = jobId, CopyOf = sourceId, DefaultTitle = "Slot", CreateTitle = "Copy of slot", EntityIcon = "person_search" });
+}

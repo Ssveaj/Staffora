@@ -1,0 +1,61 @@
+@using Staffora.Blazor.Components.Common.Dialogs.StateEntity
+@using Staffora.Core.Entities.Resources
+@using Staffora.Core.Models
+@using Staffora.Services.Resources
+@inject DialogService DialogService
+@inject QualificationService QualificationService
+
+<FormDialogFrame OnSave="RemoveAsync" SaveText="Remove qualification" SaveIcon="remove_circle" IsBusy="@this.removing" ReadOnly="@(!CanRemove)">
+    <dl class="staff-qualification">
+        <dt>Qualification</dt>
+        <dd>@Qualification.Name</dd>
+        @if (!string.IsNullOrWhiteSpace(Qualification.Description))
+        {
+            <dt>Description</dt>
+            <dd>@Qualification.Description</dd>
+        }
+    </dl>
+    @if (Qualification.State == QualificationState.Archived)
+    {
+        <RadzenText TextStyle="TextStyle.Body2" class="text-muted">The qualification is archived: the staff member keeps it, and it is given to nobody new.</RadzenText>
+    }
+
+    @if (!string.IsNullOrEmpty(this.error))
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Danger" Variant="Variant.Flat" Shade="Shade.Lighter" ShowIcon="true" AllowClose="false">@this.error</RadzenAlert>
+    }
+</FormDialogFrame>
+
+@code {
+    private bool removing;
+    private string? error;
+
+    [Parameter, EditorRequired] public StaffQualificationRow Qualification { get; set; } = null!;
+
+    [Parameter] public bool CanRemove { get; set; }
+
+    private async Task RemoveAsync()
+    {
+        this.error = null;
+        this.removing = true;
+        var taken = await QualificationService.TakeQualificationAsync(Qualification.UserId, Qualification.QualificationId);
+        this.removing = false;
+        if (taken.IsSuccess)
+        {
+            DialogService.Close(true);
+        }
+        else
+        {
+            this.error = taken.Error ?? "The qualification could not be taken away.";
+        }
+    }
+
+    public static async Task<StateEntityDialogResult> OpenAsync(DialogService dialogService, StaffQualificationRow qualification, bool canRemove)
+    {
+        var removed = await dialogService.OpenFormDialogAsync<StaffQualificationDialog>(
+            qualification.Name,
+            parameters => parameters.Set(dialog => dialog.Qualification, qualification).Set(dialog => dialog.CanRemove, canRemove),
+            new FormDialogOptions { Width = "440px" });
+        return new StateEntityDialogResult(removed, false, null);
+    }
+}

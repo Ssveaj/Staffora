@@ -1,0 +1,28 @@
+@typeparam TDefinition where TDefinition : IEntityAttributeDefinition
+@using Staffora.Core.Entities.EntityAttributes
+
+@if (Definitions.Count > 0 || Leading is not null)
+{
+    <div class="custom-fields-fieldset field-row">
+        @if (Leading is not null)
+        {
+            <div class="custom-fields-fieldset__cell">@Leading</div>
+        }
+        @foreach (var definition in Ordered)
+        {
+            <div class="custom-fields-fieldset__cell" @key="definition.Id">@Field(definition)</div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<TDefinition> Definitions { get; set; } = [];
+
+    [Parameter, EditorRequired] public RenderFragment<TDefinition> Field { get; set; } = null!;
+
+    [Parameter, EditorRequired] public string NamePrefix { get; set; } = "attribute";
+
+    [Parameter] public RenderFragment? Leading { get; set; }
+
+    private IEnumerable<TDefinition> Ordered => Definitions.Where(definition => definition.TenantId is not null).Concat(Definitions.Where(definition => definition.TenantId is null));
+}

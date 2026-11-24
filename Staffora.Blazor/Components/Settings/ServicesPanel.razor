@@ -1,0 +1,67 @@
+@using Staffora.Blazor.Components.Common.Dialogs
+@using Staffora.Core.Entities.Catalogue
+@using Staffora.Services.Catalogue
+@inject ServiceCatalogueService Catalogue
+@inject DialogService DialogService
+
+<div class="services-panel">
+    <div class="services-panel__bar">
+        <p class="services-panel__lead">What the company sells: a slot of a job is made from a service, with its name and qualifications.</p>
+        <PermissionView Permission="RolePermission.ServicesEdit">
+            <Authorized>
+                <IconTextButton Text="New service" Icon="add_business" ButtonStyle="ButtonStyle.Primary" Click="CreateAsync" />
+            </Authorized>
+        </PermissionView>
+    </div>
+
+    <ListView @ref="this.list"
+              TItem="ServiceListItem"
+              Label="Services"
+              ItemName="service"
+              ItemsName="services"
+              AddressPrefix="@AddressPrefix"
+              Definition="ServiceList.Definition"
+              Load="LoadAsync"
+              RowKey="service => service.Id"
+              RowLabel="service => service.Name"
+              RowState="service => ListRowState.Of(service.State)"
+              OnOpen="OpenAsync"
+              QuickFilter="@ServiceList.Status"
+              SearchPlaceholder="Name or description"
+              EmptyIcon="design_services"
+              EmptyText="The catalogue is empty. Add the services your company sells.">
+        <Columns>
+            <ListColumn TItem="ServiceListItem" Title="Name" Primary="true" Subtitle="service => service.Description">
+                @context.Name
+            </ListColumn>
+            <ListColumn TItem="ServiceListItem" Title="People">
+                @context.DefaultSlotCount
+            </ListColumn>
+            <ListColumn TItem="ServiceListItem" Title="Portal">
+                @context.PortalLabel
+            </ListColumn>
+            <ListColumn TItem="ServiceListItem" Title="Qualifications">
+                @context.QualificationCount
+            </ListColumn>
+        </Columns>
+    </ListView>
+</div>
+
+@code {
+    private ListView<ServiceListItem>? list;
+
+    [Parameter] public string? AddressPrefix { get; set; }
+
+    private Task<Result<ListPage<ServiceListItem>>> LoadAsync(ListQuery query) => Catalogue.QueryServicesAsync(query);
+
+    private async Task CreateAsync()
+    {
+        var result = await ServiceDialog.OpenCreateAsync(DialogService, Catalogue);
+        if (result.EntityId is not null && this.list is not null)
+        {
+            await this.list.ReloadAsync();
+        }
+    }
+
+    private Task OpenAsync(ServiceListItem service) => ServiceDialog.OpenAsync(DialogService, Catalogue, service.Id);
+}

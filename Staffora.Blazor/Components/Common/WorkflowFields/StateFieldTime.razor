@@ -1,0 +1,42 @@
+@inherits StateFieldBase<TimeOnly?>
+@using System.Globalization
+@using Microsoft.AspNetCore.Components.Forms
+
+@if (IsVisible)
+{
+    <StateFieldFrame Label="@Label" Component="@InputName" Helper="@Helper" Field="@FieldName" IsRequired="@IsRequired" IsReadOnly="@(!IsEditable)">
+        <input type="time" class="rz-textbox state-field-time" id="@InputName" name="@InputName" value="@Text" readonly="@(!IsEditable)"
+               aria-invalid="@(this.unreadable ? "true" : null)" @onchange="ChangedAsync" @attributes="InputAttributes" />
+    </StateFieldFrame>
+}
+
+@code {
+    private bool unreadable;
+
+    private string Text => Value is { } time ? time.ToString("HH':'mm", CultureInfo.InvariantCulture) : string.Empty;
+
+    private async Task ChangedAsync(ChangeEventArgs change)
+    {
+        if (!IsEditable || ValueExpression is null)
+        {
+            return;
+        }
+
+        var text = change.Value as string;
+        TimeOnly? time = null;
+        if (!string.IsNullOrWhiteSpace(text))
+        {
+            if (!TimeOnly.TryParseExact(text, ["HH:mm", "HH:mm:ss"], CultureInfo.InvariantCulture, DateTimeStyles.None, out var read))
+            {
+                this.unreadable = true;
+                return;
+            }
+
+            time = read;
+        }
+
+        this.unreadable = false;
+        await SetAsync(time);
+        EditContext?.NotifyFieldChanged(FieldIdentifier.Create(ValueExpression));
+    }
+}

@@ -1,0 +1,44 @@
+@using Staffora.Blazor.Components.Common.Dialogs.StateEntity
+@using Staffora.Blazor.Components.Common.WorkflowFields
+@using Staffora.Core.Entities.Catalogue
+@using Staffora.Core.Workflow.WorkflowAttributes
+@using Staffora.Services.Catalogue
+@implements IStateEntityDialog<ServiceDialogContext>
+
+<div class="service-dialog">
+    <StateFieldTextBox @bind-Value="Context.Entity!.Name" Label="Name" MaxLength="@Service.NameMaxLength" Name="service-name" Placeholder="Such as Office cleaning" />
+    <StateFieldTextArea @bind-Value="Context.Entity!.Description" Label="Description" MaxLength="@Service.DescriptionMaxLength" Rows="2" Name="service-description" />
+    <StateFieldNumeric TValue="int" @bind-Value="Context.Entity!.DefaultSlotCount" Label="Default number of people" Min="@Service.MinSlotCount" Max="@Service.MaxSlotCount" Name="service-default-count" />
+    <StateFieldSwitch @bind-Value="Context.Entity!.OfferedInPortal" Label="Offered in the customer portal" Name="service-portal" />
+    <StateAreaFieldset Area="@ServiceWorkflowAttribute.AreaQualifications" Legend="Qualifications">
+        <StateSlotQualifications Area="@ServiceWorkflowAttribute.AreaQualifications" Values="@Context.Entity!.Qualifications" Options="@Context.Qualifications" Name="service-qualification" />
+    </StateAreaFieldset>
+    <p class="service-dialog__help">
+        A slot made from the service takes its name and qualifications. Staff who lack a required qualification can still be
+        staffed, with a warning, but a preferred one only ranks the candidates.
+    </p>
+</div>
+
+@code {
+    private int? shownVersion;
+
+    [Parameter, EditorRequired] public ServiceDialogContext Context { get; set; } = null!;
+
+    protected override void OnParametersSet()
+    {
+        if (this.shownVersion != Context.Version)
+        {
+            this.shownVersion = Context.Version;
+            Context.DisplayName = string.IsNullOrWhiteSpace(Context.Entity!.Name) ? null : Context.Entity.Name;
+        }
+    }
+
+    internal static ServiceDialogContext ContextFor(ServiceCatalogueService service, Guid? serviceId) =>
+        new(service, serviceId) { DefaultTitle = "Service", CreateTitle = "New service", EntityIcon = "design_services" };
+
+    public static Task<StateEntityDialogResult> OpenAsync(DialogService dialogService, ServiceCatalogueService service, Guid serviceId, StateEntityDialogOptions? options = null) =>
+        dialogService.OpenStateEntityDialogAsync<ServiceDialog, ServiceDialogContext>(ContextFor(service, serviceId), options);
+
+    public static Task<StateEntityDialogResult> OpenCreateAsync(DialogService dialogService, ServiceCatalogueService service) =>
+        dialogService.OpenStateEntityDialogAsync<ServiceDialog, ServiceDialogContext>(ContextFor(service, null));
+}

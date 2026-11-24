@@ -1,0 +1,57 @@
+@using Staffora.Services.Scheduling
+@inject DialogService DialogService
+@inject ResourceAbsenceService AbsenceService
+
+<FormDialogFrame OnSave="ContinueAsync" SaveText="Continue" SaveIcon="arrow_forward" SaveDisabled="@(this.userId is null)">
+    @if (this.choices is null)
+    {
+        <LoadingState Text="Loading staff members…" Inline="true" />
+    }
+    else if (this.choices.Count == 0)
+    {
+        <RadzenText TextStyle="TextStyle.Body2" class="text-muted" data-no-choices>There is no staff member you may register an absence for.</RadzenText>
+    }
+    else
+    {
+        <RadzenFormField Text="Staff" Component="absence-staff" Style="width: 100%;">
+            <RadzenDropDown Name="absence-staff" InputAttributes="@FieldLabel.Of("Staff")" @bind-Value="this.userId"
+                            Data="@this.choices" TextProperty="Name" ValueProperty="UserId" TValue="Guid?"
+                            AllowFiltering="true" FilterCaseSensitivity="FilterCaseSensitivity.CaseInsensitive"
+                            Placeholder="Select a staff member" Style="width: 100%;" />
+        </RadzenFormField>
+    }
+
+    @if (!string.IsNullOrEmpty(this.error))
+    {
+        <RadzenAlert AlertStyle="AlertStyle.Danger" Variant="Variant.Flat" Shade="Shade.Lighter" ShowIcon="true" AllowClose="false">@this.error</RadzenAlert>
+    }
+</FormDialogFrame>
+
+@code {
+    private IReadOnlyList<AbsenceStaffChoice>? choices;
+    private Guid? userId;
+    private string? error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var choices = await AbsenceService.GetRegistrableStaffMembersAsync();
+        this.choices = choices.IsSuccess && choices.Value is { } offered ? offered : [];
+        this.error = choices.IsSuccess ? null : choices.Error;
+    }
+
+    private Task ContinueAsync()
+    {
+        if (this.userId is { } chosen)
+        {
+            DialogService.Close(chosen);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public static async Task<Guid?> OpenAsync(DialogService dialogService)
+    {
+        var chosen = await dialogService.OpenFormDialogAsync<ChooseAbsenceStaffDialog, Guid>("Register absence", options: new FormDialogOptions { Width = "440px" });
+        return chosen == Guid.Empty ? null : chosen;
+    }
+}

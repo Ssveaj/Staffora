@@ -1,0 +1,60 @@
+@using Staffora.Blazor.Components.Common.Dialogs.StateEntity
+@using Staffora.Blazor.Components.Common.List
+@using Staffora.Core.Jobs
+@using Staffora.Core.Lists
+@using Staffora.Core.Models
+@using Staffora.Core.Scheduling
+@using Staffora.Services.Jobs
+@implements IStateEntityDialog<RequestRoundDialogContext>
+@inject DialogService DialogService
+@inject SlotAssignmentService AssignmentService
+
+<StateEntityDialogViewPanel Key="@RequestRoundDialogContext.InfoView">
+    @if (Context.Summary is { } round)
+    {
+        <dl class="request-round-dialog" data-round-summary>
+            <dt>Job</dt>
+            <dd data-round-job>@round.Job</dd>
+            <dt>Slot</dt>
+            <dd data-round-slot>@round.Slot</dd>
+            <dt>Slots held</dt>
+            <dd data-round-held>@round.HeldLabel</dd>
+            <dt>Rule</dt>
+            <dd data-round-rule>@round.RuleLabel</dd>
+            <dt>Sent</dt>
+            <dd data-round-sent>@round.SentBy, @ScheduleRules.DateText(DateOnly.FromDateTime(round.SentAt))</dd>
+            <dt>Requests</dt>
+            <dd data-round-counts>@round.CountsLabel@(round.NothingWaits ? ", nothing waits" : null)</dd>
+        </dl>
+    }
+</StateEntityDialogViewPanel>
+<StateEntityDialogViewPanel Key="@RequestRoundDialogContext.RequestsView">
+    <StateEntityDialogChildList TItem="SlotAssignmentRow"
+                                View="@RequestRoundDialogContext.RequestsView"
+                                RowKey="@(row => row.Id)"
+                                RowLabel="@(row => row.Staff)"
+                                RowStateOf="@(row => row.State)"
+                                Label="Requests"
+                                ItemName="request"
+                                ItemsName="requests"
+                                EmptyIcon="group"
+                                EmptyTitle="No request"
+                                EmptyText="The round asked nobody."
+                                OpenRow="@OpenRequestAsync">
+        <Columns>
+            <ListColumn TItem="SlotAssignmentRow" Title="Staff" Primary="true">@context.Staff</ListColumn>
+        </Columns>
+    </StateEntityDialogChildList>
+</StateEntityDialogViewPanel>
+
+@code {
+    [Parameter, EditorRequired] public RequestRoundDialogContext Context { get; set; } = null!;
+
+    private Task<StateEntityDialogResult> OpenRequestAsync(SlotAssignmentRow row) => SlotAssignmentDialog.OpenAsync(DialogService, AssignmentService, row.Id);
+
+    internal static RequestRoundDialogContext ContextFor(RequestRoundService service, Guid? roundId) =>
+        new(service, roundId) { DefaultTitle = "Request round", CreateTitle = "New order round", EntityIcon = "campaign" };
+
+    public static Task<StateEntityDialogResult> OpenAsync(DialogService dialogService, RequestRoundService service, Guid roundId, StateEntityDialogOptions? options = null) =>
+        dialogService.OpenStateEntityDialogAsync<RequestRoundDialog, RequestRoundDialogContext>(ContextFor(service, roundId), options);
+}

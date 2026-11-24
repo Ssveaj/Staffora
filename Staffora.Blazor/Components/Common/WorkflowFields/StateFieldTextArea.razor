@@ -1,0 +1,15 @@
+@inherits StateFieldBase<string>
+
+@if (IsVisible)
+{
+    <StateFieldFrame Label="@Label" Component="@InputName" Helper="@Helper" Field="@FieldName" IsRequired="@IsRequired" IsReadOnly="@(!IsEditable)">
+        <RadzenTextArea Name="@InputName" Value="@Value" ValueChanged="@((string? text) => SetAsync(text))" ValueExpression="@(ValueExpression!)"
+                        ReadOnly="@(!IsEditable)" MaxLength="@MaxLength" Rows="@Rows" Placeholder="@Placeholder" @attributes="TypingAttributes" />
+    </StateFieldFrame>
+}
+
+@code {
+    [Parameter] public long? MaxLength { get; set; }
+
+    [Parameter] public int Rows { get; set; } = 3;
+}

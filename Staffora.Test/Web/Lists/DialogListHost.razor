@@ -1,0 +1,25 @@
+@using Staffora.Blazor.Components.Common.Dialogs
+@using Staffora.Blazor.Components.Common.List
+@using Staffora.Core.Lists
+@using Staffora.Core.Models
+
+<FormDialogFrame>
+    <ListView TItem="ListTestRow"
+              Id="child"
+              Label="Child rows"
+              Definition="FakeRowSource.Definition"
+              Load="Source.LoadAsync"
+              RowKey="row => row.Id"
+              RowLabel="row => row.Name"
+              BindAddress="BindAddress">
+        <Columns>
+            <ListColumn TItem="ListTestRow" Title="Name" Primary="true">@context.Name</ListColumn>
+        </Columns>
+    </ListView>
+</FormDialogFrame>
+
+@code {
+    [Parameter, EditorRequired] public FakeRowSource Source { get; set; } = null!;
+
+    [Parameter] public bool? BindAddress { get; set; }
+}

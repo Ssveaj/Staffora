@@ -1,0 +1,87 @@
+{
+  "id": "tenant-administrator-finds-in-lists",
+  "title": "A tenant administrator finds people and units in lists",
+  "goal": "The tenant's administrator narrows the user list and the list of organization units to what they look for, keeps that view through a reload, reads a row's summary and opens a row's dialog, on a wide screen and on a phone; a colleague who may only look opens a row without being offered changes.",
+  "actors": [
+    {
+      "id": "platform-owner",
+      "description": "Operates the platform and acts inside a tenant only by impersonating one of its users."
+    },
+    {
+      "id": "tenant-administrator",
+      "description": "Holds every permission of Company A, as the platform owner sees and acts while impersonating them."
+    },
+    {
+      "id": "tenant-viewer",
+      "description": "May view Company A's users and units and change nothing, as the platform owner sees while impersonating them."
+    }
+  ],
+  "preconditions": [
+    "The end-to-end database was prepared in this run: Company A with Sam Taylor, Alex Morgan and Robin Lee, its Company root and the head office below it."
+  ],
+  "steps": [
+    {
+      "id": "impersonate-administrator",
+      "actor": "platform-owner",
+      "intent": "Sign in and impersonate Company A's administrator",
+      "outcome": "The platform owner sees Company A as its administrator does."
+    },
+    {
+      "id": "search-users",
+      "actor": "tenant-administrator",
+      "intent": "Search the user list for one person",
+      "outcome": "The list shows that person only, and its address names the search."
+    },
+    {
+      "id": "reload-keeps-search",
+      "actor": "tenant-administrator",
+      "intent": "Reload the user list",
+      "outcome": "The list opens again with the same search and the same person, read from its address."
+    },
+    {
+      "id": "read-user-summary",
+      "actor": "tenant-administrator",
+      "intent": "Open the person's summary in the list",
+      "outcome": "The row's summary shows what the columns do not, the person's phone and roles, without leaving the list."
+    },
+    {
+      "id": "open-user",
+      "actor": "tenant-administrator",
+      "intent": "Open the person from the keyboard",
+      "outcome": "The person's dialog opens on them, and closing it returns to the list with the person's name focused."
+    },
+    {
+      "id": "find-users-on-a-phone",
+      "actor": "tenant-administrator",
+      "intent": "Find people in the user list on a phone",
+      "outcome": "The search and the first people show on the first screen with the other choices folded away; unfolded, the keyboard goes from the choices straight to the first person."
+    },
+    {
+      "id": "filter-units",
+      "actor": "tenant-administrator",
+      "intent": "Show the organization units as a list and keep the branches only",
+      "outcome": "The list shows the head office and not the Company root, and keeps that filter through a reload."
+    },
+    {
+      "id": "open-unit",
+      "actor": "tenant-administrator",
+      "intent": "Read the head office's summary, then open it",
+      "outcome": "The summary names the head office's place in the tree, and its dialog opens on it."
+    },
+    {
+      "id": "impersonate-viewer",
+      "actor": "platform-owner",
+      "intent": "Impersonate Company A's viewer instead",
+      "outcome": "The platform owner sees Company A as the viewer does."
+    },
+    {
+      "id": "view-user-read-only",
+      "actor": "tenant-viewer",
+      "intent": "Open a person from the user list",
+      "outcome": "The person's dialog shows them with nothing to change and no Save, and closing it returns to the list."
+    }
+  ],
+  "completion": [
+    "The administrator found each row through the lists, their filters live in the address, every dialog they opened is closed again, and the viewer was never offered a change."
+  ]
+}
